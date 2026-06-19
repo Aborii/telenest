@@ -1,0 +1,691 @@
+# User-Account Client (MTProto / GramJS) Guide
+
+This guide covers the **MTProto user-account** side of `nestjs-telegram`: signing in as
+**your own Telegram account** (not a bot) over the MTProto protocol via
+[GramJS](https://gram.js.org/) (the `telegram` package), reading and sending messages as
+yourself, and persisting the resulting session.
+
+For the Bot API (`@BotFather` bot) side, see the bot module documentation. The two modules
+are independent and can be used together or separately.
+
+---
+
+> [!WARNING]
+> ## Respect Telegram's Terms of Service
+>
+> A user-account client logs in as **a real human account**, with the same powers and the
+> same responsibilities as the official apps. Automating a user account ("user-bots",
+> "self-bots") is governed by Telegram's [Terms of Service](https://telegram.org/tos) and
+> the [API Terms](https://core.telegram.org/api/terms).
+>
+> - **Do not spam, scrape, or mass-message.** Bulk or unsolicited messaging, aggressive
+>   contact/member harvesting, and automated outreach can get your account **limited or
+>   permanently banned** — and the ban applies to *you*, the human, not a disposable bot.
+> - **Respect rate limits.** Telegram enforces `FLOOD_WAIT` throttling. This library surfaces
+>   it as a typed error (and GramJS can auto-sleep below `floodSleepThreshold`); honor it
+>   rather than retrying in a tight loop.
+> - **The session string is a credential.** It grants full access to your account without a
+>   password or 2FA prompt. Treat it like a password: never commit it, never log it, store it
+>   encrypted at rest.
+> - **Prefer the Bot API where it fits.** If a bot can do the job, use the bot. User-mode
+>   exists for things bots genuinely cannot do (reading your own dialogs, acting as yourself),
+>   not as a way to bypass bot limitations.
+>
+> You are responsible for how you use this. Use it for personal automation and legitimate
+> tooling on accounts you own.
+
+---
+
+## Table of contents
+
+1. [What is MTProto user-mode?](#1-what-is-mtproto-user-mode)
+2. [Getting `api_id` / `api_hash`](#2-getting-api_id--api_hash)
+3. [Configuring `TelegramClientModule`](#3-configuring-telegramclientmodule)
+4. [Authentication flow](#4-authentication-flow)
+5. [Sessions and `SessionStore`](#5-sessions-and-sessionstore)
+6. [`TelegramUserService` operations](#6-telegramuserservice-operations)
+7. [DTO shapes](#7-dto-shapes)
+8. [The `IGramClient` abstraction and `clientFactory` seam](#8-the-igramclient-abstraction-and-clientfactory-seam)
+9. [Error handling](#9-error-handling)
+
+---
+
+## 1. What is MTProto user-mode?
+
+Telegram exposes **two distinct APIs**:
+
+| | **Bot API** | **MTProto client API** |
+|---|---|---|
+| Library used | Telegraf | GramJS (`telegram`) |
+| You authenticate as | a bot created by `@BotFather` | **your own account** |
+| Credentials | a bot **token** | `api_id` + `api_hash`, then **phone → code → 2FA** |
+| Can read your dialog list? | No | Yes |
+| Can message users who never messaged it? | No (users must start the bot) | Yes (subject to ToS) |
+| Identity in chats | "MyBot" | you, the human |
+
+MTProto is Telegram's native binary protocol. When you sign in with it, you create a new
+**authorized session** for your account — the same kind of session you see under
+*Settings → Devices → Active sessions* in the official app. This library reports that session
+with a configurable device/app name (see [`deviceModel`](#deviceModel) below) so you can
+recognize and revoke it.
+
+The flow is: **authenticate the application** (`api_id` / `api_hash`) and **authenticate the
+account** (phone number → login code → optional 2FA password). The result is a portable
+**string session** that lets you reconnect later without repeating the login.
+
+```mermaid
+flowchart LR
+  subgraph app["Your NestJS app"]
+    AUTH["TelegramAuthService"]
+    USER["TelegramUserService"]
+  end
+  AUTH -->|sendCode / signIn / checkPassword| GC["IGramClient"]
+  USER -->|getMe / getDialogs / sendMessage| GC
+  GC -->|implemented by| ADAPTER["GramJsClientAdapter"]
+  ADAPTER -->|wraps| GRAMJS["GramJS TelegramClient"]
+  GRAMJS <-->|MTProto| TG[("Telegram DC")]
+  AUTH -. persists string session .-> STORE["SessionStore"]
+```
+
+Everything above `IGramClient` speaks in library DTOs (`GramUser`, `GramDialog`,
+`GramMessage`) and never imports GramJS — only `GramJsClientAdapter` touches the `telegram`
+package.
+
+---
+
+## 2. Getting `api_id` / `api_hash`
+
+These credentials authenticate the **application**, not the account. Obtain them once:
+
+1. Go to **<https://my.telegram.org>** and log in with your phone number.
+2. Open **"API development tools"**.
+3. Create an application (any title/short-name; platform "Other" is fine).
+4. Copy the **`api_id`** (an integer) and the **`api_hash`** (a hex string).
+
+Store them as environment variables — for example in a `.env` file consumed by
+`@nestjs/config`:
+
+```dotenv
+TG_API_ID=1234567
+TG_API_HASH=0123456789abcdef0123456789abcdef
+# After your first login (see below), paste the printed session here:
+TG_SESSION=
+```
+
+> `api_id` / `api_hash` identify your app to Telegram. Keep `api_hash` private; do not embed
+> it in client-side/browser bundles you ship to third parties.
+
+---
+
+## 3. Configuring `TelegramClientModule`
+
+`TelegramClientModule` is a dynamic Nest module with `forRoot` (synchronous) and
+`forRootAsync` (factory-based) static methods. Because `api_id` / `api_hash` almost always
+come from configuration, `forRootAsync` is the recommended form:
+
+```ts
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { FileSessionStore, TelegramClientModule } from 'nestjs-telegram';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    TelegramClientModule.forRootAsync({
+      isGlobal: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        apiId: Number(config.getOrThrow<string>('TG_API_ID')),
+        apiHash: config.getOrThrow<string>('TG_API_HASH'),
+        // Resume from an env-provided session if present:
+        session: config.get<string>('TG_SESSION'),
+        // Persist newly-created sessions across restarts:
+        sessionStore: new FileSessionStore('./.telegram.session'),
+        deviceModel: 'nestjs-telegram',
+        appVersion: '1.0.0',
+      }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+A synchronous `forRoot` is also available when values are known at import time:
+
+```ts
+TelegramClientModule.forRoot({
+  apiId: Number(process.env.TG_API_ID),
+  apiHash: process.env.TG_API_HASH!,
+  sessionStore: new FileSessionStore('./.telegram.session'),
+  isGlobal: true,
+});
+```
+
+If you want **both** the bot and the client wired from one synchronous call, use the umbrella
+`TelegramModule.forRoot({ bot, client, isGlobal })`. For configuration that depends on a
+provider such as `ConfigService`, import each module directly and use its `forRootAsync`
+factory (as above).
+
+### All `TelegramClientModuleOptions`
+
+The factory must return a `TelegramClientModuleOptions` object:
+
+| Option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `apiId` | `number` | **yes** | — | Application `api_id` from my.telegram.org. |
+| `apiHash` | `string` | **yes** | — | Application `api_hash` from my.telegram.org. |
+| `session` | `string` | no | — | An existing string session to start from. **Takes precedence** over a value loaded from `sessionStore`. |
+| `sessionStore` | `SessionStore` | no | — | Pluggable session persistence. When set, the module loads the initial session from it (if `session` is unset) and the auth service writes the session back after a successful login. |
+| `connectionRetries` | `number` | no | `5` | Automatic reconnection attempts on transport errors. |
+| `deviceModel` <a id="deviceModel"></a> | `string` | no | GramJS default | Reported device model — shows up in the account's *active sessions* list. |
+| `systemVersion` | `string` | no | GramJS default | Reported system version. |
+| `appVersion` | `string` | no | GramJS default | Reported application version. |
+| `useWSS` | `boolean` | no | `false` | Use WebSocket transport (required in browsers). |
+| `floodSleepThreshold` | `number` | no | GramJS default | `FLOOD_WAIT` threshold in **seconds** below which GramJS waits and retries transparently instead of throwing. |
+| `autoConnect` | `boolean` | no | `true` | Whether to connect on module initialization. Set `false` to connect lazily/manually (e.g. in tests or CLI login scripts). |
+| `clientFactory` | `GramClientFactory` | no | builds a real GramJS client | Override client construction. Primarily a **test seam** — see [section 8](#8-the-igramclient-abstraction-and-clientfactory-seam). |
+
+> [!NOTE]
+> **Initial session precedence.** When the module builds the client it resolves the starting
+> session in this order:
+> 1. `options.session`
+> 2. `sessionStore.load()` (if a store is configured)
+> 3. empty string → a fresh phone/code login is required.
+>
+> **Connection on bootstrap.** Unless `autoConnect` is `false`, the module connects the client
+> during initialization. A connection failure is **logged, not thrown**, so a Telegram outage
+> does not crash the bootstrap of unrelated modules. Operations called later will attempt to
+> connect again on demand.
+
+The module exports `TelegramAuthService`, `TelegramUserService`, and the
+`TELEGRAM_GRAM_CLIENT` / `TELEGRAM_SESSION_STORE` injection tokens.
+
+---
+
+## 4. Authentication flow
+
+Signing in is a small state machine driven by `TelegramAuthService`:
+
+```mermaid
+flowchart TD
+  A["sendCode(phoneNumber)"] --> B["signIn(phoneCode)"]
+  B -->|status: 'authorized'| OK["Signed in ✔ (session persisted)"]
+  B -->|status: 'password-required'| C["checkPassword(password)"]
+  C --> OK
+```
+
+The relevant `TelegramAuthService` methods:
+
+| Method | Signature | Purpose |
+|---|---|---|
+| `sendCode` | `(phoneNumber: string, forceSMS?: boolean) => Promise<GramSendCodeResult>` | Request a login code for a phone number (international format). `forceSMS` forces SMS instead of the in-app code. |
+| `signIn` | `(phoneCode: string) => Promise<GramSignInResult>` | Complete sign-in with the received code. Returns `{ status: 'authorized', user }` or `{ status: 'password-required' }`. On success the session is persisted. |
+| `checkPassword` | `(password: string) => Promise<GramUser>` | Complete a 2FA-protected login with the two-step-verification password. Persists the session. |
+| `logOut` | `() => Promise<void>` | Log out (invalidates the session on Telegram's servers) and clear the stored session. |
+| `isAuthorized` | `() => Promise<boolean>` | Whether the current session is already authorized. |
+| `exportSession` | `() => string` | Serialize the current session string for manual persistence/inspection (empty when unauthenticated). |
+
+> The service holds the pending phone number and code hash on the instance. It is built to
+> manage **exactly one account**; do not share a single instance across concurrent logins for
+> different numbers. Calling `signIn` before `sendCode` throws `TelegramAuthError` with code
+> `CODE_NOT_REQUESTED`.
+
+### Inside a Nest provider
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { TelegramAuthService } from 'nestjs-telegram';
+
+@Injectable()
+export class LoginService {
+  constructor(private readonly auth: TelegramAuthService) {}
+
+  /** Step 1: request a code. */
+  async requestCode(phone: string): Promise<void> {
+    await this.auth.sendCode(phone); // e.g. '+15551234567'
+  }
+
+  /**
+   * Step 2: submit the code (and 2FA password if required).
+   * The session is persisted to the configured SessionStore automatically.
+   */
+  async submitCode(code: string, password?: string): Promise<void> {
+    const step = await this.auth.signIn(code);
+    if (step.status === 'password-required') {
+      if (!password) throw new Error('This account has 2FA enabled; a password is required.');
+      await this.auth.checkPassword(password);
+    }
+  }
+}
+```
+
+### One-time interactive login (recommended for first run)
+
+Because the login code arrives on your phone, the simplest first-time flow is an interactive
+CLI that prints a string session you then save as `TG_SESSION`. The repository ships
+[`examples/login-cli.ts`](../examples/login-cli.ts) which demonstrates using the library
+**outside of Nest DI** by constructing the client directly:
+
+```ts
+import 'dotenv/config';
+import { stdin as input, stdout as output } from 'node:process';
+import { createInterface } from 'node:readline/promises';
+import { createGramJsClient, isTelegramError, TelegramAuthService } from 'nestjs-telegram';
+
+const apiId = Number(process.env.TG_API_ID);
+const apiHash = process.env.TG_API_HASH ?? '';
+
+const client = createGramJsClient({ apiId, apiHash }, process.env.TG_SESSION ?? '');
+const auth = new TelegramAuthService(client);
+const rl = createInterface({ input, output });
+
+try {
+  if (!(await auth.isAuthorized())) {
+    await auth.sendCode(await rl.question('Phone (+countrycode…): '));
+    const step = await auth.signIn(await rl.question('Login code: '));
+    if (step.status === 'password-required') {
+      await auth.checkPassword(await rl.question('2FA password: '));
+    }
+  }
+  output.write(`\n=== SESSION STRING (save as TG_SESSION) ===\n${auth.exportSession()}\n`);
+} catch (error) {
+  if (isTelegramError(error)) output.write(`\nTelegram error [${error.kind}]: ${error.message}\n`);
+} finally {
+  rl.close();
+  await client.disconnect();
+}
+```
+
+Copy the printed string into `.env` as `TG_SESSION`. On subsequent app starts the module
+reconnects from that session and **no login is needed**.
+
+---
+
+## 5. Sessions and `SessionStore`
+
+A **string session** encodes the auth keys that let the client reconnect without re-running
+the phone/code/2FA flow. **It is as sensitive as a password** — anyone holding it has full
+access to your account.
+
+`SessionStore` is the pluggable persistence contract. All methods may be sync or async (the
+library always awaits them):
+
+```ts
+interface SessionStore {
+  /** Load the persisted session, or `undefined` when none is stored. */
+  load(): Awaitable<string | undefined>;
+  /** Persist the session, overwriting any previous value. */
+  save(session: string): Awaitable<void>;
+  /** Remove any persisted session (used on logout). */
+  clear(): Awaitable<void>;
+}
+```
+
+The library wires the store both ways: on bootstrap it calls `load()` for the initial session
+(unless `options.session` is set), and after a successful login `TelegramAuthService` calls
+`save()` with the new session. `logOut()` calls `clear()`.
+
+### `InMemorySessionStore`
+
+Volatile, process-local. Useful for tests and short-lived processes, but **not durable** — the
+session is lost on restart, forcing a fresh login next time. Optionally seed it from an env var:
+
+```ts
+import { InMemorySessionStore } from 'nestjs-telegram';
+
+const store = new InMemorySessionStore(process.env.TG_SESSION);
+```
+
+### `FileSessionStore`
+
+Durable, file-backed. Persists the session to a single UTF-8 file with `0o600` permissions
+(owner read/write only) on POSIX systems. A missing file simply means "no session yet"; other
+I/O errors surface as `TelegramSessionError`.
+
+```ts
+import { FileSessionStore } from 'nestjs-telegram';
+
+const store = new FileSessionStore('./.telegram.session');
+```
+
+> Add the session file to `.gitignore` and keep it off shared volumes.
+
+### Writing a custom store (e.g. Redis)
+
+Implement the three methods. The `SessionStore` interface is exported, so a typed
+implementation is straightforward:
+
+```ts
+import type { Redis } from 'ioredis';
+import { TelegramSessionError, type SessionStore } from 'nestjs-telegram';
+
+/**
+ * Persists the MTProto string session in Redis under a single key.
+ *
+ * SECURITY: the value is a live credential. Use an access-controlled Redis
+ * instance, enable encryption in transit/at rest, and consider a key TTL.
+ */
+export class RedisSessionStore implements SessionStore {
+  constructor(
+    private readonly redis: Redis,
+    private readonly key = 'tg:session',
+  ) {}
+
+  async load(): Promise<string | undefined> {
+    try {
+      return (await this.redis.get(this.key)) ?? undefined;
+    } catch (error) {
+      throw new TelegramSessionError('Failed to read session from Redis.', error);
+    }
+  }
+
+  async save(session: string): Promise<void> {
+    try {
+      await this.redis.set(this.key, session);
+    } catch (error) {
+      throw new TelegramSessionError('Failed to write session to Redis.', error);
+    }
+  }
+
+  async clear(): Promise<void> {
+    try {
+      await this.redis.del(this.key);
+    } catch (error) {
+      throw new TelegramSessionError('Failed to delete session from Redis.', error);
+    }
+  }
+}
+```
+
+Wrapping failures in `TelegramSessionError` keeps storage errors inside the library's single
+error hierarchy. Then pass it via options:
+
+```ts
+TelegramClientModule.forRootAsync({
+  inject: [ConfigService, RedisClient],
+  useFactory: (config: ConfigService, redis: Redis) => ({
+    apiId: Number(config.getOrThrow('TG_API_ID')),
+    apiHash: config.getOrThrow('TG_API_HASH'),
+    sessionStore: new RedisSessionStore(redis),
+  }),
+});
+```
+
+---
+
+## 6. `TelegramUserService` operations
+
+`TelegramUserService` is the facade for acting **as the logged-in account**. Inject it
+anywhere after the module is registered. Every method requires an authorized session and
+returns library DTOs; the service transparently connects the client on first use.
+
+| Method | Signature | Returns |
+|---|---|---|
+| `getMe` | `() => Promise<GramUser>` | The logged-in account's profile. |
+| `getDialogs` | `(params?: GramGetDialogsParams) => Promise<GramDialog[]>` | The dialog (conversation) list. |
+| `getMessages` | `(peer: GramPeer, params?: GramGetMessagesParams) => Promise<GramMessage[]>` | Recent messages from a peer, newest first. |
+| `sendMessage` | `(peer: GramPeer, text: string \| GramSendMessageParams) => Promise<GramMessage>` | Sends a message; returns the sent message. |
+| `sendToSelf` | `(text: string) => Promise<GramMessage>` | Convenience for messaging your own *Saved Messages* (peer `'me'`). |
+
+A `GramPeer` is `string | number`: the literal `'me'`, a public `@username`, or a numeric
+user/chat id.
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { TelegramUserService } from 'nestjs-telegram';
+
+@Injectable()
+export class MyAccountService {
+  constructor(private readonly user: TelegramUserService) {}
+
+  async whoAmI() {
+    const me = await this.user.getMe();
+    // me: GramUser
+    return `${me.firstName ?? ''} (@${me.username ?? 'no-username'}), id=${me.id}`;
+  }
+
+  async recentChats() {
+    // Up to 20 non-archived dialogs:
+    const dialogs = await this.user.getDialogs({ limit: 20, archived: false });
+    return dialogs.map((d) => `${d.type}: ${d.title} (${d.unreadCount} unread)`);
+  }
+
+  async lastMessagesFrom(username: string) {
+    // Newest first; supports minId/maxId for pagination.
+    const messages = await this.user.getMessages(username, { limit: 50 });
+    return messages.map((m) => ({ out: m.out, text: m.text, at: m.date }));
+  }
+}
+```
+
+### Sending messages and `parseMode`
+
+`sendMessage` accepts either a plain string (sent as-is) or a full `GramSendMessageParams`
+object. The MTProto parse modes are **`'html'`** and **`'md'`** (`GramParseMode`) — note these
+differ from the Bot API's `ParseMode` (`'HTML' | 'Markdown' | 'MarkdownV2'`).
+
+```ts
+// Plain text:
+await this.user.sendMessage('@durov', 'Hi from my own account!');
+
+// Formatted (HTML), as a reply, silently:
+await this.user.sendMessage('@channel', {
+  message: '<b>Build passed</b> ✅',
+  parseMode: 'html',     // 'html' | 'md'
+  replyTo: 12345,        // message id to reply to
+  silent: true,          // no notification sound
+});
+
+// Markdown:
+await this.user.sendMessage('me', { message: '*reminder*: ship it', parseMode: 'md' });
+
+// Note to self (your Saved Messages chat):
+await this.user.sendToSelf('Remember to renew the api credentials.');
+```
+
+`GramSendMessageParams`:
+
+| Field | Type | Description |
+|---|---|---|
+| `message` | `string` | Message text. |
+| `parseMode` | `'html' \| 'md'` | Optional formatting mode applied to `message`. |
+| `replyTo` | `number` | Id of the message to reply to. |
+| `silent` | `boolean` | Send without a notification sound. |
+
+`GramGetDialogsParams` accepts `limit` and `archived`; `GramGetMessagesParams` accepts
+`limit`, `minId`, and `maxId` (for pagination).
+
+---
+
+## 7. DTO shapes
+
+The user-facing services speak in plain, GramJS-free DTOs so consumers and tests never import
+`telegram`. The adapter is the single place that maps GramJS `Api.*` objects into these shapes.
+
+> [!IMPORTANT]
+> Telegram ids can exceed `2^53`, so user/chat/peer ids are returned as **decimal strings**,
+> not `number`. Message ids (`GramMessage.id`) are scoped to a chat and remain `number`.
+
+### `GramUser`
+
+```ts
+interface GramUser {
+  id: string;          // Telegram user id as a decimal string
+  isSelf: boolean;     // true when this is the logged-in account itself
+  isBot: boolean;      // whether the account is a bot
+  isPremium: boolean;  // whether the account has Telegram Premium
+  firstName?: string;
+  lastName?: string;
+  username?: string;   // without the leading '@'
+  phone?: string;      // international format, when visible
+}
+```
+
+### `GramDialog`
+
+```ts
+interface GramDialog {
+  id: string;                // peer id as a decimal string
+  title: string;             // chat title or the user's name
+  type: 'user' | 'group' | 'channel';
+  unreadCount: number;
+  pinned: boolean;
+}
+```
+
+### `GramMessage`
+
+```ts
+interface GramMessage {
+  id: number;          // message id within its chat
+  peerId: string;      // chat/user the message belongs to, as a decimal string
+  text: string;        // plain-text body ('' for non-text/service messages)
+  date: number;        // unix timestamp in seconds
+  out: boolean;        // true when sent by the logged-in account
+  senderId?: string;   // sender id as a decimal string, when known
+}
+```
+
+Related sign-in DTOs you may encounter: `GramSendCodeResult`
+(`{ phoneCodeHash, isCodeViaApp }`) and the discriminated `GramSignInResult`
+(`{ status: 'authorized', user } | { status: 'password-required' }`).
+
+---
+
+## 8. The `IGramClient` abstraction and `clientFactory` seam
+
+Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
+operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
+`signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
+`sendMessage`, `exportSession`). The concrete `GramJsClientAdapter` — created by
+`createGramJsClient` — is the **only** implementation that touches the `telegram` package.
+
+This boundary makes the services unit-testable with a trivial fake and keeps GramJS out of
+consumer compilation units. There are two ways to substitute a fake:
+
+**(a) Construct a service directly** with a fake `IGramClient` (no Nest required):
+
+```ts
+import type { IGramClient } from 'nestjs-telegram';
+import { TelegramUserService } from 'nestjs-telegram';
+
+const fake: IGramClient = {
+  isConnected: () => true,
+  connect: async () => {},
+  disconnect: async () => {},
+  isAuthorized: async () => true,
+  getMe: async () => ({ id: '42', isSelf: true, isBot: false, isPremium: false }),
+  getDialogs: async () => [],
+  getMessages: async () => [],
+  sendMessage: async (_peer, params) => ({
+    id: 1, peerId: '42', text: params.message, date: 0, out: true,
+  }),
+  sendCode: async () => ({ phoneCodeHash: 'h', isCodeViaApp: true }),
+  signInWithCode: async () => ({ status: 'authorized', user: { id: '42', isSelf: true, isBot: false, isPremium: false } }),
+  signInWithPassword: async () => ({ id: '42', isSelf: true, isBot: false, isPremium: false }),
+  logOut: async () => {},
+  exportSession: () => '',
+};
+
+const user = new TelegramUserService(fake);
+```
+
+**(b) Pass `clientFactory`** so the module builds your fake instead of a real GramJS client.
+`GramClientFactory` has the signature `(options, session) => IGramClient`. Combine it with
+`autoConnect: false` in tests that must never hit the network:
+
+```ts
+TelegramClientModule.forRoot({
+  apiId: 1,
+  apiHash: 'test',
+  autoConnect: false,
+  clientFactory: (_options, _session) => fake, // your IGramClient
+});
+```
+
+In tests you can alternatively override the exported `TELEGRAM_GRAM_CLIENT` provider token
+directly. Both approaches guarantee no real connection is opened.
+
+---
+
+## 9. Error handling
+
+Every failure this library raises is an instance of the abstract `TelegramError`, so you can
+catch one base type and narrow via the discriminated `kind` field (or with the `isTelegramError`
+type guard). The MTProto side raises two of them:
+
+- **`TelegramClientError`** (`kind: 'client'`) — generic client/transport failures that are
+  **not** part of the sign-in flow: a failed `getMe`, `getDialogs`, `getMessages`,
+  `sendMessage`, `connect`, `isAuthorized`, or `logOut`. It carries an optional `operation`
+  (e.g. `'getDialogs'`) and a `cause` (the wrapped GramJS error).
+- **`TelegramAuthError`** (`kind: 'auth'`) — raised during sign-in, with a machine-readable
+  `code` (`TelegramAuthErrorCode`) so you can drive the login UI. For `FLOOD_WAIT` it also
+  carries `retryAfterSeconds`.
+- **`TelegramSessionError`** (`kind: 'session'`) — a session could not be loaded or persisted
+  by the `SessionStore`.
+
+`TelegramAuthErrorCode` is one of: `PHONE_INVALID`, `CODE_INVALID`, `PASSWORD_REQUIRED`,
+`PASSWORD_INVALID`, `CODE_NOT_REQUESTED`, `SIGN_UP_REQUIRED`, `NOT_AUTHORIZED`, `FLOOD_WAIT`,
+`UNKNOWN`.
+
+### Handling client operation failures
+
+```ts
+import { TelegramClientError, isTelegramError } from 'nestjs-telegram';
+
+try {
+  await this.user.sendMessage('@somebody', 'hi');
+} catch (error) {
+  if (error instanceof TelegramClientError) {
+    // error.operation === 'sendMessage', error.cause holds the underlying GramJS error
+    this.logger.error(`MTProto ${error.operation ?? 'op'} failed: ${error.message}`);
+  } else if (isTelegramError(error)) {
+    this.logger.error(`Telegram error [${error.kind}]: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+### Handling auth failures (and flood waits)
+
+```ts
+import { TelegramAuthError } from 'nestjs-telegram';
+
+try {
+  const step = await this.auth.signIn(code);
+  if (step.status === 'password-required') {
+    await this.auth.checkPassword(password);
+  }
+} catch (error) {
+  if (error instanceof TelegramAuthError) {
+    switch (error.code) {
+      case 'CODE_INVALID':
+        return 'That login code was wrong or expired — request a new one.';
+      case 'PASSWORD_INVALID':
+        return 'Incorrect 2FA password.';
+      case 'FLOOD_WAIT':
+        return `Rate limited. Try again in ${error.retryAfterSeconds ?? '?'}s.`;
+      case 'CODE_NOT_REQUESTED':
+        return 'Call sendCode() before signIn().';
+      default:
+        return `Sign-in failed (${error.code}).`;
+    }
+  }
+  throw error;
+}
+```
+
+> [!TIP]
+> Respect `FLOOD_WAIT`. When `error.code === 'FLOOD_WAIT'`, wait at least
+> `error.retryAfterSeconds` before retrying. For low thresholds you can let GramJS handle it
+> transparently by setting `floodSleepThreshold`. Hammering through rate limits is exactly the
+> kind of behavior that gets accounts restricted — see the warning at the top of this guide.
+
+---
+
+## See also
+
+- [`examples/login-cli.ts`](../examples/login-cli.ts) — interactive one-time login.
+- [`examples/example-app.module.ts`](../examples/example-app.module.ts) — reference NestJS wiring of both modules.
+- Telegram [Terms of Service](https://telegram.org/tos) and [API Terms](https://core.telegram.org/api/terms).

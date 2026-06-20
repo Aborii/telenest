@@ -5,6 +5,32 @@
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bot": {
+      "types": "./dist/lib/bot/index.d.ts",
+      "default": "./dist/lib/bot/index.js"
+    },
+    "./client": {
+      "types": "./dist/lib/client/index.d.ts",
+      "default": "./dist/lib/client/index.js"
+    },
+    "./common": {
+      "types": "./dist/lib/common/index.d.ts",
+      "default": "./dist/lib/common/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "bot": ["dist/lib/bot/index.d.ts"],
+      "client": ["dist/lib/client/index.d.ts"],
+      "common": ["dist/lib/common/index.d.ts"]
+    }
+  },
   "files": [
     "dist",
     "README.md"
@@ -28,7 +54,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "prepublishOnly": "npm run build"
+    "prepare": "npm run build"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",
@@ -37,6 +63,14 @@
     "rxjs": "^7.0.0",
     "telegraf": "^4.16.0",
     "telegram": "^2.26.0"
+  },
+  "peerDependenciesMeta": {
+    "telegraf": {
+      "optional": true
+    },
+    "telegram": {
+      "optional": true
+    }
   },
   "dependencies": {},
   "devDependencies": {

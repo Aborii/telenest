@@ -49,6 +49,15 @@ describe('matchesUserMessageFilter', () => {
       expect(matchesUserMessageFilter(msg({ text: 'hi' }), { pattern: 'hi' })).toBe(true);
       expect(matchesUserMessageFilter(msg({ text: 'hi there' }), { pattern: 'hi' })).toBe(false);
     });
+
+    it('is stable across calls for a globally-flagged RegExp (no lastIndex drift)', () => {
+      const filter = { pattern: /ping/g };
+      // ── Without resetting lastIndex, the 2nd identical test would return
+      //    false; it must stay true. ─────────────────────────────────────────
+      expect(matchesUserMessageFilter(msg({ text: 'ping' }), filter)).toBe(true);
+      expect(matchesUserMessageFilter(msg({ text: 'ping' }), filter)).toBe(true);
+      expect(matchesUserMessageFilter(msg({ text: 'ping' }), filter)).toBe(true);
+    });
   });
 
   describe('chatId', () => {

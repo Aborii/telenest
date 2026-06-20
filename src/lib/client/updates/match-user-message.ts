@@ -45,6 +45,10 @@ export function matchesUserMessageFilter(
   // ── Text pattern: RegExp is tested; a string must match exactly. ──────────
   if (filter.pattern !== undefined) {
     if (filter.pattern instanceof RegExp) {
+      // ── Reset lastIndex first: a `g`/`y`-flagged RegExp keeps mutable state
+      //    across .test() calls, which would make matching inconsistent from
+      //    one message to the next. ─────────────────────────────────────────
+      filter.pattern.lastIndex = 0;
       if (!filter.pattern.test(message.text)) return false;
     } else if (message.text !== filter.pattern) {
       return false;

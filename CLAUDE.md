@@ -52,11 +52,13 @@ its own. This is a hard architectural rule, not a preference:
 - **The umbrella `TelegramModule` only composes** the two feature modules
   (`TelegramModule.forRoot({ bot?, client? })`) — never add logic there that
   couples them.
-- **`telegraf` and `telegram` are peer dependencies** and neither side may take a
-  hard runtime dependency on the other's SDK (roadmap issue #6 makes them optional
-  via subpath exports).
+- **`telegraf` and `telegram` are optional peer dependencies** and neither side may
+  take a hard runtime dependency on the other's SDK. Subpath exports
+  (`nestjs-telegram/bot`, `/client`, `/common`) keep each side importable on its
+  own.
 
-Verify the boundary holds — both of these must return nothing:
+The boundary is enforced automatically by `src/lib/import-boundaries.spec.ts`. To
+check by hand, both of these must return nothing:
 
 ```bash
 grep -rn "from '\.\./client" src/lib/bot

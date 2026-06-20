@@ -29,3 +29,4 @@ export { createGramJsClient } from './gramjs-client.adapter';
 export * from './session/session-store.interface';
 export * from './session/memory-session-store';
 export * from './session/file-session-store';
+export * from './updates';

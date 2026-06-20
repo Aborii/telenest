@@ -27,6 +27,7 @@
  */
 
 import { Module } from '@nestjs/common';
+import { DiscoveryModule } from '@nestjs/core';
 import {
   gramClientProvider,
   sessionStoreProvider,
@@ -39,18 +40,21 @@ import {
 import { TelegramAuthService } from './telegram-auth.service';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import { TelegramUserService } from './telegram-user.service';
+import { TelegramUserUpdatesRegistrar } from './updates/telegram-user-updates.registrar';
 
 /**
  * MTProto feature module. Extends the generated `ConfigurableModuleClass` to
  * inherit fully-typed `forRoot` / `forRootAsync` static factories.
  */
 @Module({
+  imports: [DiscoveryModule],
   providers: [
     sessionStoreProvider,
     gramClientProvider,
     TelegramClientLifecycle,
     TelegramAuthService,
     TelegramUserService,
+    TelegramUserUpdatesRegistrar,
   ],
   exports: [
     TELEGRAM_GRAM_CLIENT,

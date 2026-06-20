@@ -45,6 +45,7 @@ function fakeClient(connect = jest.fn().mockResolvedValue(undefined)): IGramClie
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue(''),
+    onNewMessage: jest.fn().mockReturnValue(() => undefined),
   };
 }
 

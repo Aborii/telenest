@@ -8,11 +8,16 @@
  * behalf. All methods return library DTOs and require an authorized session
  * (establish one with {@link TelegramAuthService}).
  *
+ * It also exposes {@link TelegramUserService.updates$}: a hot stream of inbound
+ * messages received by the account (the same source `@OnUserMessage` handlers
+ * subscribe to).
+ *
  * USAGE
  * -----
  * ```ts
  * const me = await user.getMe();
  * await user.sendMessage('@durov', 'Hi from my own account!');
+ * user.updates$.subscribe((m) => console.log('new message', m.text));
  * ```
  *
  * KEY EXPORTS
@@ -20,7 +25,14 @@
  * - TelegramUserService: Injectable user-account operations facade.
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import type { IGramClient } from './gram-client.interface';
 import type {
   GramDialog,
@@ -35,15 +47,61 @@ import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
 
 /**
  * Facade for acting as the logged-in account over MTProto.
+ *
+ * Implements `OnModuleInit`/`OnModuleDestroy`: on init it subscribes to the
+ * client's inbound-message events and fans them out through
+ * {@link TelegramUserService.updates$}; on destroy it tears the subscription
+ * down and completes the stream.
  */
 @Injectable()
-export class TelegramUserService {
+export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
+  /** Logger scoped to this service. */
+  private readonly _logger = new Logger(TelegramUserService.name);
+
+  /** Multicast source backing {@link updates$}. */
+  private readonly _messages = new Subject<GramMessage>();
+
+  /** Unsubscribe handle returned by `client.onNewMessage`. */
+  private _unsubscribe?: () => void;
+
+  /**
+   * Hot, multicast stream of inbound messages received by the logged-in
+   * account. Subscribers added later only see messages from that point on.
+   */
+  public readonly updates$: Observable<GramMessage> =
+    this._messages.asObservable();
+
   /**
    * @param client - The MTProto client abstraction.
    */
   public constructor(
     @Inject(TELEGRAM_GRAM_CLIENT) private readonly client: IGramClient,
   ) {}
+
+  /**
+   * Begins fanning the client's new-message events into {@link updates$}.
+   *
+   * @returns Nothing.
+   * @throws Never.
+   */
+  public onModuleInit(): void {
+    this._unsubscribe = this.client.onNewMessage((message) =>
+      this._messages.next(message),
+    );
+    this._logger.log('Subscribed to inbound account messages.');
+  }
+
+  /**
+   * Stops forwarding events and completes the stream.
+   *
+   * @returns Nothing.
+   * @throws Never.
+   */
+  public onModuleDestroy(): void {
+    this._unsubscribe?.();
+    this._unsubscribe = undefined;
+    this._messages.complete();
+  }
 
   /**
    * Returns the logged-in account's own profile.

@@ -20,6 +20,7 @@
  */
 
 import { Api, TelegramClient, errors, password, sessions } from 'telegram';
+import { NewMessage, type NewMessageEvent } from 'telegram/events';
 import type { Dialog } from 'telegram/tl/custom/dialog';
 import {
   TelegramAuthError,
@@ -280,6 +281,18 @@ export class GramJsClientAdapter implements IGramClient {
     // ── StringSession.save() returns the encoded string; the abstract base
     //    type widens it to `void`, hence the dedicated reference. ────────────
     return this.stringSession.save() ?? '';
+  }
+
+  /** {@inheritDoc IGramClient.onNewMessage} */
+  public onNewMessage(handler: (message: GramMessage) => void): () => void {
+    const builder = new NewMessage({});
+    const callback = (event: NewMessageEvent): void => {
+      handler(this.mapMessage(event.message));
+    };
+    this.client.addEventHandler(callback, builder);
+    return () => {
+      this.client.removeEventHandler(callback, builder);
+    };
   }
 
   // ── Mapping helpers (Api.* → library DTOs) ─────────────────────────────────

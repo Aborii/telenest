@@ -45,6 +45,7 @@ function createFakeClient(
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(FAKE_MESSAGE),
     exportSession: jest.fn().mockReturnValue(''),
+    onNewMessage: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
   return Object.assign(base, overrides);
 }
@@ -108,5 +109,46 @@ describe('TelegramUserService', () => {
     const service = new TelegramUserService(client);
     await service.getMe();
     expect(client.connect).not.toHaveBeenCalled();
+  });
+
+  describe('updates$', () => {
+    it('forwards client new-message events after onModuleInit', () => {
+      let emit: ((message: GramMessage) => void) | undefined;
+      const client = createFakeClient({
+        onNewMessage: jest.fn((handler: (m: GramMessage) => void) => {
+          emit = handler;
+          return () => {
+            emit = undefined;
+          };
+        }),
+      });
+      const service = new TelegramUserService(client);
+
+      const received: GramMessage[] = [];
+      service.updates$.subscribe((message) => received.push(message));
+
+      service.onModuleInit();
+      emit?.(FAKE_MESSAGE);
+
+      expect(client.onNewMessage).toHaveBeenCalledTimes(1);
+      expect(received).toEqual([FAKE_MESSAGE]);
+    });
+
+    it('unsubscribes and completes the stream on destroy', () => {
+      const unsubscribe = jest.fn();
+      const client = createFakeClient({
+        onNewMessage: jest.fn().mockReturnValue(unsubscribe),
+      });
+      const service = new TelegramUserService(client);
+
+      let completed = false;
+      service.updates$.subscribe({ complete: () => (completed = true) });
+
+      service.onModuleInit();
+      service.onModuleDestroy();
+
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+      expect(completed).toBe(true);
+    });
   });
 });

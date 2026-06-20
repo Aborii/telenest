@@ -495,6 +495,65 @@ await this.user.sendToSelf('Remember to renew the api credentials.');
 `GramGetDialogsParams` accepts `limit` and `archived`; `GramGetMessagesParams` accepts
 `limit`, `minId`, and `maxId` (for pagination).
 
+### Receiving inbound messages
+
+The user account can **react** to incoming messages, not just send them. There are two ways
+to consume the inbound stream — both fed by the same underlying GramJS event and both
+returning plain `GramMessage` DTOs (no GramJS imported in your code).
+
+**1. The `updates$` observable** — a hot, multicast RxJS stream on `TelegramUserService`:
+
+```ts
+@Injectable()
+export class Watcher implements OnModuleInit {
+  constructor(private readonly user: TelegramUserService) {}
+
+  onModuleInit() {
+    this.user.updates$
+      .pipe(filter((m) => !m.out)) // incoming only
+      .subscribe((m) => console.log(`[${m.peerId}] ${m.text}`));
+  }
+}
+```
+
+**2. The `@OnUserMessage()` decorator** — declare a handler method on any provider and the
+module discovers and wires it at bootstrap (and tears it down on shutdown):
+
+```ts
+import { OnUserMessage, GramMessage, GramUserMessageContext } from 'nestjs-telegram';
+
+@Injectable()
+export class AutoReply {
+  @OnUserMessage({ incoming: true, pattern: /^ping$/i })
+  async onPing(message: GramMessage, ctx: GramUserMessageContext) {
+    await ctx.reply('pong'); // replies in the same chat
+  }
+
+  @OnUserMessage({ chatId: '@mychannel' })
+  onChannelPost(message: GramMessage) {
+    // ...
+  }
+}
+```
+
+The second argument is a `GramUserMessageContext`: `{ message, reply(text) }`, where `reply`
+sends back to the chat the message came from. A handler that throws is logged and isolated —
+it never breaks delivery for the other handlers.
+
+#### `OnUserMessageFilter`
+
+All present fields must match (logical AND); omit a field to ignore it.
+
+| Field | Type | Matches |
+|---|---|---|
+| `incoming` | `boolean` | Messages **not** sent by the logged-in account. |
+| `outgoing` | `boolean` | Messages **sent by** the logged-in account. |
+| `pattern` | `RegExp \| string` | `RegExp` is tested against the text; a `string` must equal it exactly. |
+| `chatId` | `GramPeer \| GramPeer[]` | One or more chat/peer ids (matched against `message.peerId`). |
+
+> Note: events only flow while the client is connected (the default). With `autoConnect: false`
+> you manage the connection yourself, and the stream stays idle until you connect.
+
 ---
 
 ## 7. DTO shapes

@@ -1,0 +1,105 @@
+/**
+ * @file src/lib/bot/updates/telegram-update.decorator.spec.ts
+ *
+ * PURPOSE
+ * -------
+ * Verifies the class/method decorators attach the expected reflect-metadata: the
+ * class scan marker, one binding per method decorator, correct kinds/triggers,
+ * and accumulation when decorators are stacked on a single method.
+ */
+
+import 'reflect-metadata';
+import {
+  Action,
+  Command,
+  Hears,
+  Help,
+  On,
+  Start,
+  TelegramUpdate,
+  Use,
+} from './telegram-update.decorator';
+import {
+  BOT_UPDATE_KINDS,
+  IS_TELEGRAM_UPDATE_METADATA,
+  UPDATE_BINDINGS_METADATA,
+  type UpdateBinding,
+} from './telegram-update.types';
+
+/** Reads the binding array a method decorator stored on a prototype method. */
+function bindingsOf(prototype: object, method: string): UpdateBinding[] {
+  const fn = (prototype as Record<string, unknown>)[method] as object;
+  return (Reflect.getMetadata(UPDATE_BINDINGS_METADATA, fn) as UpdateBinding[]) ?? [];
+}
+
+describe('@TelegramUpdate class decorator', () => {
+  it('marks the class so the registrar will scan it', () => {
+    @TelegramUpdate()
+    class Marked {}
+
+    expect(Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, Marked)).toBe(true);
+  });
+
+  it('leaves undecorated classes unmarked', () => {
+    class Plain {}
+    expect(
+      Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, Plain),
+    ).toBeUndefined();
+  });
+});
+
+describe('method decorators', () => {
+  /* eslint-disable @typescript-eslint/no-empty-function */
+  class Handlers {
+    @Start() onStart(): void {}
+    @Help() onHelp(): void {}
+    @Command('ping') onPing(): void {}
+    @Hears(/hi/) onHi(): void {}
+    @Action('go') onGo(): void {}
+    @On('text') onText(): void {}
+    @Use() onUse(): void {}
+  }
+  /* eslint-enable @typescript-eslint/no-empty-function */
+
+  const proto = Handlers.prototype;
+
+  it('records start/help/use with no trigger', () => {
+    expect(bindingsOf(proto, 'onStart')).toEqual([
+      { kind: BOT_UPDATE_KINDS.START },
+    ]);
+    expect(bindingsOf(proto, 'onHelp')).toEqual([
+      { kind: BOT_UPDATE_KINDS.HELP },
+    ]);
+    expect(bindingsOf(proto, 'onUse')).toEqual([
+      { kind: BOT_UPDATE_KINDS.USE },
+    ]);
+  });
+
+  it('records command/hears/action/on with their trigger', () => {
+    expect(bindingsOf(proto, 'onPing')).toEqual([
+      { kind: BOT_UPDATE_KINDS.COMMAND, trigger: 'ping' },
+    ]);
+    expect(bindingsOf(proto, 'onHi')).toEqual([
+      { kind: BOT_UPDATE_KINDS.HEARS, trigger: /hi/ },
+    ]);
+    expect(bindingsOf(proto, 'onGo')).toEqual([
+      { kind: BOT_UPDATE_KINDS.ACTION, trigger: 'go' },
+    ]);
+    expect(bindingsOf(proto, 'onText')).toEqual([
+      { kind: BOT_UPDATE_KINDS.ON, trigger: 'text' },
+    ]);
+  });
+
+  it('accumulates multiple stacked decorators on one method', () => {
+    class Stacked {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      @Command('a') @Command('b') both(): void {}
+    }
+
+    // ── Decorators apply bottom-up, so 'b' is appended before 'a'. ───────────
+    expect(bindingsOf(Stacked.prototype, 'both')).toEqual([
+      { kind: BOT_UPDATE_KINDS.COMMAND, trigger: 'b' },
+      { kind: BOT_UPDATE_KINDS.COMMAND, trigger: 'a' },
+    ]);
+  });
+});

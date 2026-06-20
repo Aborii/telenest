@@ -28,17 +28,28 @@
  */
 
 import { Module } from '@nestjs/common';
+import { DiscoveryModule } from '@nestjs/core';
 import { TELEGRAM_BOT } from './telegram-bot.constants';
 import { telegramBotProvider } from './telegram-bot.factory';
 import { ConfigurableModuleClass } from './telegram-bot.module-definition';
 import { TelegramBotService } from './telegram-bot.service';
+import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
 
 /**
  * Bot API feature module. Extends the generated `ConfigurableModuleClass` to
  * inherit fully-typed `forRoot` and `forRootAsync` static factories.
+ *
+ * `DiscoveryModule` + {@link TelegramBotUpdatesRegistrar} power the
+ * decorator-based handler system (`@TelegramUpdate`/`@Command`/…): the registrar
+ * binds discovered handlers onto the bot at bootstrap, before launch.
  */
 @Module({
-  providers: [telegramBotProvider, TelegramBotService],
+  imports: [DiscoveryModule],
+  providers: [
+    telegramBotProvider,
+    TelegramBotService,
+    TelegramBotUpdatesRegistrar,
+  ],
   exports: [TelegramBotService, TELEGRAM_BOT],
 })
 export class TelegramBotModule extends ConfigurableModuleClass {}

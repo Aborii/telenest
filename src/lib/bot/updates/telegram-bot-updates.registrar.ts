@@ -36,6 +36,20 @@ import {
   type UpdateBinding,
 } from './telegram-update.types';
 
+/** A discovered handler binding, queued before it is applied to Telegraf. */
+interface PendingBinding {
+  /** The provider instance bound as `this`. */
+  readonly instance: object;
+  /** The decorated method. */
+  readonly handler: TelegramUpdateHandler;
+  /** The method's parameter descriptors. */
+  readonly params: readonly ParamMetadata[];
+  /** How the handler binds onto Telegraf. */
+  readonly binding: UpdateBinding;
+  /** Human-readable identifier for logs. */
+  readonly label: string;
+}
+
 /**
  * Scans `@TelegramUpdate` providers and bridges their decorated methods onto the
  * Bot API via the underlying `Telegraf` instance.
@@ -61,10 +75,17 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
   /**
    * Discovers and binds every decorated handler. Runs once, before launch.
    *
+   * Bindings are collected first, then applied with all `@Use()` global
+   * middleware **before** the terminal handlers — Telegraf runs middleware in
+   * registration order, and a terminal handler (`@Command`, `@Hears`, …) that
+   * matches first would otherwise short-circuit before global middleware ran.
+   *
    * @returns Nothing.
    * @throws Never.
    */
   public onModuleInit(): void {
+    const collected: PendingBinding[] = [];
+
     for (const wrapper of this.discovery.getProviders()) {
       const instance = wrapper.instance;
       const metatype = wrapper.metatype;
@@ -100,9 +121,26 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
 
         const label = `${wrapper.name ?? metatype.name}.${methodName}`;
         for (const binding of bindings)
-          this.bind(instance as object, handler, params, binding, label);
+          collected.push({
+            instance: instance as object,
+            handler,
+            params,
+            binding,
+            label,
+          });
       }
     }
+
+    // ── Two stable passes: global @Use() middleware first, terminal handlers
+    //    second; discovery order is preserved within each group. ─────────────
+    const isUse = (entry: PendingBinding): boolean =>
+      entry.binding.kind === BOT_UPDATE_KINDS.USE;
+    for (const entry of collected)
+      if (isUse(entry))
+        this.bind(entry.instance, entry.handler, entry.params, entry.binding, entry.label);
+    for (const entry of collected)
+      if (!isUse(entry))
+        this.bind(entry.instance, entry.handler, entry.params, entry.binding, entry.label);
   }
 
   /**

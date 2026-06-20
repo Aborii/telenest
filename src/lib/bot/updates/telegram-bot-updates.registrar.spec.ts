@@ -206,6 +206,17 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
     expect(regs.find((r) => r.method === 'on')?.trigger).toBe('text');
   });
 
+  it('hoists @Use() global middleware ahead of terminal handlers', async () => {
+    // ── DemoUpdate declares globalMw (@Use) last, after @Command etc.; it must
+    //    still be registered first so Telegraf runs it before terminal matches. ─
+    const { regs } = await bootstrap([DemoUpdate]);
+    const useIndex = regs.findIndex((r) => r.method === 'use');
+    const firstTerminal = regs.findIndex((r) => r.method !== 'use');
+
+    expect(useIndex).toBe(0);
+    expect(useIndex).toBeLessThan(firstTerminal);
+  });
+
   it('dispatches updates with resolved arguments', async () => {
     const { regs, get } = await bootstrap([DemoUpdate]);
     const demo = get(DemoUpdate);

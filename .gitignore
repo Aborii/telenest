@@ -4,3 +4,5 @@ coverage
 .env
 .vscode
 *.log
+.claude/worktrees/
+.telegram.session

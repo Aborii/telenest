@@ -153,4 +153,15 @@ export interface IGramClient {
    * @throws Never.
    */
   exportSession(): string;
+
+  /**
+   * Subscribes to inbound new-message events for the logged-in account. The
+   * handler receives each message as a normalized {@link GramMessage}.
+   *
+   * @param handler - Called for every new message while subscribed.
+   * @returns An unsubscribe function that removes the handler. Idempotent.
+   * @throws Never (registration is synchronous; transport errors surface
+   *   elsewhere).
+   */
+  onNewMessage(handler: (message: GramMessage) => void): () => void;
 }

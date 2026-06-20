@@ -41,6 +41,7 @@ function createFakeClient(): IGramClient {
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue('S'),
+    onNewMessage: jest.fn().mockReturnValue(() => undefined),
   };
 }
 

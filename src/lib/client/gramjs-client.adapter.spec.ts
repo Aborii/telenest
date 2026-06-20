@@ -30,6 +30,8 @@ type MockClient = {
   getDialogs: jest.Mock;
   getMessages: jest.Mock;
   sendMessage: jest.Mock;
+  addEventHandler: jest.Mock;
+  removeEventHandler: jest.Mock;
 };
 
 /** Builds a mock client with overridable jest fns. */
@@ -44,6 +46,8 @@ function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
     getDialogs: jest.fn(),
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
+    addEventHandler: jest.fn(),
+    removeEventHandler: jest.fn(),
     ...overrides,
   };
 }
@@ -559,6 +563,56 @@ describe('GramJsClientAdapter', () => {
       expect(typeof client.getMe).toBe('function');
       expect(typeof client.sendMessage).toBe('function');
       expect(typeof client.exportSession()).toBe('string');
+    });
+  });
+
+  describe('onNewMessage', () => {
+    it('registers a NewMessage handler and maps the event message', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      const unsubscribe = adapter.onNewMessage((message) => received.push(message));
+
+      expect(mock.addEventHandler).toHaveBeenCalledTimes(1);
+
+      // ── Simulate GramJS delivering a NewMessageEvent to the registered cb. ──
+      const callback = mock.addEventHandler.mock.calls[0]?.[0] as (
+        event: unknown,
+      ) => void;
+      callback({
+        message: {
+          id: 7,
+          peerId: new Api.PeerUser({ userId: bigInt('1001') }),
+          message: 'hi there',
+          date: 5,
+          out: false,
+          senderId: bigInt('1001'),
+        },
+      });
+
+      expect(received).toEqual([
+        {
+          id: 7,
+          peerId: '1001',
+          text: 'hi there',
+          date: 5,
+          out: false,
+          senderId: '1001',
+        },
+      ]);
+    });
+
+    it('unsubscribe removes the event handler', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+
+      const unsubscribe = adapter.onNewMessage(() => undefined);
+      const registeredCb = mock.addEventHandler.mock.calls[0]?.[0];
+      unsubscribe();
+
+      expect(mock.removeEventHandler).toHaveBeenCalledTimes(1);
+      expect(mock.removeEventHandler.mock.calls[0]?.[0]).toBe(registeredCb);
     });
   });
 });

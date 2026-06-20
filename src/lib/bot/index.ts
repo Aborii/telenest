@@ -22,3 +22,4 @@ export * from './telegram-bot.module';
 export * from './keyboard.builder';
 export { createTelegrafInstance } from './telegram-bot.factory';
 export * from './updates';
+export * from './web-app';

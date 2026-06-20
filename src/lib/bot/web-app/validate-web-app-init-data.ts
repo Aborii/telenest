@@ -139,9 +139,11 @@ function hashMatches(computed: Buffer, hashHex: string): boolean {
 function buildInitData(params: URLSearchParams, hash: string): WebAppInitData {
   const authDateRaw = params.get('auth_date');
   const authSeconds = authDateRaw === null ? Number.NaN : Number(authDateRaw);
-  if (!Number.isFinite(authSeconds))
+  // ── Must be a positive integer Unix timestamp; reject '' (Number('')===0),
+  //    0, negative, and fractional values rather than mapping them to 1970. ──
+  if (!Number.isInteger(authSeconds) || authSeconds <= 0)
     throw new TelegramConfigError(
-      'validateWebAppInitData: "auth_date" is missing or not a number.',
+      'validateWebAppInitData: "auth_date" is missing or not a positive integer.',
     );
 
   const raw: Record<string, string> = {};

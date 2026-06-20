@@ -207,6 +207,15 @@ describe('validateWebAppInitData', () => {
     );
   });
 
+  it('throws when auth_date is empty or non-positive (no silent epoch)', () => {
+    for (const authDate of ['', '0', '-5', '1.5']) {
+      const initData = signInitData({ auth_date: authDate, user: USER_JSON });
+      expect(() => validateWebAppInitData(initData, BOT_TOKEN)).toThrow(
+        TelegramConfigError,
+      );
+    }
+  });
+
   it('throws TelegramConfigError when user JSON is unparseable (valid signature)', () => {
     const initData = signInitData({
       auth_date: String(nowSeconds()),

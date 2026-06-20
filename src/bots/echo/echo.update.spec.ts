@@ -19,8 +19,9 @@ function createCtx(options: {
   noText?: boolean;
 }): { ctx: Context; reply: jest.Mock } {
   const reply = jest.fn().mockResolvedValue(undefined);
+  // A non-text message (no `text` field) drives the early-return path.
   const message = options.noText
-    ? { photo: [] } // a non-text message
+    ? { photo: [] }
     : { text: options.text ?? '' };
   const ctx = {
     reply,

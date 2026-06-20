@@ -60,8 +60,10 @@ describe('ProfileWizard', () => {
   });
 
   it('rejects a whitespace-only name', async () => {
-    const { ctx, leave } = createCtx({ text: '   ' });
+    const { ctx, reply, leave, state } = createCtx({ text: '   ' });
     await wizard.saveName(ctx);
+    expect(reply).toHaveBeenCalledWith(expect.stringContaining('plain text'));
+    expect(state.profileName).toBeUndefined();
     expect(leave).not.toHaveBeenCalled();
   });
 });

@@ -36,14 +36,50 @@ examples/                       # login CLI + reference wiring
 docs/                           # feature documentation (see rules below)
 ```
 
-### Key architectural rule
+### Internal decoupling (Bot API ⟷ MTProto client) — keep them independent
 
-`IGramClient` (`src/lib/client/gram-client.interface.ts`) is the seam between the
-MTProto services and GramJS. **`GramJsClientAdapter` is the only file allowed to
-import `telegram`.** Services depend on `IGramClient` and return library-owned DTOs
-(`gram-client.types.ts`), never raw GramJS `Api.*` objects. Preserve this boundary.
+The two sides MUST stay independent so each is usable (and one day publishable) on
+its own. This is a hard architectural rule, not a preference:
 
-`telegraf` and `telegram` are **peerDependencies**.
+- **No cross-imports.** Nothing under `src/lib/bot/**` may import from
+  `src/lib/client/**`, and vice-versa. The two sides share code **only** through
+  `src/lib/common/**`.
+- **SDKs stay confined.** Only `src/lib/client/gramjs-client.adapter.ts` (and its
+  co-located spec, for fixtures) may import `telegram` (GramJS); only
+  `src/lib/bot/**` may import `telegraf`. MTProto services depend on the
+  `IGramClient` seam (`gram-client.interface.ts`) and return library DTOs
+  (`gram-client.types.ts`), never raw GramJS `Api.*` objects.
+- **The umbrella `TelegramModule` only composes** the two feature modules
+  (`TelegramModule.forRoot({ bot?, client? })`) — never add logic there that
+  couples them.
+- **`telegraf` and `telegram` are optional peer dependencies** and neither side may
+  take a hard runtime dependency on the other's SDK. Subpath exports
+  (`nestjs-telegram/bot`, `/client`, `/common`) keep each side importable on its
+  own.
+
+The boundary is enforced automatically by `src/lib/import-boundaries.spec.ts`. To
+check by hand, both of these must return nothing:
+
+```bash
+grep -rn "from '\.\./client" src/lib/bot
+grep -rn "from '\.\./bot" src/lib/client
+```
+
+## Non-negotiables
+
+Hard rules — never violate them, even under time pressure. The detailed sections
+below expand each one.
+
+- **No TypeScript `enum`, ever.** Model closed sets as an `as const` object plus a
+  derived union type (and a derived values array when you need the list). See
+  "No enums".
+- **No `any`** (explicit or implicit) — use `unknown` at boundaries and narrow.
+- **Keep the Bot and MTProto sides decoupled** — see "Internal decoupling".
+- **Full JSDoc** on every file, export, and non-obvious type member.
+- **Tests never hit the network**; co-locate `*.spec.ts`; keep the coverage bar.
+- **Feature work targets `dev`, never `main`** — see "Branching & releases".
+- **Sign commits** with the dedicated key; reference the issue and add `Closes #n`.
+- **`npm run typecheck` and `npm test` must both pass** before every commit.
 
 ## Commands
 
@@ -58,6 +94,24 @@ import `telegram`.** Services depend on `IGramClient` and return library-owned D
 
 Always run `npm run typecheck` and `npm test` before considering a change done.
 Strict TypeScript is the gate (there is no ESLint config in this repo).
+
+---
+
+## Branching & releases
+
+This repo uses a `dev`-based flow:
+
+- **`dev` is the integration branch and the merge base.** It is the default
+  branch. All feature/fix work branches off `dev` and opens PRs **against `dev`**
+  (`gh pr create --base dev`). Never open feature PRs against `main`.
+- **`main` is release-only.** It receives `dev` *only* via a release merge, so it
+  always reflects the latest released version.
+- **Cutting a release:** merge `dev` → `main`, then tag `vX.Y.Z` and create a
+  GitHub release from `main`. Releases are **GitHub-only (never npm)** and the repo
+  stays **private**.
+- For any feature/fix, follow the feature-from-issue flow in the global
+  `~/.claude/CLAUDE.md` (branch off `dev` → implement → verify → commit → PR into
+  `dev` → self-review → fix → resolve).
 
 ---
 
@@ -198,6 +252,8 @@ follow the interface, not GramJS internals.
 - [ ] Every function/method has JSDoc with `@param`/`@returns`/`@throws`.
 - [ ] Every exported type/interface documented, members commented.
 - [ ] No `any`; no `enum`; secrets (tokens, session strings) never logged.
+- [ ] Bot ⟷ client decoupling preserved (no cross-imports; SDKs confined).
 - [ ] Non-obvious logic commented; section dividers in long functions.
 - [ ] Tests added/updated; `npm run typecheck` and `npm test` pass.
 - [ ] `docs/<FEATURE>.md` created or updated for new/changed features.
+- [ ] Branch is off `dev` and the PR targets `dev` (not `main`).

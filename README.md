@@ -45,13 +45,45 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 npm i nestjs-telegram
 ```
 
-Then install the peer dependencies (NestJS runtime + both Telegram clients):
+The NestJS runtime peers are always required:
 
 ```bash
-npm i @nestjs/common @nestjs/core reflect-metadata rxjs telegraf telegram
+npm i @nestjs/common @nestjs/core reflect-metadata rxjs
 ```
 
-> `telegraf` powers the Bot API side and `telegram` (GramJS) powers the MTProto user-account side. Both are peer dependencies; GramJS is imported in exactly one adapter file, so if you only use the Bot side it never ends up on your hot path.
+Then install **only the Telegram client(s) you use** — `telegraf` and `telegram`
+are **optional** peer dependencies:
+
+```bash
+# Bot API only
+npm i telegraf
+
+# User account (MTProto) only
+npm i telegram
+
+# Both
+npm i telegraf telegram
+```
+
+### Import only the side you need (subpath exports)
+
+The package exposes three independent entry points so a bot-only app never pulls
+in GramJS, and a user-account-only app never pulls in Telegraf:
+
+| Import | Pulls in | Use when |
+| --- | --- | --- |
+| `nestjs-telegram/bot` | `telegraf` only | You only run a bot |
+| `nestjs-telegram/client` | `telegram` (GramJS) only | You only control a user account |
+| `nestjs-telegram/common` | neither | Just the shared error/types layer |
+| `nestjs-telegram` (root) | both | You use both sides |
+
+```ts
+import { TelegramBotModule } from 'nestjs-telegram/bot';       // no GramJS loaded
+import { TelegramClientModule } from 'nestjs-telegram/client'; // no Telegraf loaded
+```
+
+> Importing from the root (`nestjs-telegram`) re-exports everything and therefore
+> loads both SDKs — use the subpaths when you only need one side.
 
 ---
 

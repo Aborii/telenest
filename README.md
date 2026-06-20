@@ -98,6 +98,25 @@ import { TelegramClientModule } from 'nestjs-telegram/client'; // no Telegraf lo
 | **Main service** | `TelegramBotService` | `TelegramUserService` (+ `TelegramAuthService`) |
 | **When to use** | Building a bot users talk to; sending automated notifications from a server | Automating your own account; reading/aggregating your own chats; user-only actions a bot cannot perform |
 
+---
+
+## 📚 Documentation
+
+**[→ Complete Documentation Index](./docs/INDEX.md)**
+
+### Quick Links
+
+- **[Getting Started](./docs/GETTING-STARTED.md)** — Installation & first bot/client setup
+- **[API Reference](./docs/API-REFERENCE.md)** — Complete API documentation
+- **[Examples & Recipes](./docs/EXAMPLES.md)** — Practical copy-paste examples
+- **[Advanced Usage](./docs/ADVANCED-USAGE.md)** — Production patterns & best practices
+
+### By Topic
+
+- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
+- **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md)
+- **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
+
 ```mermaid
 flowchart LR
   App[Your NestJS App]

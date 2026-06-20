@@ -103,6 +103,11 @@ describe('ReplyKeyboardBuilder', () => {
     const markup = new ReplyKeyboardBuilder().text('Hi').build();
     expect(markup).toEqual({ keyboard: [[{ text: 'Hi' }]] });
   });
+
+  it('supports selective targeting', () => {
+    const markup = new ReplyKeyboardBuilder().text('Hi').selective().build();
+    expect(markup.selective).toBe(true);
+  });
 });
 
 describe('removeKeyboard', () => {

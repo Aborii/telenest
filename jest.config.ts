@@ -31,9 +31,14 @@ const config: Config = {
   setupFiles: ['<rootDir>/test/jest-setup.ts'],
   clearMocks: true,
   collectCoverageFrom: [
-    'src/lib/**/*.ts',
-    '!src/lib/**/index.ts',
+    'src/**/*.ts',
+    // Barrels and the generated module-definition plumbing carry no logic.
+    '!src/**/index.ts',
     '!src/lib/**/*.module-definition.ts',
+    // Bootstrap entry and the demo composition root require a full runtime
+    // (env vars + live bot tokens) to exercise and are verified manually.
+    '!src/main.ts',
+    '!src/app.module.ts',
   ],
   coverageDirectory: '<rootDir>/coverage',
 };

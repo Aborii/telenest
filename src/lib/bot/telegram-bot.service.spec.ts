@@ -87,6 +87,18 @@ describe('TelegramBotService', () => {
       telegram.getMe.mockResolvedValue({ id: 7, is_bot: true });
       await expect(service.getMe()).resolves.toEqual({ id: 7, is_bot: true });
     });
+
+    it('wraps a non-Error rejection with no status code (String fallback)', async () => {
+      const { service, telegram } = createService();
+      telegram.sendMessage.mockRejectedValue('plain string failure');
+
+      const error = await service.sendMessage(1, 'x').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TelegramBotApiError);
+      expect((error as TelegramBotApiError).statusCode).toBeUndefined();
+      expect((error as TelegramBotApiError).message).toContain(
+        'plain string failure',
+      );
+    });
   });
 
   describe('raw accessors', () => {

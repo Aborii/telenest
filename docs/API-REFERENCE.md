@@ -38,16 +38,18 @@ Dynamic module for registering the Bot API side.
 Synchronous configuration. Use when options are available at import time.
 
 **Parameters:**
+
 - `options.token` (string, **required**) — Bot token from @BotFather
 - `options.launch` (boolean, optional, default: `true`) — Auto-launch on bootstrap
 - `options.launchOptions` (object, optional) — Telegraf launch config (webhook, etc.)
 
 **Example:**
+
 ```typescript
 TelegramBotModule.forRoot({
   token: process.env.BOT_TOKEN!,
   launch: true,
-})
+});
 ```
 
 ##### `forRootAsync(options: TelegramBotModuleAsyncOptions): DynamicModule`
@@ -55,14 +57,15 @@ TelegramBotModule.forRoot({
 Async configuration with `useFactory`, `useClass`, or `useExisting`.
 
 **Example:**
+
 ```typescript
 TelegramBotModule.forRootAsync({
   imports: [ConfigModule],
   inject: [ConfigService],
   useFactory: (config: ConfigService) => ({
-    token: config.get('BOT_TOKEN')!,
+    token: config.get("BOT_TOKEN")!,
   }),
-})
+});
 ```
 
 ---
@@ -73,10 +76,10 @@ Injectable facade over Telegraf. All methods wrap errors in `TelegramBotApiError
 
 #### Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property   | Type       | Description                            |
+| ---------- | ---------- | -------------------------------------- |
 | `instance` | `Telegraf` | Raw Telegraf instance for advanced use |
-| `telegram` | `Telegram` | Raw Telegraf Bot API client |
+| `telegram` | `Telegram` | Raw Telegraf Bot API client            |
 
 #### Lifecycle Methods
 
@@ -91,6 +94,7 @@ Starts the bot manually (only needed if `launch: false`).
 Stops the bot.
 
 **Parameters:**
+
 - `reason` (string, optional) — Logged reason for shutdown
 
 ---
@@ -102,6 +106,7 @@ Stops the bot.
 Sends a text message.
 
 **Parameters:**
+
 - `chatId` (number | string) — Target chat ID or username
 - `text` (string) — Message text
 - `extra` (object, optional) — Additional options (parse mode, keyboard, etc.)
@@ -111,10 +116,11 @@ Sends a text message.
 **Throws:** `TelegramBotApiError`
 
 **Example:**
+
 ```typescript
-await bot.sendMessage(123456, 'Hello!', {
-  parse_mode: 'Markdown',
-  reply_markup: { inline_keyboard: [[{ text: 'Click me', callback_data: 'btn1' }]] }
+await bot.sendMessage(123456, "Hello!", {
+  parse_mode: "Markdown",
+  reply_markup: { inline_keyboard: [[{ text: "Click me", callback_data: "btn1" }]] },
 });
 ```
 
@@ -123,14 +129,16 @@ await bot.sendMessage(123456, 'Hello!', {
 Sends a photo.
 
 **Parameters:**
+
 - `chatId` — Target chat
 - `photo` — Photo source (file path, Buffer, Stream, or URL)
 - `extra` — Optional caption, keyboard, etc.
 
 **Example:**
+
 ```typescript
-await bot.sendPhoto(chatId, 'https://example.com/image.jpg', {
-  caption: 'Check this out!'
+await bot.sendPhoto(chatId, "https://example.com/image.jpg", {
+  caption: "Check this out!",
 });
 ```
 
@@ -139,9 +147,10 @@ await bot.sendPhoto(chatId, 'https://example.com/image.jpg', {
 Sends a file/document.
 
 **Example:**
+
 ```typescript
-import { createReadStream } from 'fs';
-await bot.sendDocument(chatId, { source: createReadStream('./file.pdf') });
+import { createReadStream } from "fs";
+await bot.sendDocument(chatId, { source: createReadStream("./file.pdf") });
 ```
 
 ##### `sendVideo(chatId, video, extra?): Promise<Message>`
@@ -157,10 +166,11 @@ Sends an audio file.
 Sends multiple photos/videos as an album.
 
 **Example:**
+
 ```typescript
 await bot.sendMediaGroup(chatId, [
-  { type: 'photo', media: 'https://example.com/1.jpg' },
-  { type: 'photo', media: 'https://example.com/2.jpg' },
+  { type: "photo", media: "https://example.com/1.jpg" },
+  { type: "photo", media: "https://example.com/2.jpg" },
 ]);
 ```
 
@@ -173,13 +183,15 @@ Sends a location.
 Shows typing indicator or upload status.
 
 **Parameters:**
+
 - `action` — `'typing'`, `'upload_photo'`, `'upload_video'`, etc.
 
 **Example:**
+
 ```typescript
-await bot.sendChatAction(chatId, 'typing');
-await new Promise(r => setTimeout(r, 2000)); // Simulate typing
-await bot.sendMessage(chatId, 'Done!');
+await bot.sendChatAction(chatId, "typing");
+await new Promise((r) => setTimeout(r, 2000)); // Simulate typing
+await bot.sendMessage(chatId, "Done!");
 ```
 
 ##### `forwardMessage(chatId, fromChatId, messageId, extra?): Promise<Message>`
@@ -199,9 +211,10 @@ Copies a message without "Forwarded from" header.
 Edits message text.
 
 **Example:**
+
 ```typescript
-const msg = await bot.sendMessage(chatId, 'Loading...');
-await bot.editMessageText(chatId, msg.message_id, undefined, 'Done!');
+const msg = await bot.sendMessage(chatId, "Loading...");
+await bot.editMessageText(chatId, msg.message_id, undefined, "Done!");
 ```
 
 ##### `editMessageReplyMarkup(chatId, messageId, inlineMessageId, markup): Promise<Message | true>`
@@ -221,15 +234,17 @@ Deletes a message.
 Answers an inline button press.
 
 **Parameters:**
+
 - `callbackQueryId` — From `ctx.callbackQuery.id`
 - `text` — Optional notification text
 - `showAlert` — Show as alert instead of notification
 
 **Example:**
+
 ```typescript
-bot.action('confirm', async (ctx) => {
-  await bot.answerCbQuery(ctx.callbackQuery.id, 'Confirmed!');
-  await ctx.editMessageText('Action confirmed ✅');
+bot.action("confirm", async (ctx) => {
+  await bot.answerCbQuery(ctx.callbackQuery.id, "Confirmed!");
+  await ctx.editMessageText("Action confirmed ✅");
 });
 ```
 
@@ -278,10 +293,11 @@ Unpins a message.
 Sets bot's command menu.
 
 **Example:**
+
 ```typescript
 await bot.setMyCommands([
-  { command: 'start', description: 'Start the bot' },
-  { command: 'help', description: 'Show help' },
+  { command: "start", description: "Start the bot" },
+  { command: "help", description: "Show help" },
 ]);
 ```
 
@@ -306,10 +322,11 @@ Gets file metadata.
 Gets download URL for a file.
 
 **Example:**
+
 ```typescript
 const file = await bot.getFile(fileId);
 const url = await bot.getFileLink(fileId);
-console.log('Download:', url.href);
+console.log("Download:", url.href);
 ```
 
 ---
@@ -341,8 +358,9 @@ Express/Koa middleware for webhook handling.
 Registers `/start` handler.
 
 **Example:**
+
 ```typescript
-bot.start((ctx) => ctx.reply('Welcome!'));
+bot.start((ctx) => ctx.reply("Welcome!"));
 ```
 
 ##### `help(...middleware): Telegraf`
@@ -354,9 +372,10 @@ Registers `/help` handler.
 Registers custom command(s).
 
 **Example:**
+
 ```typescript
-bot.command('ping', (ctx) => ctx.reply('pong'));
-bot.command(['stats', 'info'], handlerFunction);
+bot.command("ping", (ctx) => ctx.reply("pong"));
+bot.command(["stats", "info"], handlerFunction);
 ```
 
 ##### `hears(triggers, ...middleware): Telegraf`
@@ -364,8 +383,9 @@ bot.command(['stats', 'info'], handlerFunction);
 Matches message text.
 
 **Example:**
+
 ```typescript
-bot.hears('hello', (ctx) => ctx.reply('Hi!'));
+bot.hears("hello", (ctx) => ctx.reply("Hi!"));
 bot.hears(/^\/secret (\w+)$/, (ctx) => {
   const code = ctx.match[1];
   // ...
@@ -377,10 +397,11 @@ bot.hears(/^\/secret (\w+)$/, (ctx) => {
 Handles inline button callbacks.
 
 **Example:**
+
 ```typescript
-bot.action('delete', async (ctx) => {
+bot.action("delete", async (ctx) => {
   await ctx.deleteMessage();
-  await ctx.answerCbQuery('Deleted!');
+  await ctx.answerCbQuery("Deleted!");
 });
 ```
 
@@ -389,9 +410,10 @@ bot.action('delete', async (ctx) => {
 Handles specific update types.
 
 **Example:**
+
 ```typescript
-bot.on('text', (ctx) => ctx.reply(`You said: ${ctx.text}`));
-bot.on('photo', (ctx) => ctx.reply('Nice photo!'));
+bot.on("text", (ctx) => ctx.reply(`You said: ${ctx.text}`));
+bot.on("photo", (ctx) => ctx.reply("Nice photo!"));
 ```
 
 ##### `use(...middleware): Telegraf`
@@ -399,9 +421,10 @@ bot.on('photo', (ctx) => ctx.reply('Nice photo!'));
 Registers global middleware.
 
 **Example:**
+
 ```typescript
 bot.use((ctx, next) => {
-  console.log('Update:', ctx.updateType);
+  console.log("Update:", ctx.updateType);
   return next();
 });
 ```
@@ -411,10 +434,11 @@ bot.use((ctx, next) => {
 Registers global error handler.
 
 **Example:**
+
 ```typescript
 bot.catch((err, ctx) => {
-  console.error('Bot error:', err);
-  ctx.reply('Something went wrong!');
+  console.error("Bot error:", err);
+  ctx.reply("Something went wrong!");
 });
 ```
 
@@ -459,17 +483,18 @@ Starts a new row.
 Returns the final keyboard.
 
 **Example:**
+
 ```typescript
-import { InlineKeyboardBuilder } from 'nestjs-telegram/bot';
+import { InlineKeyboardBuilder } from "nestjs-telegram/bot";
 
 const keyboard = new InlineKeyboardBuilder()
-  .callback('Yes', 'confirm')
-  .callback('No', 'cancel')
+  .callback("Yes", "confirm")
+  .callback("No", "cancel")
   .row()
-  .url('Learn more', 'https://example.com')
+  .url("Learn more", "https://example.com")
   .build();
 
-await bot.sendMessage(chatId, 'Are you sure?', { reply_markup: keyboard });
+await bot.sendMessage(chatId, "Are you sure?", { reply_markup: keyboard });
 ```
 
 ---
@@ -521,19 +546,20 @@ Input field placeholder.
 Returns the final keyboard.
 
 **Example:**
+
 ```typescript
-import { ReplyKeyboardBuilder } from 'nestjs-telegram/bot';
+import { ReplyKeyboardBuilder } from "nestjs-telegram/bot";
 
 const keyboard = new ReplyKeyboardBuilder()
-  .text('📝 New Task')
-  .text('📊 Stats')
+  .text("📝 New Task")
+  .text("📊 Stats")
   .row()
-  .text('⚙️ Settings')
+  .text("⚙️ Settings")
   .resize()
   .oneTime()
   .build();
 
-await bot.sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
+await bot.sendMessage(chatId, "Choose an action:", { reply_markup: keyboard });
 ```
 
 ---
@@ -545,9 +571,10 @@ await bot.sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
 Removes the custom keyboard.
 
 **Example:**
+
 ```typescript
-import { removeKeyboard } from 'nestjs-telegram/bot';
-await bot.sendMessage(chatId, 'Keyboard hidden', { reply_markup: removeKeyboard() });
+import { removeKeyboard } from "nestjs-telegram/bot";
+await bot.sendMessage(chatId, "Keyboard hidden", { reply_markup: removeKeyboard() });
 ```
 
 ##### `forceReply(selective?: boolean, placeholder?: string): ForceReply`
@@ -567,22 +594,23 @@ Decorator-based handler registration (alternative to imperative style).
 Marks a class for automatic handler registration.
 
 **Example:**
+
 ```typescript
-import { TelegramUpdate, Start, Command, Ctx } from 'nestjs-telegram/bot';
-import { Injectable } from '@nestjs/common';
-import type { Context } from 'telegraf';
+import { TelegramUpdate, Start, Command, Ctx } from "nestjs-telegram/bot";
+import { Injectable } from "@nestjs/common";
+import type { Context } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
 export class BotHandlers {
   @Start()
   async onStart(@Ctx() ctx: Context) {
-    await ctx.reply('Bot started!');
+    await ctx.reply("Bot started!");
   }
 
-  @Command('ping')
+  @Command("ping")
   async onPing(@Ctx() ctx: Context) {
-    await ctx.reply('pong');
+    await ctx.reply("pong");
   }
 }
 ```
@@ -592,24 +620,31 @@ export class BotHandlers {
 #### Method Decorators
 
 ##### `@Start()`
+
 Handles `/start`.
 
 ##### `@Help()`
+
 Handles `/help`.
 
 ##### `@Command(command: string | string[])`
+
 Handles custom command(s).
 
 ##### `@Hears(trigger: string | RegExp | (string | RegExp)[])`
+
 Matches message text.
 
 ##### `@Action(trigger: string | RegExp | (string | RegExp)[])`
+
 Handles callback queries.
 
 ##### `@On(updateType: UpdateType | UpdateType[])`
+
 Handles specific update types.
 
 **Example:**
+
 ```typescript
 @On('photo')
 async onPhoto(@Ctx() ctx: Context) {
@@ -618,6 +653,7 @@ async onPhoto(@Ctx() ctx: Context) {
 ```
 
 ##### `@Use()`
+
 Global middleware (runs for all updates).
 
 ---
@@ -627,18 +663,23 @@ Global middleware (runs for all updates).
 Inject context data into handler methods.
 
 ##### `@Ctx()`
+
 Injects full Telegraf `Context`.
 
 ##### `@MessageText()`
+
 Injects `ctx.message.text`.
 
 ##### `@Sender()`
+
 Injects `ctx.from` (User object).
 
 ##### `@CallbackData()`
+
 Injects `ctx.callbackQuery.data`.
 
 **Example:**
+
 ```typescript
 @Command('greet')
 async greet(
@@ -661,6 +702,7 @@ See [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md) for full details.
 Validates Telegram Mini App init data signature.
 
 **Parameters:**
+
 - `initData` — Query string from `window.Telegram.WebApp.initData`
 - `botToken` — Your bot token
 - `options.maxAgeSeconds` — Reject data older than this
@@ -670,16 +712,17 @@ Validates Telegram Mini App init data signature.
 **Throws:** `TelegramConfigError` for malformed data
 
 **Example:**
+
 ```typescript
-import { validateWebAppInitData } from 'nestjs-telegram/bot';
+import { validateWebAppInitData } from "nestjs-telegram/bot";
 
 const data = validateWebAppInitData(req.body.initData, process.env.BOT_TOKEN!, {
   maxAgeSeconds: 3600,
 });
 
-if (!data) throw new UnauthorizedException('Invalid init data');
+if (!data) throw new UnauthorizedException("Invalid init data");
 
-console.log('User:', data.user?.id, data.user?.username);
+console.log("User:", data.user?.id, data.user?.username);
 ```
 
 See [MINI-APP-INIT-DATA.md](./MINI-APP-INIT-DATA.md) for details.
@@ -697,10 +740,12 @@ Dynamic module for the MTProto user-account side.
 ##### `forRoot(options: TelegramClientModuleOptions): DynamicModule`
 
 **Required Options:**
+
 - `apiId` (number) — From my.telegram.org
 - `apiHash` (string) — From my.telegram.org
 
 **Optional Options:**
+
 - `sessionString` (string) — Reuse existing session
 - `sessionStore` (SessionStore) — Custom persistence (default: in-memory)
 - `autoConnect` (boolean, default: `true`) — Auto-connect on bootstrap
@@ -709,12 +754,13 @@ Dynamic module for the MTProto user-account side.
 - `clientFactory` (function) — Custom client factory (for testing)
 
 **Example:**
+
 ```typescript
 TelegramClientModule.forRoot({
   apiId: Number(process.env.TG_API_ID),
   apiHash: process.env.TG_API_HASH!,
   sessionString: process.env.TG_SESSION,
-})
+});
 ```
 
 ##### `forRootAsync(options: TelegramClientModuleAsyncOptions): DynamicModule`
@@ -722,16 +768,17 @@ TelegramClientModule.forRoot({
 Async configuration.
 
 **Example:**
+
 ```typescript
 TelegramClientModule.forRootAsync({
   imports: [ConfigModule],
   inject: [ConfigService],
   useFactory: (config: ConfigService) => ({
-    apiId: config.get('TG_API_ID')!,
-    apiHash: config.get('TG_API_HASH')!,
-    sessionString: config.get('TG_SESSION'),
+    apiId: config.get("TG_API_ID")!,
+    apiHash: config.get("TG_API_HASH")!,
+    sessionString: config.get("TG_SESSION"),
   }),
-})
+});
 ```
 
 ---
@@ -747,10 +794,12 @@ Handles MTProto authentication.
 Sends login code to phone number.
 
 **Parameters:**
+
 - `phoneNumber` — Format: `+12345678901` (include country code)
 - `forceSMS` — Force SMS instead of Telegram message
 
 **Returns:**
+
 ```typescript
 {
   phoneCodeHash: string; // Save this for signIn
@@ -765,12 +814,18 @@ Sends login code to phone number.
 Signs in with the received code.
 
 **Returns:**
+
 ```typescript
 // Success
-{ status: 'authorized'; user: GramUser; }
+{
+  status: "authorized";
+  user: GramUser;
+}
 
 // 2FA required
-{ status: 'password-required'; }
+{
+  status: "password-required";
+}
 ```
 
 **Throws:** `TelegramAuthError` (codes: `CODE_INVALID`, `CODE_NOT_REQUESTED`, etc.)
@@ -794,21 +849,22 @@ Signs out and clears session.
 Returns session string (save as `TG_SESSION`).
 
 **Example: Complete Login Flow**
+
 ```typescript
 // 1. Send code
-const { phoneCodeHash } = await auth.sendCode('+12345678901');
+const { phoneCodeHash } = await auth.sendCode("+12345678901");
 
 // 2. Sign in
-const result = await auth.signIn('12345'); // code from Telegram
+const result = await auth.signIn("12345"); // code from Telegram
 
-if (result.status === 'password-required') {
+if (result.status === "password-required") {
   // 3. Handle 2FA
-  await auth.checkPassword('my2FApassword');
+  await auth.checkPassword("my2FApassword");
 }
 
 // 4. Save session
 const session = auth.exportSession();
-console.log('Save this:', session);
+console.log("Save this:", session);
 ```
 
 ---
@@ -824,9 +880,10 @@ Operations performed as your account.
 Hot stream of incoming messages.
 
 **Example:**
+
 ```typescript
 user.updates$.subscribe((msg) => {
-  console.log('New message:', msg.text, 'from', msg.sender?.firstName);
+  console.log("New message:", msg.text, "from", msg.sender?.firstName);
 });
 ```
 
@@ -839,6 +896,7 @@ user.updates$.subscribe((msg) => {
 Returns your own profile.
 
 **Example:**
+
 ```typescript
 const me = await user.getMe();
 console.log(me.firstName, me.isPremium);
@@ -849,6 +907,7 @@ console.log(me.firstName, me.isPremium);
 Lists your chats.
 
 **Parameters:**
+
 ```typescript
 {
   limit?: number;        // Max dialogs to fetch (default: 100)
@@ -862,9 +921,10 @@ Lists your chats.
 **Returns:** Array of `GramDialog` objects (most recent first)
 
 **Example:**
+
 ```typescript
 const chats = await user.getDialogs({ limit: 20 });
-chats.forEach(chat => {
+chats.forEach((chat) => {
   console.log(chat.title, chat.unreadCount, chat.lastMessage?.text);
 });
 ```
@@ -874,6 +934,7 @@ chats.forEach(chat => {
 Fetches messages from a chat.
 
 **Parameters:**
+
 - `peer` — `'me'` (Saved Messages), `@username`, or numeric ID
 - `params.limit` — Max messages (default: 100)
 - `params.offsetId` — Message ID to start from
@@ -883,9 +944,10 @@ Fetches messages from a chat.
 **Returns:** Array of `GramMessage` (newest first)
 
 **Example:**
+
 ```typescript
-const messages = await user.getMessages('@durov', { limit: 50 });
-messages.forEach(msg => {
+const messages = await user.getMessages("@durov", { limit: 50 });
+messages.forEach((msg) => {
   console.log(msg.date, msg.sender?.username, msg.text);
 });
 ```
@@ -895,10 +957,12 @@ messages.forEach(msg => {
 Sends a message as your account.
 
 **Parameters:**
+
 - `peer` — Target (`'me'`, `@username`, or ID)
 - `text` — String or full params object
 
 **GramSendMessageParams:**
+
 ```typescript
 {
   message: string;
@@ -911,14 +975,15 @@ Sends a message as your account.
 ```
 
 **Example:**
+
 ```typescript
 // Simple
-await user.sendMessage('me', 'Note to self');
+await user.sendMessage("me", "Note to self");
 
 // With options
-await user.sendMessage('@channel', {
-  message: '<b>Bold text</b>',
-  parseMode: 'html',
+await user.sendMessage("@channel", {
+  message: "<b>Bold text</b>",
+  parseMode: "html",
   silent: true,
 });
 ```
@@ -950,14 +1015,15 @@ interface SessionStore {
 Volatile, in-memory storage (lost on restart).
 
 **Example:**
+
 ```typescript
-import { InMemorySessionStore } from 'nestjs-telegram/client';
+import { InMemorySessionStore } from "nestjs-telegram/client";
 
 TelegramClientModule.forRoot({
   apiId: 12345,
-  apiHash: 'abc',
+  apiHash: "abc",
   sessionStore: new InMemorySessionStore(),
-})
+});
 ```
 
 ---
@@ -967,19 +1033,21 @@ TelegramClientModule.forRoot({
 Persists to disk with `0o600` permissions (owner-only).
 
 **Constructor:**
+
 ```typescript
 new FileSessionStore(filePath: string)
 ```
 
 **Example:**
+
 ```typescript
-import { FileSessionStore } from 'nestjs-telegram/client';
+import { FileSessionStore } from "nestjs-telegram/client";
 
 TelegramClientModule.forRoot({
   apiId: 12345,
-  apiHash: 'abc',
-  sessionStore: new FileSessionStore('./session.txt'),
-})
+  apiHash: "abc",
+  sessionStore: new FileSessionStore("./session.txt"),
+});
 ```
 
 ---
@@ -989,24 +1057,25 @@ TelegramClientModule.forRoot({
 Implement `SessionStore` for Redis, database, secrets manager, etc.
 
 **Example:**
+
 ```typescript
-import { SessionStore } from 'nestjs-telegram/client';
-import { Injectable } from '@nestjs/common';
+import { SessionStore } from "nestjs-telegram/client";
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class RedisSessionStore implements SessionStore {
   constructor(private redis: RedisClient) {}
 
   async load(): Promise<string | null> {
-    return this.redis.get('telegram:session');
+    return this.redis.get("telegram:session");
   }
 
   async save(session: string): Promise<void> {
-    await this.redis.set('telegram:session', session);
+    await this.redis.set("telegram:session", session);
   }
 
   async clear(): Promise<void> {
-    await this.redis.del('telegram:session');
+    await this.redis.del("telegram:session");
   }
 }
 ```
@@ -1079,7 +1148,7 @@ Library-owned data types (never import GramJS directly).
 #### GramPeer
 
 ```typescript
-type GramPeer = 'me' | string | number;
+type GramPeer = "me" | string | number;
 ```
 
 - `'me'` — Your Saved Messages
@@ -1099,6 +1168,7 @@ All library errors extend `TelegramError`.
 Base class with discriminated `kind`.
 
 **Properties:**
+
 ```typescript
 {
   kind: TelegramErrorKind; // 'config' | 'bot-api' | 'client' | 'auth' | 'session'
@@ -1108,8 +1178,9 @@ Base class with discriminated `kind`.
 ```
 
 **Type Guard:**
+
 ```typescript
-import { isTelegramError } from 'nestjs-telegram';
+import { isTelegramError } from "nestjs-telegram";
 
 if (isTelegramError(error)) {
   console.error(error.kind, error.message);
@@ -1135,6 +1206,7 @@ Bot API request failure.
 **Kind:** `'bot-api'`
 
 **Extra Properties:**
+
 ```typescript
 {
   statusCode?: number;  // HTTP status
@@ -1151,6 +1223,7 @@ MTProto client operation failure.
 **Kind:** `'client'`
 
 **Extra Properties:**
+
 ```typescript
 {
   operation?: string; // Operation name
@@ -1166,6 +1239,7 @@ Authentication failure (MTProto).
 **Kind:** `'auth'`
 
 **Extra Properties:**
+
 ```typescript
 {
   code: TelegramAuthErrorCode; // See below
@@ -1174,6 +1248,7 @@ Authentication failure (MTProto).
 ```
 
 **Error Codes:**
+
 - `PHONE_INVALID` — Bad phone number format
 - `CODE_INVALID` — Wrong login code
 - `PASSWORD_REQUIRED` — 2FA enabled
@@ -1185,21 +1260,22 @@ Authentication failure (MTProto).
 - `UNKNOWN` — Unexpected error
 
 **Example:**
+
 ```typescript
-import { isTelegramError } from 'nestjs-telegram';
+import { isTelegramError } from "nestjs-telegram";
 
 try {
   await auth.signIn(code);
 } catch (error) {
-  if (isTelegramError(error) && error.kind === 'auth') {
+  if (isTelegramError(error) && error.kind === "auth") {
     switch (error.code) {
-      case 'CODE_INVALID':
-        console.error('Wrong code');
+      case "CODE_INVALID":
+        console.error("Wrong code");
         break;
-      case 'PASSWORD_REQUIRED':
+      case "PASSWORD_REQUIRED":
         // Prompt for 2FA
         break;
-      case 'FLOOD_WAIT':
+      case "FLOOD_WAIT":
         console.error(`Retry in ${error.retryAfterSeconds}s`);
         break;
     }
@@ -1222,14 +1298,15 @@ Session load/save failure.
 #### ParseMode
 
 ```typescript
-type ParseMode = 'Markdown' | 'MarkdownV2' | 'HTML';
+type ParseMode = "Markdown" | "MarkdownV2" | "HTML";
 ```
 
 Also available as `PARSE_MODES` object:
+
 ```typescript
-import { PARSE_MODES } from 'nestjs-telegram';
-PARSE_MODES.MARKDOWN // 'Markdown'
-PARSE_MODES.HTML     // 'HTML'
+import { PARSE_MODES } from "nestjs-telegram";
+PARSE_MODES.MARKDOWN; // 'Markdown'
+PARSE_MODES.HTML; // 'HTML'
 ```
 
 ---
@@ -1265,6 +1342,7 @@ Composes both Bot API and MTProto in one module.
 ##### `forRoot(options): DynamicModule`
 
 **Options:**
+
 ```typescript
 {
   bot?: TelegramBotModuleOptions;
@@ -1274,8 +1352,9 @@ Composes both Bot API and MTProto in one module.
 ```
 
 **Example:**
+
 ```typescript
-import { TelegramModule } from 'nestjs-telegram';
+import { TelegramModule } from "nestjs-telegram";
 
 TelegramModule.forRoot({
   bot: { token: process.env.BOT_TOKEN! },
@@ -1284,7 +1363,7 @@ TelegramModule.forRoot({
     apiHash: process.env.TG_API_HASH!,
   },
   isGlobal: true,
-})
+});
 ```
 
 Both `bot` and `client` are optional—omit either to use only one side.
@@ -1298,7 +1377,7 @@ Advanced: Inject raw instances directly.
 ### Bot API Tokens
 
 ```typescript
-import { TELEGRAM_BOT } from 'nestjs-telegram/bot';
+import { TELEGRAM_BOT } from "nestjs-telegram/bot";
 
 @Injectable()
 export class MyService {
@@ -1309,7 +1388,7 @@ export class MyService {
 ### MTProto Tokens
 
 ```typescript
-import { TELEGRAM_GRAM_CLIENT } from 'nestjs-telegram/client';
+import { TELEGRAM_GRAM_CLIENT } from "nestjs-telegram/client";
 
 @Injectable()
 export class MyService {
@@ -1324,8 +1403,8 @@ export class MyService {
 Access Telegraf and GramJS types without importing the SDKs:
 
 ```typescript
-import type { Context, Markup } from 'telegraf';
-import type { GramUser, GramMessage } from 'nestjs-telegram/client';
+import type { Context, Markup } from "telegraf";
+import type { GramUser, GramMessage } from "nestjs-telegram/client";
 ```
 
 ---

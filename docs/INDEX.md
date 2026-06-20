@@ -7,6 +7,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 ## 📚 Documentation Structure
 
 ### Getting Started
+
 **New to the library? Start here!**
 
 - **[GETTING-STARTED.md](./GETTING-STARTED.md)** ⭐
@@ -17,6 +18,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Troubleshooting
 
 ### Core Documentation
+
 **Deep dive into features**
 
 - **[BOT-API.md](./BOT-API.md)**
@@ -25,7 +27,6 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - TelegramBotService methods
   - Polling vs webhook
   - Error handling
-  
 - **[USER-CLIENT-MTPROTO.md](./USER-CLIENT-MTPROTO.md)**
   - MTProto client guide
   - Authentication flow
@@ -141,67 +142,67 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 ### Configuration
 
-| Topic | Document |
-|-------|----------|
-| Bot module setup | [BOT-API.md § Registering the module](./BOT-API.md#2-registering-the-module) |
-| Client module setup | [USER-CLIENT-MTPROTO.md § Configuring](./USER-CLIENT-MTPROTO.md#3-configuring-telegramclientmodule) |
-| Environment variables | [GETTING-STARTED.md § Environment](./GETTING-STARTED.md#common-patterns) |
-| Async configuration | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasync-options-telegrambotmoduleasyncoptions-dynamicmodule) |
+| Topic                 | Document                                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Bot module setup      | [BOT-API.md § Registering the module](./BOT-API.md#2-registering-the-module)                                           |
+| Client module setup   | [USER-CLIENT-MTPROTO.md § Configuring](./USER-CLIENT-MTPROTO.md#3-configuring-telegramclientmodule)                    |
+| Environment variables | [GETTING-STARTED.md § Environment](./GETTING-STARTED.md#common-patterns)                                               |
+| Async configuration   | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasync-options-telegrambotmoduleasyncoptions-dynamicmodule) |
 
 ### Messaging
 
-| Topic | Document |
-|-------|----------|
-| Send messages (Bot) | [API-REFERENCE.md § sendMessage](./API-REFERENCE.md#sendmessagechatid-text-extra-promisemessage) |
+| Topic                | Document                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Send messages (Bot)  | [API-REFERENCE.md § sendMessage](./API-REFERENCE.md#sendmessagechatid-text-extra-promisemessage)                                            |
 | Send messages (User) | [API-REFERENCE.md § TelegramUserService](./API-REFERENCE.md#sendmessagepeer-grampeer-text-string--gramsendmessageparams-promisegrammessage) |
-| Send files/media | [EXAMPLES.md § Sending Files](./EXAMPLES.md#sending-files--media) |
-| Keyboards | [API-REFERENCE.md § Keyboard Builders](./API-REFERENCE.md#keyboard-builders) |
-| Inline buttons | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
+| Send files/media     | [EXAMPLES.md § Sending Files](./EXAMPLES.md#sending-files--media)                                                                           |
+| Keyboards            | [API-REFERENCE.md § Keyboard Builders](./API-REFERENCE.md#keyboard-builders)                                                                |
+| Inline buttons       | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling)                                                         |
 
 ### Handlers & Events
 
-| Topic | Document |
-|-------|----------|
-| Command handlers | [BOT-API.md § Registering handlers](./BOT-API.md#5-registering-handlers) |
-| Decorators | [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md) |
-| Callback queries | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
-| Incoming messages (User) | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages) |
+| Topic                    | Document                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| Command handlers         | [BOT-API.md § Registering handlers](./BOT-API.md#5-registering-handlers)            |
+| Decorators               | [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)                              |
+| Callback queries         | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
+| Incoming messages (User) | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
 
 ### Authentication
 
-| Topic | Document |
-|-------|----------|
-| Bot token | [GETTING-STARTED.md § Get Token](./GETTING-STARTED.md#1-get-your-bot-token) |
-| MTProto login | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#4-authentication-flow) |
+| Topic              | Document                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| Bot token          | [GETTING-STARTED.md § Get Token](./GETTING-STARTED.md#1-get-your-bot-token)               |
+| MTProto login      | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#4-authentication-flow)                     |
 | Session management | [USER-CLIENT-MTPROTO.md § Sessions](./USER-CLIENT-MTPROTO.md#5-sessions-and-sessionstore) |
-| 2FA | [AUTHENTICATION.md](./AUTHENTICATION.md) |
+| 2FA                | [AUTHENTICATION.md](./AUTHENTICATION.md)                                                  |
 
 ### Data & Types
 
-| Topic | Document |
-|-------|----------|
-| DTOs | [API-REFERENCE.md § DTOs](./API-REFERENCE.md#dtos--types) |
-| Error types | [API-REFERENCE.md § Errors](./API-REFERENCE.md#error-hierarchy) |
+| Topic       | Document                                                               |
+| ----------- | ---------------------------------------------------------------------- |
+| DTOs        | [API-REFERENCE.md § DTOs](./API-REFERENCE.md#dtos--types)              |
+| Error types | [API-REFERENCE.md § Errors](./API-REFERENCE.md#error-hierarchy)        |
 | Type safety | [ADVANCED-USAGE.md § Validation](./ADVANCED-USAGE.md#input-validation) |
 
 ### Testing
 
-| Topic | Document |
-|-------|----------|
-| Unit tests | [TESTING.md § Unit Testing](./TESTING.md#2-testing-your-application-code) |
-| Mocking | [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples) |
-| Test patterns | [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies) |
+| Topic         | Document                                                                  |
+| ------------- | ------------------------------------------------------------------------- |
+| Unit tests    | [TESTING.md § Unit Testing](./TESTING.md#2-testing-your-application-code) |
+| Mocking       | [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)                   |
+| Test patterns | [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies)     |
 
 ### Advanced
 
-| Topic | Document |
-|-------|----------|
-| Architecture patterns | [ADVANCED-USAGE.md § Architecture](./ADVANCED-USAGE.md#architecture-patterns) |
-| Performance | [ADVANCED-USAGE.md § Performance](./ADVANCED-USAGE.md#performance-optimization) |
-| Rate limiting | [ADVANCED-USAGE.md § Rate Limiting](./ADVANCED-USAGE.md#rate-limiting) |
-| Error handling | [ADVANCED-USAGE.md § Error Handling](./ADVANCED-USAGE.md#error-handling--resilience) |
-| Security | [ADVANCED-USAGE.md § Security](./ADVANCED-USAGE.md#security-best-practices) |
-| Production | [ADVANCED-USAGE.md § Deployment](./ADVANCED-USAGE.md#production-deployment) |
+| Topic                 | Document                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| Architecture patterns | [ADVANCED-USAGE.md § Architecture](./ADVANCED-USAGE.md#architecture-patterns)        |
+| Performance           | [ADVANCED-USAGE.md § Performance](./ADVANCED-USAGE.md#performance-optimization)      |
+| Rate limiting         | [ADVANCED-USAGE.md § Rate Limiting](./ADVANCED-USAGE.md#rate-limiting)               |
+| Error handling        | [ADVANCED-USAGE.md § Error Handling](./ADVANCED-USAGE.md#error-handling--resilience) |
+| Security              | [ADVANCED-USAGE.md § Security](./ADVANCED-USAGE.md#security-best-practices)          |
+| Production            | [ADVANCED-USAGE.md § Deployment](./ADVANCED-USAGE.md#production-deployment)          |
 
 ---
 
@@ -209,30 +210,30 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 ### Bot API Features
 
-| Feature | Quick Link |
-|---------|------------|
-| Send text message | [API-REFERENCE.md](./API-REFERENCE.md#sendmessagechatid-text-extra-promisemessage) |
-| Send photo | [API-REFERENCE.md](./API-REFERENCE.md#sendphotochatid-photo-extra-promisemessage) |
-| Send file | [API-REFERENCE.md](./API-REFERENCE.md#senddocumentchatid-document-extra-promisemessage) |
-| Edit message | [API-REFERENCE.md](./API-REFERENCE.md#editmessagetextchatid-messageid-inlinemessageid-text-extra-promisemessage--true) |
-| Delete message | [API-REFERENCE.md](./API-REFERENCE.md#deletemessagechatid-messageid-promisetrue) |
-| Inline keyboard | [EXAMPLES.md](./EXAMPLES.md#inline-keyboards--callback-handling) |
-| Reply keyboard | [EXAMPLES.md](./EXAMPLES.md#custom-reply-keyboard) |
-| Commands | [EXAMPLES.md](./EXAMPLES.md#command-handler-with-parameters) |
-| Callback queries | [EXAMPLES.md](./EXAMPLES.md#inline-keyboards--callback-handling) |
-| Webhook | [EXAMPLES.md](./EXAMPLES.md#webhook-mode) |
-| Mini App validation | [MINI-APP-INIT-DATA.md](./MINI-APP-INIT-DATA.md) |
+| Feature             | Quick Link                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Send text message   | [API-REFERENCE.md](./API-REFERENCE.md#sendmessagechatid-text-extra-promisemessage)                                     |
+| Send photo          | [API-REFERENCE.md](./API-REFERENCE.md#sendphotochatid-photo-extra-promisemessage)                                      |
+| Send file           | [API-REFERENCE.md](./API-REFERENCE.md#senddocumentchatid-document-extra-promisemessage)                                |
+| Edit message        | [API-REFERENCE.md](./API-REFERENCE.md#editmessagetextchatid-messageid-inlinemessageid-text-extra-promisemessage--true) |
+| Delete message      | [API-REFERENCE.md](./API-REFERENCE.md#deletemessagechatid-messageid-promisetrue)                                       |
+| Inline keyboard     | [EXAMPLES.md](./EXAMPLES.md#inline-keyboards--callback-handling)                                                       |
+| Reply keyboard      | [EXAMPLES.md](./EXAMPLES.md#custom-reply-keyboard)                                                                     |
+| Commands            | [EXAMPLES.md](./EXAMPLES.md#command-handler-with-parameters)                                                           |
+| Callback queries    | [EXAMPLES.md](./EXAMPLES.md#inline-keyboards--callback-handling)                                                       |
+| Webhook             | [EXAMPLES.md](./EXAMPLES.md#webhook-mode)                                                                              |
+| Mini App validation | [MINI-APP-INIT-DATA.md](./MINI-APP-INIT-DATA.md)                                                                       |
 
 ### MTProto Features
 
-| Feature | Quick Link |
-|---------|------------|
-| Login | [EXAMPLES.md](./EXAMPLES.md#login-flow) |
-| Get dialogs | [EXAMPLES.md](./EXAMPLES.md#list-recent-chats) |
-| Get messages | [EXAMPLES.md](./EXAMPLES.md#read-messages-from-a-channel) |
-| Send message | [EXAMPLES.md](./EXAMPLES.md#send-message-to-saved-messages) |
-| Listen to updates | [EXAMPLES.md](./EXAMPLES.md#listen-to-incoming-messages) |
-| Session stores | [API-REFERENCE.md](./API-REFERENCE.md#session-stores) |
+| Feature           | Quick Link                                                  |
+| ----------------- | ----------------------------------------------------------- |
+| Login             | [EXAMPLES.md](./EXAMPLES.md#login-flow)                     |
+| Get dialogs       | [EXAMPLES.md](./EXAMPLES.md#list-recent-chats)              |
+| Get messages      | [EXAMPLES.md](./EXAMPLES.md#read-messages-from-a-channel)   |
+| Send message      | [EXAMPLES.md](./EXAMPLES.md#send-message-to-saved-messages) |
+| Listen to updates | [EXAMPLES.md](./EXAMPLES.md#listen-to-incoming-messages)    |
+| Session stores    | [API-REFERENCE.md](./API-REFERENCE.md#session-stores)       |
 
 ---
 
@@ -240,23 +241,24 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 The library uses subpath exports to load only what you need:
 
-| Import Path | Includes | Use When |
-|-------------|----------|----------|
-| `nestjs-telegram` | Both Bot + Client | Using both APIs |
-| `nestjs-telegram/bot` | Bot API only | Bot-only app (no GramJS) |
-| `nestjs-telegram/client` | MTProto only | User account only (no Telegraf) |
-| `nestjs-telegram/common` | Shared types/errors | Type imports only |
+| Import Path              | Includes            | Use When                        |
+| ------------------------ | ------------------- | ------------------------------- |
+| `nestjs-telegram`        | Both Bot + Client   | Using both APIs                 |
+| `nestjs-telegram/bot`    | Bot API only        | Bot-only app (no GramJS)        |
+| `nestjs-telegram/client` | MTProto only        | User account only (no Telegraf) |
+| `nestjs-telegram/common` | Shared types/errors | Type imports only               |
 
 **Example:**
+
 ```typescript
 // Load only Bot API
-import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram/bot';
+import { TelegramBotModule, TelegramBotService } from "nestjs-telegram/bot";
 
 // Load only MTProto
-import { TelegramClientModule, TelegramUserService } from 'nestjs-telegram/client';
+import { TelegramClientModule, TelegramUserService } from "nestjs-telegram/client";
 
 // Load both
-import { TelegramModule } from 'nestjs-telegram';
+import { TelegramModule } from "nestjs-telegram";
 ```
 
 ---
@@ -272,19 +274,19 @@ import { TelegramModule } from 'nestjs-telegram';
 
 ### Common Issues
 
-| Problem | Solution |
-|---------|----------|
-| Bot not responding | [GETTING-STARTED.md § Troubleshooting](./GETTING-STARTED.md#troubleshooting) |
-| MTProto login fails | [AUTHENTICATION.md](./AUTHENTICATION.md) |
-| Import errors | Use correct [subpath imports](#-package-exports) |
-| Type errors | Check [API-REFERENCE.md § Types](./API-REFERENCE.md#shared-types) |
-| Testing issues | See [TESTING.md](./TESTING.md) |
-| Production errors | Review [ADVANCED-USAGE.md § Error Handling](./ADVANCED-USAGE.md#error-handling--resilience) |
+| Problem             | Solution                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| Bot not responding  | [GETTING-STARTED.md § Troubleshooting](./GETTING-STARTED.md#troubleshooting)                |
+| MTProto login fails | [AUTHENTICATION.md](./AUTHENTICATION.md)                                                    |
+| Import errors       | Use correct [subpath imports](#-package-exports)                                            |
+| Type errors         | Check [API-REFERENCE.md § Types](./API-REFERENCE.md#shared-types)                           |
+| Testing issues      | See [TESTING.md](./TESTING.md)                                                              |
+| Production errors   | Review [ADVANCED-USAGE.md § Error Handling](./ADVANCED-USAGE.md#error-handling--resilience) |
 
 ### Resources
 
 - 📖 Full docs in [docs/](../docs/) folder
-- 💻 Example code in [examples/](../examples/) folder  
+- 💻 Example code in [examples/](../examples/) folder
 - 🐛 [GitHub Issues](https://github.com/Aborii/nestjs-telegram/issues)
 - 📝 [README.md](../README.md) for overview
 
@@ -334,6 +336,7 @@ nestjs-telegram/
 ## 🚀 Quick Links
 
 **Most Popular Pages:**
+
 1. [Getting Started](./GETTING-STARTED.md) — First-time setup
 2. [API Reference](./API-REFERENCE.md) — Look up methods
 3. [Examples](./EXAMPLES.md) — Copy-paste recipes
@@ -341,6 +344,7 @@ nestjs-telegram/
 5. [MTProto Guide](./USER-CLIENT-MTPROTO.md) — Automate your account
 
 **By Experience Level:**
+
 - **Beginner**: [GETTING-STARTED.md](./GETTING-STARTED.md) → [EXAMPLES.md](./EXAMPLES.md)
 - **Intermediate**: [BOT-API.md](./BOT-API.md) → [USER-CLIENT-MTPROTO.md](./USER-CLIENT-MTPROTO.md) → [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)
 - **Advanced**: [ADVANCED-USAGE.md](./ADVANCED-USAGE.md) → [TELEGRAM-MODULE.md](./TELEGRAM-MODULE.md)

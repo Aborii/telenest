@@ -6,19 +6,33 @@ This guide will help you get up and running with `nestjs-telegram` in under 10 m
 
 ## Table of Contents
 
-- [Installation](#installation)
-- [Quick Start: Bot API](#quick-start-bot-api)
-  - [1. Get Your Bot Token](#1-get-your-bot-token)
-  - [2. Configure the Module](#2-configure-the-module)
-  - [3. Send Your First Message](#3-send-your-first-message)
-  - [4. Handle Commands](#4-handle-commands)
-- [Quick Start: MTProto Client](#quick-start-mtproto-client)
-  - [1. Get API Credentials](#1-get-api-credentials)
-  - [2. Configure the Module](#2-configure-the-module-1)
-  - [3. Login and Get Session](#3-login-and-get-session)
-  - [4. Send Messages as Your Account](#4-send-messages-as-your-account)
-- [Using Both APIs Together](#using-both-apis-together)
-- [Next Steps](#next-steps)
+- [Getting Started with nestjs-telegram](#getting-started-with-nestjs-telegram)
+  - [Table of Contents](#table-of-contents)
+  - [Installation](#installation)
+  - [Quick Start: Bot API](#quick-start-bot-api)
+    - [1. Get Your Bot Token](#1-get-your-bot-token)
+    - [2. Configure the Module](#2-configure-the-module)
+    - [3. Send Your First Message](#3-send-your-first-message)
+    - [4. Handle Commands](#4-handle-commands)
+  - [Quick Start: MTProto Client](#quick-start-mtproto-client)
+    - [1. Get API Credentials](#1-get-api-credentials)
+    - [2. Configure the Module](#2-configure-the-module-1)
+    - [3. Login and Get Session](#3-login-and-get-session)
+    - [4. Send Messages as Your Account](#4-send-messages-as-your-account)
+  - [Using Both APIs Together](#using-both-apis-together)
+  - [Next Steps](#next-steps)
+    - [Bot API](#bot-api)
+    - [MTProto Client](#mtproto-client)
+    - [General](#general)
+  - [Common Patterns](#common-patterns)
+    - [Environment Variables Setup](#environment-variables-setup)
+    - [Async Configuration with ConfigService](#async-configuration-with-configservice)
+    - [Error Handling](#error-handling)
+  - [Troubleshooting](#troubleshooting)
+    - [Bot isn't responding](#bot-isnt-responding)
+    - [MTProto login fails](#mtproto-login-fails)
+    - [Import errors](#import-errors)
+  - [Help \& Support](#help--support)
 
 ---
 
@@ -44,6 +58,7 @@ npm i telegraf telegram
 ```
 
 > **Tip:** Use [subpath imports](#subpath-imports) to load only what you need:
+>
 > - `nestjs-telegram/bot` — Bot API only (no GramJS)
 > - `nestjs-telegram/client` — MTProto only (no Telegraf)
 > - `nestjs-telegram` — Both APIs
@@ -69,10 +84,10 @@ BOT_TOKEN=your_bot_token_here
 
 ```typescript
 // app.module.ts
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { TelegramBotModule } from 'nestjs-telegram/bot';
-import { AppService } from './app.service';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { TelegramBotModule } from "nestjs-telegram/bot";
+import { AppService } from "./app.service";
 
 @Module({
   imports: [
@@ -90,8 +105,8 @@ export class AppModule {}
 
 ```typescript
 // app.service.ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
 
 @Injectable()
 export class AppService implements OnModuleInit {
@@ -100,17 +115,17 @@ export class AppService implements OnModuleInit {
   async onModuleInit() {
     // Register /start command
     this.bot.start(async (ctx) => {
-      await ctx.reply('Hello! I am your NestJS bot 🤖');
+      await ctx.reply("Hello! I am your NestJS bot 🤖");
     });
 
     // Register /help command
     this.bot.help(async (ctx) => {
-      await ctx.reply('Available commands:\n/start - Start the bot\n/hello - Say hello');
+      await ctx.reply("Available commands:\n/start - Start the bot\n/hello - Say hello");
     });
 
     // Register custom command
-    this.bot.command('hello', async (ctx) => {
-      const name = ctx.from?.first_name || 'friend';
+    this.bot.command("hello", async (ctx) => {
+      const name = ctx.from?.first_name || "friend";
       await ctx.reply(`Hello, ${name}! 👋`);
     });
   }
@@ -126,6 +141,7 @@ npm run start:dev
 ```
 
 Open Telegram and:
+
 1. Find your bot by username
 2. Send `/start`
 3. Send `/hello`
@@ -158,10 +174,10 @@ TG_API_HASH=abcdef1234567890abcdef1234567890
 
 ```typescript
 // app.module.ts
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { TelegramClientModule } from 'nestjs-telegram/client';
-import { AppService } from './app.service';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { TelegramClientModule } from "nestjs-telegram/client";
+import { AppService } from "./app.service";
 
 @Module({
   imports: [
@@ -191,8 +207,8 @@ Follow the prompts, then copy the session string to `.env` as `TG_SESSION`.
 
 ```typescript
 // app.service.ts
-import { Injectable } from '@nestjs/common';
-import { TelegramAuthService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramAuthService } from "nestjs-telegram/client";
 
 @Injectable()
 export class AppService {
@@ -200,19 +216,19 @@ export class AppService {
 
   async login() {
     // Send login code
-    await this.auth.sendCode('+1234567890');
-    
+    await this.auth.sendCode("+1234567890");
+
     // Sign in with the code you receive via Telegram
-    const result = await this.auth.signIn('12345'); // code from Telegram
-    
-    if (result.status === 'password-required') {
+    const result = await this.auth.signIn("12345"); // code from Telegram
+
+    if (result.status === "password-required") {
       // 2FA enabled: enter your password
-      await this.auth.checkPassword('your2FApassword');
+      await this.auth.checkPassword("your2FApassword");
     }
-    
+
     // Save session for later
     const session = this.auth.exportSession();
-    console.log('Session:', session); // Save this to TG_SESSION
+    console.log("Session:", session); // Save this to TG_SESSION
   }
 }
 ```
@@ -223,8 +239,8 @@ Once you have a valid `TG_SESSION`:
 
 ```typescript
 // app.service.ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class AppService implements OnModuleInit {
@@ -233,17 +249,20 @@ export class AppService implements OnModuleInit {
   async onModuleInit() {
     // Get your own profile
     const me = await this.user.getMe();
-    console.log('Logged in as:', me.firstName);
+    console.log("Logged in as:", me.firstName);
 
     // Send a message to yourself (Saved Messages)
-    await this.user.sendToSelf('Hello from my NestJS app! 🚀');
+    await this.user.sendToSelf("Hello from my NestJS app! 🚀");
 
     // Get your recent dialogs
     const dialogs = await this.user.getDialogs({ limit: 10 });
-    console.log('Recent chats:', dialogs.map(d => d.title));
+    console.log(
+      "Recent chats:",
+      dialogs.map((d) => d.title),
+    );
 
     // Send a message to a chat
-    await this.user.sendMessage('@username', 'Hi from my account!');
+    await this.user.sendMessage("@username", "Hi from my account!");
   }
 }
 ```
@@ -258,8 +277,8 @@ You can use both the Bot API and MTProto client in the same app:
 
 ```typescript
 // app.module.ts
-import { Module } from '@nestjs/common';
-import { TelegramModule } from 'nestjs-telegram'; // Umbrella module
+import { Module } from "@nestjs/common";
+import { TelegramModule } from "nestjs-telegram"; // Umbrella module
 
 @Module({
   imports: [
@@ -282,9 +301,9 @@ export class AppModule {}
 Then inject both services:
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class NotificationService {
@@ -310,15 +329,18 @@ export class NotificationService {
 Now that you're up and running, explore these guides:
 
 ### Bot API
+
 - **[BOT-API.md](./BOT-API.md)** — Complete Bot API reference
 - **[BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)** — Decorator-based handlers (`@TelegramUpdate`, `@Command`, etc.)
 - **[MINI-APP-INIT-DATA.md](./MINI-APP-INIT-DATA.md)** — Validate Telegram Mini App data
 
 ### MTProto Client
+
 - **[USER-CLIENT-MTPROTO.md](./USER-CLIENT-MTPROTO.md)** — Complete MTProto client reference
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)** — Authentication flow deep-dive
 
 ### General
+
 - **[TESTING.md](./TESTING.md)** — How to test your bot/client code
 - **[TELEGRAM-MODULE.md](./TELEGRAM-MODULE.md)** — Architecture overview
 - **[examples/](../examples/)** — More complete examples
@@ -342,8 +364,8 @@ TG_SESSION=1AgAOMT...  # Get this from `npm run login`
 ### Async Configuration with ConfigService
 
 ```typescript
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TelegramBotModule } from 'nestjs-telegram/bot';
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { TelegramBotModule } from "nestjs-telegram/bot";
 
 @Module({
   imports: [
@@ -352,7 +374,7 @@ import { TelegramBotModule } from 'nestjs-telegram/bot';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        token: config.get<string>('BOT_TOKEN')!,
+        token: config.get<string>("BOT_TOKEN")!,
       }),
     }),
   ],
@@ -363,15 +385,15 @@ export class AppModule {}
 ### Error Handling
 
 ```typescript
-import { isTelegramError } from 'nestjs-telegram';
+import { isTelegramError } from "nestjs-telegram";
 
 try {
-  await bot.sendMessage(chatId, 'Hello!');
+  await bot.sendMessage(chatId, "Hello!");
 } catch (error) {
   if (isTelegramError(error)) {
     console.error(`Telegram error [${error.kind}]:`, error.message);
-    if (error.kind === 'bot-api') {
-      console.error('Status code:', error.statusCode);
+    if (error.kind === "bot-api") {
+      console.error("Status code:", error.statusCode);
     }
   } else {
     throw error; // Unexpected error
@@ -384,16 +406,19 @@ try {
 ## Troubleshooting
 
 ### Bot isn't responding
+
 - Check that `BOT_TOKEN` is correct
 - Make sure you started the bot in Telegram (send `/start`)
 - Verify the app started without errors (`npm run start:dev`)
 
 ### MTProto login fails
+
 - Verify `TG_API_ID` and `TG_API_HASH` are correct
 - Check phone number format (include country code: `+1234567890`)
 - If using an existing session, ensure it hasn't expired
 
 ### Import errors
+
 - Make sure you installed the correct peer dependency:
   - Bot API needs `telegraf`
   - MTProto needs `telegram`

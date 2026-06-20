@@ -7,6 +7,7 @@ Practical, copy-paste examples for common use cases with `nestjs-telegram`.
 ## Table of Contents
 
 **Bot API Examples**
+
 - [Simple Echo Bot](#simple-echo-bot)
 - [Command Handler with Parameters](#command-handler-with-parameters)
 - [Inline Keyboards & Callback Handling](#inline-keyboards--callback-handling)
@@ -20,6 +21,7 @@ Practical, copy-paste examples for common use cases with `nestjs-telegram`.
 - [Scheduled Messages](#scheduled-messages)
 
 **MTProto Client Examples**
+
 - [Login Flow](#login-flow)
 - [Send Message to Saved Messages](#send-message-to-saved-messages)
 - [List Recent Chats](#list-recent-chats)
@@ -29,10 +31,12 @@ Practical, copy-paste examples for common use cases with `nestjs-telegram`.
 - [Backup Chat History](#backup-chat-history)
 
 **Hybrid Examples**
+
 - [Bot + User Account Integration](#bot--user-account-integration)
 - [Forward Bot Messages to Your Account](#forward-bot-messages-to-your-account)
 
 **Testing Examples**
+
 - [Unit Testing Bot Handlers](#unit-testing-bot-handlers)
 - [Testing MTProto Services](#testing-mtproto-services)
 
@@ -46,8 +50,8 @@ Echoes every message the user sends.
 
 ```typescript
 // echo.service.ts
-import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
+import { Injectable } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
 
 @Injectable()
 export class EchoService {
@@ -55,7 +59,7 @@ export class EchoService {
 
   async onModuleInit() {
     // Handle all text messages
-    this.bot.on('text', async (ctx) => {
+    this.bot.on("text", async (ctx) => {
       const text = ctx.message.text;
       await ctx.reply(`You said: ${text}`);
     });
@@ -64,16 +68,17 @@ export class EchoService {
 ```
 
 **With Decorators:**
+
 ```typescript
 // echo.update.ts
-import { Injectable } from '@nestjs/common';
-import { TelegramUpdate, On, Ctx, MessageText } from 'nestjs-telegram/bot';
-import type { Context } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramUpdate, On, Ctx, MessageText } from "nestjs-telegram/bot";
+import type { Context } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
 export class EchoUpdate {
-  @On('text')
+  @On("text")
   async onText(@Ctx() ctx: Context, @MessageText() text: string) {
     await ctx.reply(`You said: ${text}`);
   }
@@ -87,32 +92,30 @@ export class EchoUpdate {
 Parse command arguments from user input.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUpdate, Command, Ctx } from 'nestjs-telegram/bot';
-import type { Context } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramUpdate, Command, Ctx } from "nestjs-telegram/bot";
+import type { Context } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
 export class WeatherUpdate {
-  @Command('weather')
+  @Command("weather")
   async getWeather(@Ctx() ctx: Context) {
     // Extract arguments: "/weather London" -> ["London"]
-    const args = ctx.message.text.split(' ').slice(1);
-    const city = args.join(' ') || 'your location';
-    
+    const args = ctx.message.text.split(" ").slice(1);
+    const city = args.join(" ") || "your location";
+
     // Simulate weather API call
     const weather = await this.fetchWeather(city);
-    
+
     await ctx.reply(
-      `🌤 Weather in ${city}:\n` +
-      `Temperature: ${weather.temp}°C\n` +
-      `Conditions: ${weather.conditions}`
+      `🌤 Weather in ${city}:\n` + `Temperature: ${weather.temp}°C\n` + `Conditions: ${weather.conditions}`,
     );
   }
 
   private async fetchWeather(city: string) {
     // Your weather API logic here
-    return { temp: 22, conditions: 'Sunny' };
+    return { temp: 22, conditions: "Sunny" };
   }
 }
 ```
@@ -124,52 +127,45 @@ export class WeatherUpdate {
 Interactive buttons under messages.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import {
-  TelegramUpdate,
-  Command,
-  Action,
-  Ctx,
-  CallbackData,
-  InlineKeyboardBuilder,
-} from 'nestjs-telegram/bot';
-import type { Context } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramUpdate, Command, Action, Ctx, CallbackData, InlineKeyboardBuilder } from "nestjs-telegram/bot";
+import type { Context } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
 export class MenuUpdate {
-  @Command('menu')
+  @Command("menu")
   async showMenu(@Ctx() ctx: Context) {
     const keyboard = new InlineKeyboardBuilder()
-      .callback('📊 Stats', 'stats')
-      .callback('⚙️ Settings', 'settings')
+      .callback("📊 Stats", "stats")
+      .callback("⚙️ Settings", "settings")
       .row()
-      .callback('ℹ️ Help', 'help')
-      .url('📖 Docs', 'https://docs.example.com')
+      .callback("ℹ️ Help", "help")
+      .url("📖 Docs", "https://docs.example.com")
       .build();
 
-    await ctx.reply('Choose an option:', { reply_markup: keyboard });
+    await ctx.reply("Choose an option:", { reply_markup: keyboard });
   }
 
-  @Action('stats')
+  @Action("stats")
   async onStats(@Ctx() ctx: Context) {
     await ctx.answerCbQuery(); // Dismiss loading indicator
-    await ctx.editMessageText('📊 Your stats:\n• Messages: 42\n• Active days: 7');
+    await ctx.editMessageText("📊 Your stats:\n• Messages: 42\n• Active days: 7");
   }
 
-  @Action('settings')
+  @Action("settings")
   async onSettings(@Ctx() ctx: Context) {
     await ctx.answerCbQuery();
-    
+
     const settingsKeyboard = new InlineKeyboardBuilder()
-      .callback('🔔 Notifications: ON', 'toggle_notif')
+      .callback("🔔 Notifications: ON", "toggle_notif")
       .row()
-      .callback('🌍 Language: EN', 'change_lang')
+      .callback("🌍 Language: EN", "change_lang")
       .row()
-      .callback('« Back', 'back_to_menu')
+      .callback("« Back", "back_to_menu")
       .build();
 
-    await ctx.editMessageText('⚙️ Settings', { reply_markup: settingsKeyboard });
+    await ctx.editMessageText("⚙️ Settings", { reply_markup: settingsKeyboard });
   }
 
   @Action(/toggle_(.+)/)
@@ -179,10 +175,10 @@ export class MenuUpdate {
     // Update state and refresh keyboard...
   }
 
-  @Action('help')
+  @Action("help")
   async onHelp(@Ctx() ctx: Context) {
     await ctx.answerCbQuery();
-    await ctx.editMessageText('ℹ️ Help:\nUse /menu to see options');
+    await ctx.editMessageText("ℹ️ Help:\nUse /menu to see options");
   }
 }
 ```
@@ -194,16 +190,9 @@ export class MenuUpdate {
 Persistent buttons that send text.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import {
-  TelegramUpdate,
-  Start,
-  Hears,
-  Ctx,
-  ReplyKeyboardBuilder,
-  removeKeyboard,
-} from 'nestjs-telegram/bot';
-import type { Context } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramUpdate, Start, Hears, Ctx, ReplyKeyboardBuilder, removeKeyboard } from "nestjs-telegram/bot";
+import type { Context } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
@@ -211,37 +200,37 @@ export class TaskUpdate {
   @Start()
   async onStart(@Ctx() ctx: Context) {
     const keyboard = new ReplyKeyboardBuilder()
-      .text('📝 New Task')
-      .text('✅ My Tasks')
+      .text("📝 New Task")
+      .text("✅ My Tasks")
       .row()
-      .text('📊 Statistics')
-      .text('⚙️ Settings')
+      .text("📊 Statistics")
+      .text("⚙️ Settings")
       .resize()
       .build();
 
-    await ctx.reply('Welcome! Choose an action:', { reply_markup: keyboard });
+    await ctx.reply("Welcome! Choose an action:", { reply_markup: keyboard });
   }
 
-  @Hears('📝 New Task')
+  @Hears("📝 New Task")
   async onNewTask(@Ctx() ctx: Context) {
-    await ctx.reply('Enter your task description:');
+    await ctx.reply("Enter your task description:");
     // In production, use scenes/sessions to track conversation state
   }
 
-  @Hears('✅ My Tasks')
+  @Hears("✅ My Tasks")
   async onMyTasks(@Ctx() ctx: Context) {
-    const tasks = ['Task 1', 'Task 2', 'Task 3'];
-    await ctx.reply(`Your tasks:\n${tasks.map((t, i) => `${i + 1}. ${t}`).join('\n')}`);
+    const tasks = ["Task 1", "Task 2", "Task 3"];
+    await ctx.reply(`Your tasks:\n${tasks.map((t, i) => `${i + 1}. ${t}`).join("\n")}`);
   }
 
-  @Hears('📊 Statistics')
+  @Hears("📊 Statistics")
   async onStats(@Ctx() ctx: Context) {
-    await ctx.reply('📊 Total tasks: 12\n✅ Completed: 8\n⏳ Pending: 4');
+    await ctx.reply("📊 Total tasks: 12\n✅ Completed: 8\n⏳ Pending: 4");
   }
 
-  @Command('hidekeyboard')
+  @Command("hidekeyboard")
   async hideKeyboard(@Ctx() ctx: Context) {
-    await ctx.reply('Keyboard hidden', { reply_markup: removeKeyboard() });
+    await ctx.reply("Keyboard hidden", { reply_markup: removeKeyboard() });
   }
 }
 ```
@@ -253,10 +242,10 @@ export class TaskUpdate {
 Upload and send various file types.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import { createReadStream } from 'fs';
-import { Input } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import { createReadStream } from "fs";
+import { Input } from "telegraf";
 
 @Injectable()
 export class MediaService {
@@ -264,37 +253,45 @@ export class MediaService {
 
   async sendDocument(chatId: number) {
     // From file system
-    await this.bot.sendDocument(chatId, {
-      source: createReadStream('./report.pdf'),
-      filename: 'monthly-report.pdf',
-    }, {
-      caption: 'Here is your report',
-    });
+    await this.bot.sendDocument(
+      chatId,
+      {
+        source: createReadStream("./report.pdf"),
+        filename: "monthly-report.pdf",
+      },
+      {
+        caption: "Here is your report",
+      },
+    );
   }
 
   async sendPhoto(chatId: number) {
     // From URL
-    await this.bot.sendPhoto(chatId, 'https://example.com/image.jpg', {
-      caption: 'Beautiful sunset 🌅',
+    await this.bot.sendPhoto(chatId, "https://example.com/image.jpg", {
+      caption: "Beautiful sunset 🌅",
     });
 
     // From Buffer
-    const buffer = Buffer.from('...image data...');
+    const buffer = Buffer.from("...image data...");
     await this.bot.sendPhoto(chatId, { source: buffer });
   }
 
   async sendVideo(chatId: number) {
-    await this.bot.sendVideo(chatId, {
-      source: createReadStream('./video.mp4'),
-    }, {
-      caption: 'Check this out!',
-      supports_streaming: true,
-    });
+    await this.bot.sendVideo(
+      chatId,
+      {
+        source: createReadStream("./video.mp4"),
+      },
+      {
+        caption: "Check this out!",
+        supports_streaming: true,
+      },
+    );
   }
 
   async sendVoice(chatId: number) {
     await this.bot.telegram.sendVoice(chatId, {
-      source: createReadStream('./voice.ogg'),
+      source: createReadStream("./voice.ogg"),
     });
   }
 
@@ -311,8 +308,8 @@ export class MediaService {
 Send multiple photos/videos as an album.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
+import { Injectable } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
 
 @Injectable()
 export class GalleryService {
@@ -321,19 +318,19 @@ export class GalleryService {
   async sendGallery(chatId: number) {
     await this.bot.sendMediaGroup(chatId, [
       {
-        type: 'photo',
-        media: 'https://example.com/photo1.jpg',
-        caption: 'Photo 1',
+        type: "photo",
+        media: "https://example.com/photo1.jpg",
+        caption: "Photo 1",
       },
       {
-        type: 'photo',
-        media: 'https://example.com/photo2.jpg',
-        caption: 'Photo 2',
+        type: "photo",
+        media: "https://example.com/photo2.jpg",
+        caption: "Photo 2",
       },
       {
-        type: 'video',
-        media: 'https://example.com/video.mp4',
-        caption: 'Video',
+        type: "video",
+        media: "https://example.com/video.mp4",
+        caption: "Video",
       },
     ]);
   }
@@ -347,12 +344,12 @@ export class GalleryService {
 Multi-step conversation using sessions (requires `telegraf-session-local` or similar).
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import session from 'telegraf-session-local';
+import { Injectable } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import session from "telegraf-session-local";
 
 interface SessionData {
-  step?: 'awaiting_name' | 'awaiting_age';
+  step?: "awaiting_name" | "awaiting_age";
   name?: string;
 }
 
@@ -364,31 +361,27 @@ export class RegistrationService {
     // Enable sessions
     this.bot.use(session());
 
-    this.bot.command('register', async (ctx) => {
-      ctx.session.step = 'awaiting_name';
-      await ctx.reply('Welcome! What is your name?');
+    this.bot.command("register", async (ctx) => {
+      ctx.session.step = "awaiting_name";
+      await ctx.reply("Welcome! What is your name?");
     });
 
-    this.bot.on('text', async (ctx) => {
+    this.bot.on("text", async (ctx) => {
       const session = ctx.session as SessionData;
-      
-      if (session.step === 'awaiting_name') {
+
+      if (session.step === "awaiting_name") {
         session.name = ctx.message.text;
-        session.step = 'awaiting_age';
+        session.step = "awaiting_age";
         await ctx.reply(`Nice to meet you, ${session.name}! How old are you?`);
-      } else if (session.step === 'awaiting_age') {
+      } else if (session.step === "awaiting_age") {
         const age = parseInt(ctx.message.text);
         if (isNaN(age)) {
-          await ctx.reply('Please enter a valid number.');
+          await ctx.reply("Please enter a valid number.");
           return;
         }
-        
-        await ctx.reply(
-          `Registration complete!\n` +
-          `Name: ${session.name}\n` +
-          `Age: ${age}`
-        );
-        
+
+        await ctx.reply(`Registration complete!\n` + `Name: ${session.name}\n` + `Age: ${age}`);
+
         // Clear session
         delete session.step;
         delete session.name;
@@ -405,32 +398,32 @@ export class RegistrationService {
 Restrict commands to specific users.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUpdate, Command, Ctx, Sender } from 'nestjs-telegram/bot';
-import type { Context, User } from 'telegraf';
+import { Injectable } from "@nestjs/common";
+import { TelegramUpdate, Command, Ctx, Sender } from "nestjs-telegram/bot";
+import type { Context, User } from "telegraf";
 
 @TelegramUpdate()
 @Injectable()
 export class AdminUpdate {
   private readonly adminIds = [123456789, 987654321]; // Your admin user IDs
 
-  @Command('broadcast')
+  @Command("broadcast")
   async broadcast(@Ctx() ctx: Context, @Sender() from: User) {
     if (!this.isAdmin(from.id)) {
-      await ctx.reply('⛔ This command is admin-only.');
+      await ctx.reply("⛔ This command is admin-only.");
       return;
     }
 
-    const message = ctx.message.text.split(' ').slice(1).join(' ');
+    const message = ctx.message.text.split(" ").slice(1).join(" ");
     if (!message) {
-      await ctx.reply('Usage: /broadcast <message>');
+      await ctx.reply("Usage: /broadcast <message>");
       return;
     }
 
     // Send to all users (fetch from database)
     const userIds = await this.getAllUserIds();
     let sent = 0;
-    
+
     for (const userId of userIds) {
       try {
         await ctx.telegram.sendMessage(userId, `📢 ${message}`);
@@ -443,19 +436,19 @@ export class AdminUpdate {
     await ctx.reply(`✅ Broadcast sent to ${sent} users`);
   }
 
-  @Command('stats')
+  @Command("stats")
   async stats(@Ctx() ctx: Context, @Sender() from: User) {
     if (!this.isAdmin(from.id)) {
-      await ctx.reply('⛔ Admin only');
+      await ctx.reply("⛔ Admin only");
       return;
     }
 
     const stats = await this.getStats();
     await ctx.reply(
       `📊 Bot Statistics:\n` +
-      `Total users: ${stats.totalUsers}\n` +
-      `Active today: ${stats.activeToday}\n` +
-      `Messages sent: ${stats.messagesSent}`
+        `Total users: ${stats.totalUsers}\n` +
+        `Active today: ${stats.activeToday}\n` +
+        `Messages sent: ${stats.messagesSent}`,
     );
   }
 
@@ -483,8 +476,8 @@ Run bot behind a web server instead of polling.
 
 ```typescript
 // app.module.ts
-import { Module } from '@nestjs/common';
-import { TelegramBotModule } from 'nestjs-telegram/bot';
+import { Module } from "@nestjs/common";
+import { TelegramBotModule } from "nestjs-telegram/bot";
 
 @Module({
   imports: [
@@ -493,7 +486,7 @@ import { TelegramBotModule } from 'nestjs-telegram/bot';
       launch: false, // Don't auto-launch
       launchOptions: {
         webhook: {
-          domain: 'https://yourdomain.com',
+          domain: "https://yourdomain.com",
           port: 3000,
         },
       },
@@ -503,17 +496,17 @@ import { TelegramBotModule } from 'nestjs-telegram/bot';
 export class AppModule {}
 
 // bot.controller.ts
-import { Controller, Post, Req } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import type { Request } from 'express';
+import { Controller, Post, Req } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import type { Request } from "express";
 
-@Controller('telegram')
+@Controller("telegram")
 export class BotController {
   constructor(private readonly bot: TelegramBotService) {}
 
-  @Post('webhook')
+  @Post("webhook")
   async handleWebhook(@Req() req: Request) {
-    const callback = this.bot.webhookCallback('/telegram/webhook');
+    const callback = this.bot.webhookCallback("/telegram/webhook");
     await callback(req as any, undefined as any);
   }
 }
@@ -521,11 +514,11 @@ export class BotController {
 // main.ts
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // Set webhook
   const bot = app.get(TelegramBotService);
-  await bot.telegram.setWebhook('https://yourdomain.com/telegram/webhook');
-  
+  await bot.telegram.setWebhook("https://yourdomain.com/telegram/webhook");
+
   await app.listen(3000);
 }
 ```
@@ -538,14 +531,9 @@ Validate data from Telegram Mini Apps.
 
 ```typescript
 // auth.guard.ts
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { validateWebAppInitData } from 'nestjs-telegram/bot';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from "@nestjs/common";
+import { validateWebAppInitData } from "nestjs-telegram/bot";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class MiniAppGuard implements CanActivate {
@@ -553,20 +541,16 @@ export class MiniAppGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-    const initData = request.headers['x-init-data'] || request.body.initData;
+    const initData = request.headers["x-init-data"] || request.body.initData;
 
     if (!initData) {
-      throw new UnauthorizedException('Missing init data');
+      throw new UnauthorizedException("Missing init data");
     }
 
-    const validated = validateWebAppInitData(
-      initData,
-      this.config.get('BOT_TOKEN')!,
-      { maxAgeSeconds: 3600 },
-    );
+    const validated = validateWebAppInitData(initData, this.config.get("BOT_TOKEN")!, { maxAgeSeconds: 3600 });
 
     if (!validated) {
-      throw new UnauthorizedException('Invalid init data');
+      throw new UnauthorizedException("Invalid init data");
     }
 
     // Attach user to request
@@ -576,17 +560,17 @@ export class MiniAppGuard implements CanActivate {
 }
 
 // mini-app.controller.ts
-import { Controller, Post, UseGuards, Req } from '@nestjs/common';
-import { MiniAppGuard } from './auth.guard';
+import { Controller, Post, UseGuards, Req } from "@nestjs/common";
+import { MiniAppGuard } from "./auth.guard";
 
-@Controller('api')
+@Controller("api")
 export class MiniAppController {
-  @Post('submit')
+  @Post("submit")
   @UseGuards(MiniAppGuard)
   async handleSubmit(@Req() req) {
     const user = req.user; // Validated Telegram user
-    console.log('Request from:', user.id, user.username);
-    
+    console.log("Request from:", user.id, user.username);
+
     return { success: true, userId: user.id };
   }
 }
@@ -599,24 +583,21 @@ export class MiniAppController {
 Send messages at specific times.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { TelegramBotService } from 'nestjs-telegram/bot';
+import { Injectable } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { TelegramBotService } from "nestjs-telegram/bot";
 
 @Injectable()
 export class SchedulerService {
   constructor(private readonly bot: TelegramBotService) {}
 
   // Every day at 9 AM
-  @Cron('0 9 * * *')
+  @Cron("0 9 * * *")
   async sendDailyReminder() {
     const subscribers = await this.getSubscribers();
-    
+
     for (const chatId of subscribers) {
-      await this.bot.sendMessage(
-        chatId,
-        '🌅 Good morning! Don\'t forget to check your tasks today.'
-      );
+      await this.bot.sendMessage(chatId, "🌅 Good morning! Don't forget to check your tasks today.");
     }
   }
 
@@ -624,7 +605,7 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_HOUR)
   async sendHourlyUpdate() {
     const adminChat = 123456789;
-    await this.bot.sendMessage(adminChat, '⏰ Hourly system check: All OK');
+    await this.bot.sendMessage(adminChat, "⏰ Hourly system check: All OK");
   }
 
   private async getSubscribers(): Promise<number[]> {
@@ -643,8 +624,8 @@ export class SchedulerService {
 Complete authentication process.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramAuthService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramAuthService } from "nestjs-telegram/client";
 
 @Injectable()
 export class AuthService {
@@ -654,31 +635,31 @@ export class AuthService {
     // Step 1: Send code
     if (!code) {
       await this.auth.sendCode(phone);
-      return { status: 'code_sent', message: 'Check Telegram for your code' };
+      return { status: "code_sent", message: "Check Telegram for your code" };
     }
 
     // Step 2: Sign in with code
     const result = await this.auth.signIn(code);
-    
-    if (result.status === 'authorized') {
+
+    if (result.status === "authorized") {
       const session = this.auth.exportSession();
       return {
-        status: 'success',
+        status: "success",
         user: result.user,
         session, // Save this!
       };
     }
 
     // Step 3: Handle 2FA
-    if (result.status === 'password-required') {
+    if (result.status === "password-required") {
       if (!password) {
-        return { status: '2fa_required', message: 'Enter your 2FA password' };
+        return { status: "2fa_required", message: "Enter your 2FA password" };
       }
-      
+
       const user = await this.auth.checkPassword(password);
       const session = this.auth.exportSession();
-      
-      return { status: 'success', user, session };
+
+      return { status: "success", user, session };
     }
   }
 }
@@ -691,8 +672,8 @@ export class AuthService {
 Quick note-taking to yourself.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class NotesService {
@@ -703,7 +684,7 @@ export class NotesService {
   }
 
   async saveWithTags(text: string, tags: string[]) {
-    const tagString = tags.map(t => `#${t}`).join(' ');
+    const tagString = tags.map((t) => `#${t}`).join(" ");
     await this.user.sendToSelf(`${text}\n\n${tagString}`);
   }
 }
@@ -716,8 +697,8 @@ export class NotesService {
 Get your dialog list.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class ChatsService {
@@ -725,8 +706,8 @@ export class ChatsService {
 
   async listRecentChats() {
     const dialogs = await this.user.getDialogs({ limit: 20 });
-    
-    return dialogs.map(dialog => ({
+
+    return dialogs.map((dialog) => ({
       id: dialog.id,
       title: dialog.title,
       unread: dialog.unreadCount,
@@ -738,7 +719,7 @@ export class ChatsService {
 
   async findChatByTitle(title: string) {
     const dialogs = await this.user.getDialogs({ limit: 100 });
-    return dialogs.find(d => d.title.toLowerCase().includes(title.toLowerCase()));
+    return dialogs.find((d) => d.title.toLowerCase().includes(title.toLowerCase()));
   }
 
   async getUnreadCount() {
@@ -755,8 +736,8 @@ export class ChatsService {
 Fetch recent messages from a channel or group.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class ChannelReaderService {
@@ -764,8 +745,8 @@ export class ChannelReaderService {
 
   async readLatestPosts(channelUsername: string, limit = 10) {
     const messages = await this.user.getMessages(`@${channelUsername}`, { limit });
-    
-    return messages.map(msg => ({
+
+    return messages.map((msg) => ({
       id: msg.id,
       text: msg.text,
       date: msg.date,
@@ -776,7 +757,7 @@ export class ChannelReaderService {
 
   async searchInChannel(channelUsername: string, keyword: string) {
     const messages = await this.user.getMessages(`@${channelUsername}`, { limit: 100 });
-    return messages.filter(msg => msg.text?.toLowerCase().includes(keyword.toLowerCase()));
+    return messages.filter((msg) => msg.text?.toLowerCase().includes(keyword.toLowerCase()));
   }
 }
 ```
@@ -788,8 +769,8 @@ export class ChannelReaderService {
 React to messages in real-time.
 
 ```typescript
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class MessageListenerService implements OnModuleInit {
@@ -797,15 +778,15 @@ export class MessageListenerService implements OnModuleInit {
 
   onModuleInit() {
     this.user.updates$.subscribe(async (message) => {
-      console.log('New message:', {
+      console.log("New message:", {
         from: message.sender?.username,
         text: message.text,
         chat: message.chatId,
       });
 
       // Auto-reply to specific keywords
-      if (message.text?.toLowerCase().includes('urgent')) {
-        await this.user.sendMessage(message.chatId, 'Got your urgent message!');
+      if (message.text?.toLowerCase().includes("urgent")) {
+        await this.user.sendMessage(message.chatId, "Got your urgent message!");
       }
     });
   }
@@ -819,13 +800,13 @@ export class MessageListenerService implements OnModuleInit {
 Automated responses from your account (use responsibly!).
 
 ```typescript
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class AutoReplyService implements OnModuleInit {
   private enabled = false;
-  private awayMessage = '🤖 Auto-reply: I\'m currently away. Will respond soon!';
+  private awayMessage = "🤖 Auto-reply: I'm currently away. Will respond soon!";
 
   constructor(private readonly user: TelegramUserService) {}
 
@@ -836,7 +817,7 @@ export class AutoReplyService implements OnModuleInit {
 
       // Don't reply to groups/channels
       const dialogs = await this.user.getDialogs({ limit: 1 });
-      const dialog = dialogs.find(d => d.id === message.chatId);
+      const dialog = dialogs.find((d) => d.id === message.chatId);
       if (dialog?.isGroup || dialog?.isChannel) return;
 
       // Send auto-reply
@@ -862,9 +843,9 @@ export class AutoReplyService implements OnModuleInit {
 Export messages to JSON.
 
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram/client';
-import { writeFile } from 'fs/promises';
+import { Injectable } from "@nestjs/common";
+import { TelegramUserService } from "nestjs-telegram/client";
+import { writeFile } from "fs/promises";
 
 @Injectable()
 export class BackupService {
@@ -872,12 +853,12 @@ export class BackupService {
 
   async backupChat(chatUsername: string, outputPath: string) {
     const messages = await this.user.getMessages(`@${chatUsername}`, { limit: 1000 });
-    
+
     const backup = {
       chat: chatUsername,
       exportedAt: new Date().toISOString(),
       messageCount: messages.length,
-      messages: messages.map(msg => ({
+      messages: messages.map((msg) => ({
         id: msg.id,
         date: msg.date.toISOString(),
         sender: msg.sender?.username || msg.sender?.firstName,
@@ -892,7 +873,7 @@ export class BackupService {
 
   async backupAllChats() {
     const dialogs = await this.user.getDialogs({ limit: 50 });
-    
+
     for (const dialog of dialogs) {
       if (dialog.isUser) {
         const filename = `backup_${dialog.id}.json`;
@@ -914,9 +895,9 @@ Use both APIs together.
 
 ```typescript
 // app.module.ts
-import { Module } from '@nestjs/common';
-import { TelegramModule } from 'nestjs-telegram';
-import { BridgeService } from './bridge.service';
+import { Module } from "@nestjs/common";
+import { TelegramModule } from "nestjs-telegram";
+import { BridgeService } from "./bridge.service";
 
 @Module({
   imports: [
@@ -935,9 +916,9 @@ import { BridgeService } from './bridge.service';
 export class AppModule {}
 
 // bridge.service.ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class BridgeService implements OnModuleInit {
@@ -948,12 +929,12 @@ export class BridgeService implements OnModuleInit {
 
   onModuleInit() {
     // Bot command to send message from your account
-    this.bot.command('sendas', async (ctx) => {
-      const [target, ...messageParts] = ctx.message.text.split(' ').slice(1);
-      const message = messageParts.join(' ');
-      
+    this.bot.command("sendas", async (ctx) => {
+      const [target, ...messageParts] = ctx.message.text.split(" ").slice(1);
+      const message = messageParts.join(" ");
+
       if (!target || !message) {
-        await ctx.reply('Usage: /sendas <@username> <message>');
+        await ctx.reply("Usage: /sendas <@username> <message>");
         return;
       }
 
@@ -967,12 +948,9 @@ export class BridgeService implements OnModuleInit {
 
     // Forward user account messages to bot users
     this.user.updates$.subscribe(async (msg) => {
-      if (msg.text?.startsWith('/bot ')) {
+      if (msg.text?.startsWith("/bot ")) {
         const adminChatId = 123456789; // Your bot admin chat
-        await this.bot.sendMessage(
-          adminChatId,
-          `📨 From ${msg.sender?.username}: ${msg.text.slice(5)}`
-        );
+        await this.bot.sendMessage(adminChatId, `📨 From ${msg.sender?.username}: ${msg.text.slice(5)}`);
       }
     });
   }
@@ -986,9 +964,9 @@ export class BridgeService implements OnModuleInit {
 Mirror bot interactions to yourself.
 
 ```typescript
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import { TelegramUserService } from 'nestjs-telegram/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramUserService } from "nestjs-telegram/client";
 
 @Injectable()
 export class MirrorService implements OnModuleInit {
@@ -1001,13 +979,13 @@ export class MirrorService implements OnModuleInit {
     // Log all bot interactions to your Saved Messages
     this.bot.use(async (ctx, next) => {
       const from = ctx.from;
-      const text = ctx.message?.text || ctx.callbackQuery?.data || 'unknown';
-      
+      const text = ctx.message?.text || ctx.callbackQuery?.data || "unknown";
+
       await this.user.sendToSelf(
         `🤖 Bot activity:\n` +
-        `User: ${from?.username || from?.id}\n` +
-        `Message: ${text}\n` +
-        `Time: ${new Date().toLocaleString()}`
+          `User: ${from?.username || from?.id}\n` +
+          `Message: ${text}\n` +
+          `Time: ${new Date().toLocaleString()}`,
       );
 
       return next();
@@ -1026,12 +1004,12 @@ Test without hitting Telegram servers.
 
 ```typescript
 // echo.update.spec.ts
-import { Test } from '@nestjs/testing';
-import { TelegramBotService } from 'nestjs-telegram/bot';
-import { EchoUpdate } from './echo.update';
-import type { Context } from 'telegraf';
+import { Test } from "@nestjs/testing";
+import { TelegramBotService } from "nestjs-telegram/bot";
+import { EchoUpdate } from "./echo.update";
+import type { Context } from "telegraf";
 
-describe('EchoUpdate', () => {
+describe("EchoUpdate", () => {
   let update: EchoUpdate;
   let bot: TelegramBotService;
 
@@ -1042,25 +1020,22 @@ describe('EchoUpdate', () => {
     };
 
     const module = await Test.createTestingModule({
-      providers: [
-        EchoUpdate,
-        { provide: TelegramBotService, useValue: mockBot },
-      ],
+      providers: [EchoUpdate, { provide: TelegramBotService, useValue: mockBot }],
     }).compile();
 
     update = module.get(EchoUpdate);
     bot = module.get(TelegramBotService);
   });
 
-  it('should echo user message', async () => {
+  it("should echo user message", async () => {
     const mockCtx = {
-      message: { text: 'Hello!' },
+      message: { text: "Hello!" },
       reply: jest.fn(),
     } as any as Context;
 
-    await update.onText(mockCtx, 'Hello!');
+    await update.onText(mockCtx, "Hello!");
 
-    expect(mockCtx.reply).toHaveBeenCalledWith('You said: Hello!');
+    expect(mockCtx.reply).toHaveBeenCalledWith("You said: Hello!");
   });
 });
 ```
@@ -1073,12 +1048,12 @@ Mock `IGramClient` for offline tests.
 
 ```typescript
 // chat.service.spec.ts
-import { Test } from '@nestjs/testing';
-import { TelegramUserService } from 'nestjs-telegram/client';
-import { TELEGRAM_GRAM_CLIENT } from 'nestjs-telegram/client';
-import type { IGramClient } from 'nestjs-telegram/client';
+import { Test } from "@nestjs/testing";
+import { TelegramUserService } from "nestjs-telegram/client";
+import { TELEGRAM_GRAM_CLIENT } from "nestjs-telegram/client";
+import type { IGramClient } from "nestjs-telegram/client";
 
-describe('ChatsService', () => {
+describe("ChatsService", () => {
   let service: TelegramUserService;
   let mockClient: jest.Mocked<IGramClient>;
 
@@ -1087,8 +1062,8 @@ describe('ChatsService', () => {
       isConnected: jest.fn().mockReturnValue(true),
       getDialogs: jest.fn().mockResolvedValue([
         {
-          id: '1',
-          title: 'Test Chat',
+          id: "1",
+          title: "Test Chat",
           unreadCount: 5,
           isPinned: false,
         },
@@ -1100,21 +1075,18 @@ describe('ChatsService', () => {
     } as any;
 
     const module = await Test.createTestingModule({
-      providers: [
-        TelegramUserService,
-        { provide: TELEGRAM_GRAM_CLIENT, useValue: mockClient },
-      ],
+      providers: [TelegramUserService, { provide: TELEGRAM_GRAM_CLIENT, useValue: mockClient }],
     }).compile();
 
     service = module.get(TelegramUserService);
   });
 
-  it('should fetch dialogs', async () => {
+  it("should fetch dialogs", async () => {
     const dialogs = await service.getDialogs({ limit: 10 });
-    
+
     expect(mockClient.getDialogs).toHaveBeenCalledWith({ limit: 10 });
     expect(dialogs).toHaveLength(1);
-    expect(dialogs[0].title).toBe('Test Chat');
+    expect(dialogs[0].title).toBe("Test Chat");
   });
 });
 ```
@@ -1122,6 +1094,7 @@ describe('ChatsService', () => {
 ---
 
 **For more examples, see:**
+
 - [examples/](../examples/) folder
 - [docs/BOT-API.md](./BOT-API.md)
 - [docs/USER-CLIENT-MTPROTO.md](./USER-CLIENT-MTPROTO.md)

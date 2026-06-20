@@ -90,5 +90,21 @@ describe('FileSessionStore', () => {
         TelegramSessionError,
       );
     });
+
+    it('re-asserts 0o600 via chmod on POSIX platforms', async () => {
+      // ── Force the POSIX branch (this runner may be Windows). chmod is spied
+      //    so the test does not depend on the real filesystem's mode bits. ────
+      const original = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      const chmodSpy = jest
+        .spyOn(fs, 'chmod')
+        .mockResolvedValue(undefined);
+      try {
+        await new FileSessionStore(filePath).save('secret');
+        expect(chmodSpy).toHaveBeenCalledWith(expect.any(String), 0o600);
+      } finally {
+        Object.defineProperty(process, 'platform', { value: original });
+      }
+    });
   });
 });

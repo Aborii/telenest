@@ -195,4 +195,20 @@ describe('TelegramAuthService', () => {
 
     logSpy.mockRestore();
   });
+
+  it('masks a short phone-like input entirely', async () => {
+    const client = createFakeClient();
+    const logSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    const service = new TelegramAuthService(client);
+
+    await service.sendCode('1234');
+
+    const logged = logSpy.mock.calls.map((args) => String(args[0])).join('\n');
+    expect(logged).toContain('****');
+    expect(logged).not.toContain('1234');
+
+    logSpy.mockRestore();
+  });
 });

@@ -14,7 +14,10 @@ import { Api, type TelegramClient, errors, password, sessions } from 'telegram';
 //    so the import-equals form is required for the call to resolve at runtime. ─
 import bigInt = require('big-integer');
 import { TelegramAuthError, TelegramClientError } from '../common';
-import { GramJsClientAdapter } from './gramjs-client.adapter';
+import {
+  GramJsClientAdapter,
+  createGramJsClient,
+} from './gramjs-client.adapter';
 
 /** Minimal mock of the GramJS client surface the adapter calls. */
 type MockClient = {
@@ -220,6 +223,18 @@ describe('GramJsClientAdapter', () => {
         .signInWithCode({ phoneNumber: '+1', phoneCodeHash: 'H', phoneCode: 'x' })
         .catch((e: unknown) => e);
       expect((error as TelegramAuthError).code).toBe('CODE_INVALID');
+    });
+
+    it('falls back to String() for a non-Error rejection', async () => {
+      const mock = createMockClient({
+        sendCode: jest.fn().mockRejectedValue('weird-non-error-failure'),
+      });
+
+      const error = (await createAdapter(mock)
+        .sendCode('+1')
+        .catch((e: unknown) => e)) as TelegramAuthError;
+      expect(error.code).toBe('UNKNOWN');
+      expect(error.message).toContain('weird-non-error-failure');
     });
 
     it('throws SIGN_UP_REQUIRED for unregistered numbers', async () => {
@@ -505,6 +520,16 @@ describe('GramJsClientAdapter', () => {
       );
     });
 
+    it('maps an unresolvable peer id to an empty string', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          { id: 1, peerId: {}, message: 'x', date: 1, out: false, senderId: undefined },
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.peerId).toBe('');
+    });
+
     it('wraps getDialogs failures in TelegramClientError', async () => {
       const mock = createMockClient({
         getDialogs: jest.fn().mockRejectedValue(new Error('rpc')),
@@ -520,6 +545,20 @@ describe('GramJsClientAdapter', () => {
     it('returns a string for an empty session', () => {
       const adapter = createAdapter(createMockClient());
       expect(typeof adapter.exportSession()).toBe('string');
+    });
+  });
+
+  describe('createGramJsClient', () => {
+    it('builds a disconnected IGramClient with no network access', () => {
+      const client = createGramJsClient(
+        { apiId: 1, apiHash: 'hash', deviceModel: 'Test', useWSS: true },
+        '',
+      );
+      expect(client).toBeInstanceOf(GramJsClientAdapter);
+      expect(client.isConnected()).toBe(false);
+      expect(typeof client.getMe).toBe('function');
+      expect(typeof client.sendMessage).toBe('function');
+      expect(typeof client.exportSession()).toBe('string');
     });
   });
 });

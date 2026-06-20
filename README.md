@@ -260,6 +260,7 @@ TelegramModule.forRoot({
 | --- | --- |
 | [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md) | The umbrella `TelegramModule`, module composition, and global registration |
 | [docs/BOT-API.md](docs/BOT-API.md) | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle |
+| [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
 | [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md) | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence |
 | [docs/TESTING.md](docs/TESTING.md) | Unit-testing both sides via the `IGramClient` / `clientFactory` seam |

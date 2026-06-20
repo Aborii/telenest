@@ -439,7 +439,174 @@ For ephemeral end-to-end tests you can also use the built-in `InMemorySessionSto
 
 ---
 
-## 3. Asserting on errors
+## 3. Public testing utilities (`nestjs-telegram/testing`)
+
+Starting from v1.2, the library ships a dedicated **`nestjs-telegram/testing`** subpath that
+re-exports every helper you need in one import, with zero runtime network or SDK dependencies.
+
+### Why use these instead of hand-rolling fakes?
+
+The utilities are generated from the same interfaces the library uses internally, so:
+
+- They always stay in sync when the interface changes — your test helpers stay
+  valid automatically.
+- You only override the one or two methods your test actually exercises; the rest
+  get sensible defaults.
+- `withMockGramClient` removes the boilerplate of writing a `FactoryProvider`
+  object every time you wire a fake into a `TestingModule`.
+
+### Available exports
+
+| Export | Kind | Description |
+| ------ | ---- | ----------- |
+| `createMockGramClient(overrides?)` | Factory | Returns `jest.Mocked<IGramClient>` — all 13 methods stubbed with `jest.fn()` and safe defaults. |
+| `createMockBotContext(overrides?)` | Factory | Returns a spyable Telegraf `Context` — all action/reply methods stubbed. |
+| `withMockGramClient(client)` | DI helper | Builds a `FactoryProvider` that registers `client` under `TELEGRAM_GRAM_CLIENT`. |
+| `aGramUser(partial?)` | DTO builder | Returns a `GramUser` with sensible defaults, merged with `partial`. |
+| `aGramMessage(partial?)` | DTO builder | Returns a `GramMessage` with sensible defaults, merged with `partial`. |
+| `aGramDialog(partial?)` | DTO builder | Returns a `GramDialog` with sensible defaults, merged with `partial`. |
+| `MockBotContextOverrides` | Type | Overrides shape accepted by `createMockBotContext`. |
+
+### Quick start
+
+```ts
+import {
+  aGramUser,
+  aGramMessage,
+  aGramDialog,
+  createMockGramClient,
+  createMockBotContext,
+  withMockGramClient,
+} from 'nestjs-telegram/testing';
+```
+
+### `createMockGramClient`
+
+Every method is a `jest.fn()` with a safe default:
+
+| Method | Default return |
+| ------ | -------------- |
+| `connect` / `disconnect` / `logOut` | Resolves `undefined` |
+| `isConnected` | Returns `true` |
+| `isAuthorized` | Resolves `true` |
+| `sendCode` | Resolves `{ phoneCodeHash: 'MOCK_HASH', isCodeViaApp: true }` |
+| `signInWithCode` | Resolves `{ status: 'authorized', user: aGramUser() }` |
+| `signInWithPassword` | Resolves `aGramUser()` |
+| `getMe` | Resolves `aGramUser()` |
+| `getDialogs` | Resolves `[]` |
+| `getMessages` | Resolves `[]` |
+| `sendMessage` | Resolves `aGramMessage()` |
+| `exportSession` | Returns `''` |
+| `onNewMessage` | Returns a no-op unsubscribe function |
+
+```ts
+// Use defaults for everything you don't care about.
+const client = createMockGramClient();
+
+// Override only what the test exercises.
+const client = createMockGramClient({
+  getMe: jest.fn().mockResolvedValue(aGramUser({ username: 'bot', isBot: true })),
+});
+
+const service = new TelegramUserService(client);
+await service.getMe();
+expect(client.getMe).toHaveBeenCalledTimes(1);
+```
+
+### `withMockGramClient`
+
+Builds a NestJS `FactoryProvider` that you can drop into a `providers` array (or
+use with `overrideProvider`). No need to import `TELEGRAM_GRAM_CLIENT` yourself.
+
+```ts
+import { Test } from '@nestjs/testing';
+import { TelegramUserService } from 'nestjs-telegram';
+import { aGramUser, createMockGramClient, withMockGramClient } from 'nestjs-telegram/testing';
+import { DigestService } from './digest.service';
+
+describe('DigestService (using withMockGramClient)', () => {
+  it('posts an unread digest to Saved Messages', async () => {
+    const client = createMockGramClient({
+      getDialogs: jest.fn().mockResolvedValue([
+        aGramDialog({ unreadCount: 2 }),
+        aGramDialog({ unreadCount: 3 }),
+      ]),
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        TelegramUserService,
+        DigestService,
+        withMockGramClient(client),   // <-- registers the fake under the token
+      ],
+    }).compile();
+
+    const service = moduleRef.get(DigestService);
+    await service.postUnreadDigest();
+
+    expect(client.sendMessage).toHaveBeenCalledWith('me', {
+      message: 'You have 5 unread messages.',
+    });
+  });
+});
+```
+
+### `createMockBotContext`
+
+Returns a structural mock of Telegraf's `Context` with every common action
+method stubbed as a `jest.fn()`. The mock does not create a real `Telegraf`
+instance, so it works without a bot token.
+
+```ts
+import { createMockBotContext } from 'nestjs-telegram/testing';
+
+describe('start command handler', () => {
+  it('replies with a welcome message', async () => {
+    const ctx = createMockBotContext({
+      update: { message: { text: '/start', from: { id: 1 } } },
+    });
+
+    await startHandler(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledWith('Welcome!');
+  });
+});
+```
+
+The `overrides` object is merged directly onto the context, so you can attach
+session data, scene state, or any custom middleware fields:
+
+```ts
+const ctx = createMockBotContext({ session: { step: 'await_phone' } });
+```
+
+Stubbed action methods (all return `jest.fn()` with a safe default):
+`reply`, `replyWithHTML`, `replyWithMarkdown`, `replyWithMarkdownV2`,
+`sendMessage`, `answerCbQuery`, `answerInlineQuery`, `editMessageText`,
+`editMessageCaption`, `editMessageReplyMarkup`, `deleteMessage`, `getChat`,
+`leaveChat`, `pinChatMessage`, `unpinChatMessage`, `banChatMember`,
+`unbanChatMember`, `restrictChatMember`, `promoteChatMember`,
+`replyWithPhoto`, `replyWithDocument`, `replyWithAudio`, `replyWithVideo`,
+`replyWithAnimation`, `replyWithSticker`, `replyWithVoice`,
+`replyWithLocation`, `replyWithContact`, `replyWithPoll`, `replyWithDice`,
+`replyWithMediaGroup`, `replyWithInvoice`.
+
+### DTO builders
+
+The builders fill in every required field so you only specify what matters:
+
+```ts
+const me   = aGramUser({ id: '42', isSelf: true, username: 'me' });
+const msg  = aGramMessage({ text: 'Hello!', out: true });
+const chat = aGramDialog({ title: 'Team', type: 'group', unreadCount: 10 });
+```
+
+All optional fields (e.g. `GramUser.phone`, `GramMessage.senderId`) are omitted
+by default and only appear when you include them in `partial`.
+
+---
+
+## 4. Asserting on errors
 
 Every failure this library raises is a subclass of `TelegramError`, so consumer tests can assert precisely:
 
@@ -475,13 +642,15 @@ it('classifies an auth failure by code', () => {
 
 ---
 
-## 4. Do's and don'ts
+## 5. Do's and don'ts
 
 **Do**
 
 - Always pass `launch: false` (bot) and `autoConnect: false` (client) in tests.
 - Prefer the facades' class tokens (`TelegramBotService`, `TelegramUserService`, `TelegramAuthService`) or the documented injection tokens (`TELEGRAM_BOT`, `TELEGRAM_GRAM_CLIENT`) as your override points.
-- Build fakes from the `IGramClient` interface and the library's DTO types (`GramUser`, `GramDialog`, `GramMessage`, `GramSendMessageParams`, …) — never from raw GramJS `Api.*` objects.
+- Use `createMockGramClient()` from `nestjs-telegram/testing` instead of hand-rolling a fake — it stays in sync with `IGramClient` automatically.
+- Use `withMockGramClient(client)` to register a fake under `TELEGRAM_GRAM_CLIENT` in a `TestingModule` without writing a `FactoryProvider` object manually.
+- Use `aGramUser()` / `aGramMessage()` / `aGramDialog()` to build DTO fixtures — only specify the fields the test needs.
 - Type your fakes (`jest.Mocked<IGramClient>`, `Partial<TelegramBotService>`) so the compiler catches drift when you upgrade the library.
 - Import `reflect-metadata` once in a Jest `setupFiles` entry if you use `@nestjs/testing`.
 

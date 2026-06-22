@@ -10,5 +10,5 @@
  * import { validateWebAppInitData } from 'nestjs-telegram';
  */
 
-export * from './web-app.types';
 export * from './validate-web-app-init-data';
+export * from './web-app.types';

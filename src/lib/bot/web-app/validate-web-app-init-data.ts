@@ -29,10 +29,11 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+
 import { TelegramConfigError } from '../../common';
 import {
-  WEB_APP_CHAT_TYPE_VALUES,
   type ValidateWebAppInitDataOptions,
+  WEB_APP_CHAT_TYPE_VALUES,
   type WebAppChat,
   type WebAppChatType,
   type WebAppInitData,
@@ -252,7 +253,9 @@ function asString(value: unknown): string | undefined {
 
 /** Returns `value` when it is a finite number, else `undefined`. */
 function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /** Returns `value` when it is a boolean, else `undefined`. */

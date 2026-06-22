@@ -16,10 +16,12 @@
  * by invoking the fake's captured `onNewMessage` callback.
  */
 
-import { Injectable, type DynamicModule, type Provider } from '@nestjs/common';
+import { type DynamicModule, Injectable, type Provider } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
+
 import type { IGramClient } from './gram-client.interface';
 import type { GramMessage } from './gram-client.types';
+import type { SessionStore } from './session/session-store.interface';
 import { TelegramAuthService } from './telegram-auth.service';
 import { TelegramClientModule } from './telegram-client.module';
 import {
@@ -30,7 +32,6 @@ import {
   InjectTelegramUser,
 } from './telegram-client.tokens';
 import { TelegramUserService } from './telegram-user.service';
-import type { SessionStore } from './session/session-store.interface';
 import { OnUserMessage } from './updates/on-user-message.decorator';
 
 /** A fake account: its client, a captured inbound-message emitter, its store. */
@@ -121,7 +122,8 @@ class DefaultHandler {
 @Injectable()
 class AccountConsumer {
   public constructor(
-    @InjectTelegramUser('personal') public readonly personalUser: TelegramUserService,
+    @InjectTelegramUser('personal')
+    public readonly personalUser: TelegramUserService,
     @InjectTelegramAuth('ops') public readonly opsAuth: TelegramAuthService,
   ) {}
 }

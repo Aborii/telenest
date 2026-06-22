@@ -36,6 +36,7 @@
  */
 
 import { Inject, type InjectionToken } from '@nestjs/common';
+
 import { DEFAULT_BOT_NAME, TELEGRAM_BOT } from './telegram-bot.constants';
 import { TelegramBotService } from './telegram-bot.service';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';

@@ -46,9 +46,9 @@
  */
 
 import {
-  Module,
   type DynamicModule,
   type InjectionToken,
+  Module,
   type Provider,
 } from '@nestjs/common';
 import {
@@ -58,6 +58,7 @@ import {
   Reflector,
 } from '@nestjs/core';
 import type { Telegraf } from 'telegraf';
+
 import { DEFAULT_BOT_NAME } from './telegram-bot.constants';
 import { createTelegrafInstance } from './telegram-bot.factory';
 import {
@@ -73,6 +74,7 @@ import {
   getBotRegistrarToken,
   getBotToken,
 } from './telegram-bot.tokens';
+import { TelegramEnhancerResolver } from './updates/execution/telegram-enhancer.resolver';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
 
 /**
@@ -84,7 +86,10 @@ import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.regi
  *
  * The facade and registrar are provided via factories (not `useClass`) so the
  * per-bot instance and options can be passed explicitly — the same reason the
- * service is constructable directly in tests.
+ * service is constructable directly in tests. The registrar additionally receives
+ * the {@link TelegramEnhancerResolver}, which resolves each handler's
+ * guards/interceptors/exception filters declared via the `@UseTelegram*`
+ * decorators.
  *
  * @param name - The bot's name (`DEFAULT_BOT_NAME` for the default bot).
  * @returns The provider set for this bot.
@@ -109,6 +114,8 @@ function createBotProviders(name: string): Provider[] {
       ): TelegramBotService => new TelegramBotService(bot, options),
       inject: [instanceToken, TELEGRAM_BOT_OPTIONS],
     },
+    // ── Resolves a handler's guard/interceptor/filter refs (DI + @Catch). ─────
+    TelegramEnhancerResolver,
     // ── Discovery-based handler registrar, scoped to this bot by name. ────────
     {
       provide: getBotRegistrarToken(name),
@@ -116,6 +123,7 @@ function createBotProviders(name: string): Provider[] {
         discovery: DiscoveryService,
         scanner: MetadataScanner,
         reflector: Reflector,
+        enhancers: TelegramEnhancerResolver,
         bot: Telegraf,
       ): TelegramBotUpdatesRegistrar =>
         new TelegramBotUpdatesRegistrar(
@@ -123,9 +131,16 @@ function createBotProviders(name: string): Provider[] {
           discovery,
           scanner,
           reflector,
+          enhancers,
           bot,
         ),
-      inject: [DiscoveryService, MetadataScanner, Reflector, instanceToken],
+      inject: [
+        DiscoveryService,
+        MetadataScanner,
+        Reflector,
+        TelegramEnhancerResolver,
+        instanceToken,
+      ],
     },
   ];
 }

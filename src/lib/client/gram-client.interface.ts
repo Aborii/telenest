@@ -77,7 +77,10 @@ export interface IGramClient {
    * @returns The `phoneCodeHash` needed to complete sign-in.
    * @throws {import('../common').TelegramAuthError} If the phone is rejected.
    */
-  sendCode(phoneNumber: string, forceSMS?: boolean): Promise<GramSendCodeResult>;
+  sendCode(
+    phoneNumber: string,
+    forceSMS?: boolean,
+  ): Promise<GramSendCodeResult>;
 
   /**
    * Completes sign-in with the code the user received.

@@ -9,14 +9,14 @@
  */
 
 import {
+  isTelegramError,
+  TELEGRAM_AUTH_ERROR_CODE_VALUES,
   TelegramAuthError,
   TelegramBotApiError,
   TelegramClientError,
   TelegramConfigError,
   TelegramError,
   TelegramSessionError,
-  TELEGRAM_AUTH_ERROR_CODE_VALUES,
-  isTelegramError,
 } from './telegram.errors';
 
 describe('Telegram error hierarchy', () => {

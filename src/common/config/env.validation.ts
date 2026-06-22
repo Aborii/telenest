@@ -62,10 +62,15 @@ function requireString(rawValue: unknown, key: string): string {
  * @returns Typed and normalized environment values.
  * @throws {Error} If required variables are missing or invalid.
  */
-export function validateEnvironment(config: Record<string, unknown>): AppEnvironment {
+export function validateEnvironment(
+  config: Record<string, unknown>,
+): AppEnvironment {
   return {
     ECHO_BOT_TOKEN: requireString(config.ECHO_BOT_TOKEN, 'ECHO_BOT_TOKEN'),
-    GREETER_BOT_TOKEN: requireString(config.GREETER_BOT_TOKEN, 'GREETER_BOT_TOKEN'),
+    GREETER_BOT_TOKEN: requireString(
+      config.GREETER_BOT_TOKEN,
+      'GREETER_BOT_TOKEN',
+    ),
     ECHO_BOT_WEBHOOK_DOMAIN:
       typeof config.ECHO_BOT_WEBHOOK_DOMAIN === 'string'
         ? config.ECHO_BOT_WEBHOOK_DOMAIN.trim() || undefined

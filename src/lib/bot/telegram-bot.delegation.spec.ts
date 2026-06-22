@@ -10,6 +10,7 @@
  */
 
 import type { Telegraf } from 'telegraf';
+
 import { TelegramBotApiError } from '../common';
 import { TelegramBotService } from './telegram-bot.service';
 
@@ -45,7 +46,10 @@ const DELEGATIONS: ReadonlyArray<{ method: string; args: unknown[] }> = [
 ];
 
 /** Builds a service whose mock `telegram` exposes `method` as a jest fn. */
-function serviceWith(method: string, impl: jest.Mock): {
+function serviceWith(
+  method: string,
+  impl: jest.Mock,
+): {
   service: TelegramBotService;
   fn: jest.Mock;
 } {

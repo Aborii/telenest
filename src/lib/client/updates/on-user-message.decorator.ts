@@ -33,6 +33,7 @@
  */
 
 import { SetMetadata } from '@nestjs/common';
+
 import { DEFAULT_CLIENT_NAME } from '../telegram-client.constants';
 import type {
   OnUserMessageFilter,
@@ -76,7 +77,11 @@ export function OnUserMessage(
   const client = options.client ?? DEFAULT_CLIENT_NAME;
   return (target, propertyKey, descriptor) => {
     // ── Two markers: the match filter + which account this handler serves. ────
-    SetMetadata(ON_USER_MESSAGE_METADATA, filter)(target, propertyKey, descriptor);
+    SetMetadata(ON_USER_MESSAGE_METADATA, filter)(
+      target,
+      propertyKey,
+      descriptor,
+    );
     SetMetadata(ON_USER_MESSAGE_CLIENT_METADATA, client)(
       target,
       propertyKey,

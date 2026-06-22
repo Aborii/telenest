@@ -17,4 +17,5 @@ export const RANDOM_NUMBER_SCENE_ID = 'random-number-scene';
 export const PROFILE_WIZARD_ID = 'profile-wizard';
 
 /** Prompt displayed when entering the random-number scene. */
-export const RANDOM_SCENE_PROMPT = 'Type again for another random number or /exit.';
+export const RANDOM_SCENE_PROMPT =
+  'Type again for another random number or /exit.';

@@ -39,12 +39,13 @@
  */
 
 import { Inject, type InjectionToken } from '@nestjs/common';
+
+import { TelegramAuthService } from './telegram-auth.service';
 import {
   DEFAULT_CLIENT_NAME,
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
-import { TelegramAuthService } from './telegram-auth.service';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import { TelegramUserService } from './telegram-user.service';
 import { TelegramUserUpdatesRegistrar } from './updates/telegram-user-updates.registrar';
@@ -180,8 +181,7 @@ export function getClientRegistrarToken(name?: string): InjectionToken {
  */
 export const InjectTelegramUser = (
   name?: string,
-): PropertyDecorator & ParameterDecorator =>
-  Inject(getTelegramUserToken(name));
+): PropertyDecorator & ParameterDecorator => Inject(getTelegramUserToken(name));
 
 /**
  * Parameter/property decorator that injects a named account's
@@ -198,5 +198,4 @@ export const InjectTelegramUser = (
  */
 export const InjectTelegramAuth = (
   name?: string,
-): PropertyDecorator & ParameterDecorator =>
-  Inject(getTelegramAuthToken(name));
+): PropertyDecorator & ParameterDecorator => Inject(getTelegramAuthToken(name));

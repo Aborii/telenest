@@ -72,12 +72,13 @@ npm i telegraf telegram
 The package exposes three independent entry points so a bot-only app never pulls
 in GramJS, and a user-account-only app never pulls in Telegraf:
 
-| Import                   | Pulls in                 | Use when                          |
-| ------------------------ | ------------------------ | --------------------------------- |
-| `nestjs-telegram/bot`    | `telegraf` only          | You only run a bot                |
-| `nestjs-telegram/client` | `telegram` (GramJS) only | You only control a user account   |
-| `nestjs-telegram/common` | neither                  | Just the shared error/types layer |
-| `nestjs-telegram` (root) | both                     | You use both sides                |
+| Import                    | Pulls in                 | Use when                          |
+| ------------------------- | ------------------------ | --------------------------------- |
+| `nestjs-telegram/bot`     | `telegraf` only          | You only run a bot                |
+| `nestjs-telegram/client`  | `telegram` (GramJS) only | You only control a user account   |
+| `nestjs-telegram/common`  | neither                  | Just the shared error/types layer |
+| `nestjs-telegram/testing` | neither (test-only)      | Mocking the library in your tests |
+| `nestjs-telegram` (root)  | both                     | You use both sides                |
 
 ```ts
 import { TelegramBotModule } from "nestjs-telegram/bot"; // no GramJS loaded
@@ -115,7 +116,7 @@ import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf lo
 
 ### By Topic
 
-- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
+- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Guards/Filters/Interceptors](./docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
 - **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md) | [Multiple Accounts](./docs/MULTIPLE-ACCOUNTS.md)
 - **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
 
@@ -278,20 +279,22 @@ TelegramModule.forRoot({
 | [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
 | [docs/BOT-API.md](docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
 | [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
+| [docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md](docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | `@UseTelegramGuards`/`@UseTelegramInterceptors`/`@UseTelegramFilters`, built-in allowlist & rate-limit guards, default exception filter |
 | [docs/MULTIPLE-BOTS.md](docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
 | [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
 | [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
 | [docs/MULTIPLE-ACCOUNTS.md](docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
-| [docs/TESTING.md](docs/TESTING.md)                             | Unit-testing both sides via the `IGramClient` / `clientFactory` seam                                        |
+| [docs/TESTING.md](docs/TESTING.md)                             | Unit-testing both sides — ready-made `nestjs-telegram/testing` mocks plus the `IGramClient` / `clientFactory` seam |
 
 ---
 
 ## Testing
 
-The library ships with **150 tests** and is built to keep network I/O out of your suite:
+The library ships with **290+ tests** and is built to keep network I/O out of your suite:
 
-- The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a hand-rolled fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
+- **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](docs/TESTING.md).
+- The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
 - Inside Nest, pass a `clientFactory` to `TelegramClientModule` (or override the `TELEGRAM_GRAM_CLIENT` token) to swap in a fake client without touching the network.
 - On the Bot side, `InMemorySessionStore` gives the client side a zero-I/O session backend, and every facade method funnels through a single error-normalizing path that wraps failures in `TelegramBotApiError`.
 

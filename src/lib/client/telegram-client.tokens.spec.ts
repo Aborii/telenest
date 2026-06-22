@@ -10,12 +10,12 @@
  * coexist without colliding. Pure functions; no DI container or network.
  */
 
+import { TelegramAuthService } from './telegram-auth.service';
 import {
   DEFAULT_CLIENT_NAME,
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
-import { TelegramAuthService } from './telegram-auth.service';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import {
   getClientLifecycleToken,
@@ -34,7 +34,9 @@ describe('per-account token helpers', () => {
   describe('default account → legacy tokens', () => {
     it('maps each provider to its original token for the default account', () => {
       expect(getGramClientToken()).toBe(TELEGRAM_GRAM_CLIENT);
-      expect(getGramClientToken(DEFAULT_CLIENT_NAME)).toBe(TELEGRAM_GRAM_CLIENT);
+      expect(getGramClientToken(DEFAULT_CLIENT_NAME)).toBe(
+        TELEGRAM_GRAM_CLIENT,
+      );
       expect(getSessionStoreToken()).toBe(TELEGRAM_SESSION_STORE);
       expect(getTelegramAuthToken()).toBe(TelegramAuthService);
       expect(getTelegramUserToken()).toBe(TelegramUserService);

@@ -50,9 +50,9 @@
  */
 
 import {
-  Module,
   type DynamicModule,
   type InjectionToken,
+  Module,
   type Provider,
 } from '@nestjs/common';
 import {
@@ -61,9 +61,13 @@ import {
   MetadataScanner,
   Reflector,
 } from '@nestjs/core';
+
+import type { IGramClient } from './gram-client.interface';
+import type { SessionStore } from './session/session-store.interface';
+import { TelegramAuthService } from './telegram-auth.service';
 import { DEFAULT_CLIENT_NAME } from './telegram-client.constants';
 import { createConnectedGramClient } from './telegram-client.factory';
-import type { IGramClient } from './gram-client.interface';
+import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import {
   ConfigurableModuleClass,
   TELEGRAM_CLIENT_OPTIONS,
@@ -71,8 +75,6 @@ import {
   type TelegramClientModuleForRootOptions,
 } from './telegram-client.module-definition';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
-import { TelegramAuthService } from './telegram-auth.service';
-import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import {
   getClientLifecycleToken,
   getClientRegistrarToken,
@@ -82,7 +84,6 @@ import {
   getTelegramUserToken,
 } from './telegram-client.tokens';
 import { TelegramUserService } from './telegram-user.service';
-import type { SessionStore } from './session/session-store.interface';
 import { TelegramUserUpdatesRegistrar } from './updates/telegram-user-updates.registrar';
 
 /**

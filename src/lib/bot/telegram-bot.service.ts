@@ -36,6 +36,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { Telegraf, type Telegram } from 'telegraf';
+
 import { TelegramBotApiError } from '../common';
 import { TELEGRAM_BOT } from './telegram-bot.constants';
 import { TELEGRAM_BOT_OPTIONS } from './telegram-bot.module-definition';
@@ -125,7 +126,9 @@ export class TelegramBotService
     if (this._launched) return;
     this._launched = true;
 
-    const mode = this.options.launchOptions?.webhook ? 'webhook' : 'long-polling';
+    const mode = this.options.launchOptions?.webhook
+      ? 'webhook'
+      : 'long-polling';
     this._logger.log(`Launching Telegram bot in ${mode} mode.`);
 
     // ── Long-polling resolves only after the bot stops, so do not await it.
@@ -699,10 +702,13 @@ export class TelegramBotService
         statusCode = candidate.response.error_code;
     }
 
-    return new TelegramBotApiError(`Bot API "${method}" failed: ${description}`, {
-      statusCode,
-      method,
-      cause: error,
-    });
+    return new TelegramBotApiError(
+      `Bot API "${method}" failed: ${description}`,
+      {
+        statusCode,
+        method,
+        cause: error,
+      },
+    );
   }
 }

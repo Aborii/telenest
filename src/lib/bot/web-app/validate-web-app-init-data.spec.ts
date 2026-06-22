@@ -10,9 +10,10 @@
  */
 
 import { createHmac } from 'node:crypto';
+
 import { TelegramConfigError } from '../../common';
-import { WEB_APP_CHAT_TYPES } from './web-app.types';
 import { validateWebAppInitData } from './validate-web-app-init-data';
+import { WEB_APP_CHAT_TYPES } from './web-app.types';
 
 /** A throwaway bot token used to sign and validate the fixtures. */
 const BOT_TOKEN = '123456:ABC-DEF_the-quick-brown-fox';

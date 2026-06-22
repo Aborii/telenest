@@ -9,9 +9,9 @@
  */
 
 import type { IGramClient } from './gram-client.interface';
+import type { SessionStore } from './session/session-store.interface';
 import { createConnectedGramClient } from './telegram-client.factory';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
-import type { SessionStore } from './session/session-store.interface';
 
 /** Invokes the client builder with explicit args. */
 const buildClient = (
@@ -20,7 +20,9 @@ const buildClient = (
 ): Promise<IGramClient> => createConnectedGramClient(options, store);
 
 /** Builds a fake client whose `connect` is observable. */
-function fakeClient(connect = jest.fn().mockResolvedValue(undefined)): IGramClient {
+function fakeClient(
+  connect = jest.fn().mockResolvedValue(undefined),
+): IGramClient {
   return {
     connect,
     disconnect: jest.fn(),
@@ -76,7 +78,13 @@ describe('createConnectedGramClient', () => {
     };
 
     await buildClient(
-      { apiId: 1, apiHash: 'h', autoConnect: false, session: 'FROM-OPTIONS', clientFactory },
+      {
+        apiId: 1,
+        apiHash: 'h',
+        autoConnect: false,
+        session: 'FROM-OPTIONS',
+        clientFactory,
+      },
       store,
     );
     await buildClient(

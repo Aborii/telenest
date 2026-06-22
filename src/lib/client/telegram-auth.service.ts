@@ -26,6 +26,7 @@
  */
 
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+
 import { TelegramAuthError } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type {
@@ -33,11 +34,11 @@ import type {
   GramSignInResult,
   GramUser,
 } from './gram-client.types';
+import type { SessionStore } from './session/session-store.interface';
 import {
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
-import type { SessionStore } from './session/session-store.interface';
 
 /**
  * Orchestrates the phone/code/2FA sign-in flow and persists the session.

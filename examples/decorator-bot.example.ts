@@ -32,6 +32,7 @@
 import { Injectable, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { Context } from 'telegraf';
+
 import {
   Action,
   CallbackData,
@@ -44,8 +45,8 @@ import {
   On,
   Sender,
   Start,
-  TelegramUpdate,
   TelegramBotModule,
+  TelegramUpdate,
   Use,
 } from '../src';
 
@@ -89,7 +90,6 @@ export class GreeterUpdate {
    */
   @Use()
   public logEveryUpdate(@Ctx() ctx: Context): void {
-    // eslint-disable-next-line no-console
     console.log(`update ${ctx.updateType} from ${ctx.from?.id ?? 'unknown'}`);
   }
 

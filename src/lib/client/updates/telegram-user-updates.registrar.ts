@@ -33,10 +33,11 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
-import { filter as rxFilter } from 'rxjs/operators';
 import type { Subscription } from 'rxjs';
-import { DEFAULT_CLIENT_NAME } from '../telegram-client.constants';
+import { filter as rxFilter } from 'rxjs/operators';
+
 import type { GramMessage } from '../gram-client.types';
+import { DEFAULT_CLIENT_NAME } from '../telegram-client.constants';
 import { TelegramUserService } from '../telegram-user.service';
 import { matchesUserMessageFilter } from './match-user-message';
 import {

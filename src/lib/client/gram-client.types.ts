@@ -96,6 +96,15 @@ export interface GramMessage {
   out: boolean;
   /** Sender id as a decimal string, when known. */
   senderId?: string;
+  /**
+   * Whether the message carries downloadable media (photo, document, video,
+   * …). Always populated by the GramJS adapter; optional on the DTO because
+   * a hand-built {@link import('./gram-client.interface').IGramClient} fake may
+   * omit it. When `true`, the media can be fetched with
+   * {@link import('./gram-client.interface').IGramClient.downloadMedia} using
+   * this message's `peerId` and `id`. Service/empty media never counts.
+   */
+  hasMedia?: boolean;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */
@@ -191,4 +200,87 @@ export interface GramSendMessageParams {
   replyTo?: number;
   /** Send without a notification sound. */
   silent?: boolean;
+}
+
+/**
+ * A file accepted by {@link import('./gram-client.interface').IGramClient.sendFile}:
+ * a local filesystem path, a public direct URL (Telegram fetches it), or an
+ * in-memory {@link Buffer}. To control the filename of a `Buffer` upload, attach
+ * a `name` property to it (`Object.assign(buf, { name: 'report.pdf' })`).
+ */
+export type GramInputFile = string | Buffer;
+
+/** Parameters for sending a file as the logged-in account. */
+export interface GramSendFileParams {
+  /** The file to send (local path, direct URL, or {@link Buffer}). */
+  file: GramInputFile;
+  /** Optional caption shown beneath the media. */
+  caption?: string;
+  /**
+   * How to present an image/video file. `true` sends it as a viewable photo/
+   * video; `false` forces it as a downloadable document; omitted lets Telegram
+   * infer from the file extension (images/videos become media, else document).
+   */
+  asPhoto?: boolean;
+  /** Optional formatting mode applied to `caption`. */
+  parseMode?: GramParseMode;
+  /** Id of the message to reply to. */
+  replyTo?: number;
+  /** Send without a notification sound. */
+  silent?: boolean;
+}
+
+/** Parameters for listing a chat's or channel's participants. */
+export interface GramGetParticipantsParams {
+  /** Maximum number of participants to return. */
+  limit?: number;
+  /** Filter participants by a display-name / username query. */
+  search?: string;
+}
+
+/** Parameters for searching messages within a peer. */
+export interface GramSearchMessagesParams {
+  /** Maximum number of matching messages to return. */
+  limit?: number;
+}
+
+/** Parameters for deleting messages. */
+export interface GramDeleteMessagesParams {
+  /**
+   * Delete the messages for everyone in the chat (not just your own copy).
+   * Defaults to `true`.
+   */
+  revoke?: boolean;
+}
+
+/** Parameters for pinning a message. */
+export interface GramPinMessageParams {
+  /**
+   * Notify chat members about the pin. Defaults to `false` (silent pin), which
+   * mirrors GramJS' default rather than the official clients' behaviour.
+   */
+  notify?: boolean;
+}
+
+/**
+ * Extended ("full") information about a chat, channel, or user, returned by
+ * {@link import('./gram-client.interface').IGramClient.getFullChat}. Richer than
+ * a {@link GramDialog}: it carries the description/bio and (for groups and
+ * channels) the participant count.
+ */
+export interface GramChatInfo {
+  /** Peer id rendered as a decimal string. */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public @username (without the leading `@`), when set. */
+  username?: string;
+  /** Bio (user) or description (group/channel), when set. */
+  about?: string;
+  /** Member count for groups and channels; `undefined` for users. */
+  participantsCount?: number;
+  /** Whether the peer carries Telegram's verified badge. */
+  verified: boolean;
 }

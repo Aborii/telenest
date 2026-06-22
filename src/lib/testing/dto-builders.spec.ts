@@ -7,7 +7,12 @@
  * and never share mutable state between calls.
  */
 
-import { aGramDialog, aGramMessage, aGramUser } from './dto-builders';
+import {
+  aGramChatInfo,
+  aGramDialog,
+  aGramMessage,
+  aGramUser,
+} from './dto-builders';
 
 describe('DTO builders', () => {
   describe('aGramUser', () => {
@@ -85,6 +90,34 @@ describe('DTO builders', () => {
       expect(channel.title).toBe('News');
       expect(channel.unreadCount).toBe(9);
       expect(channel.pinned).toBe(true);
+    });
+  });
+
+  describe('aGramChatInfo', () => {
+    it('returns a small public group by default', () => {
+      expect(aGramChatInfo()).toEqual({
+        id: '1000',
+        type: 'group',
+        title: 'Test Group',
+        username: 'test_group',
+        about: 'A representative group.',
+        participantsCount: 3,
+        verified: false,
+      });
+    });
+
+    it('applies overrides (e.g. a verified channel)', () => {
+      const channel = aGramChatInfo({
+        type: 'channel',
+        title: 'News',
+        participantsCount: 12_000,
+        verified: true,
+      });
+      expect(channel.type).toBe('channel');
+      expect(channel.participantsCount).toBe(12_000);
+      expect(channel.verified).toBe(true);
+      // Untouched fields keep their defaults.
+      expect(channel.id).toBe('1000');
     });
   });
 });

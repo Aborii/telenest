@@ -426,6 +426,19 @@ returns library DTOs; the service transparently connects the client on first use
 | `getMessages` | `(peer: GramPeer, params?: GramGetMessagesParams) => Promise<GramMessage[]>` | Recent messages from a peer, newest first. |
 | `sendMessage` | `(peer: GramPeer, text: string \| GramSendMessageParams) => Promise<GramMessage>` | Sends a message; returns the sent message. |
 | `sendToSelf` | `(text: string) => Promise<GramMessage>` | Convenience for messaging your own *Saved Messages* (peer `'me'`). |
+| `sendFile` | `(peer: GramPeer, params: GramSendFileParams) => Promise<GramMessage>` | Sends a photo / video / document; returns the sent message. |
+| `downloadMedia` | `(peer: GramPeer, messageId: number) => Promise<Buffer \| undefined>` | Downloads a message's media, or `undefined` when it has none. |
+| `downloadProfilePhoto` | `(peer: GramPeer) => Promise<Buffer \| undefined>` | Downloads a peer's profile photo, or `undefined` when absent. |
+| `joinChannel` | `(peer: GramPeer) => Promise<void>` | Joins a public channel or group. |
+| `leaveChannel` | `(peer: GramPeer) => Promise<void>` | Leaves a channel or group. |
+| `getParticipants` | `(peer: GramPeer, params?: GramGetParticipantsParams) => Promise<GramUser[]>` | Lists a group/channel's participants. |
+| `searchMessages` | `(peer: GramPeer, query: string, params?: GramSearchMessagesParams) => Promise<GramMessage[]>` | Searches a peer's history for a text query. |
+| `getFullChat` | `(peer: GramPeer) => Promise<GramChatInfo>` | Extended info (description, member count) for a chat/channel/user. |
+| `editMessage` | `(peer: GramPeer, messageId: number, text: string) => Promise<GramMessage>` | Edits a message's text; returns the edited message. |
+| `deleteMessages` | `(peer: GramPeer, messageIds: number[], params?: GramDeleteMessagesParams) => Promise<void>` | Deletes messages (for everyone by default). |
+| `forwardMessages` | `(toPeer: GramPeer, fromPeer: GramPeer, messageIds: number[]) => Promise<GramMessage[]>` | Forwards messages between peers. |
+| `markAsRead` | `(peer: GramPeer) => Promise<void>` | Marks a peer's history as read. |
+| `pinMessage` | `(peer: GramPeer, messageId: number, params?: GramPinMessageParams) => Promise<void>` | Pins a message in a chat. |
 
 A `GramPeer` is `string | number`: the literal `'me'`, a public `@username`, or a numeric
 user/chat id.
@@ -494,6 +507,66 @@ await this.user.sendToSelf('Remember to renew the api credentials.');
 
 `GramGetDialogsParams` accepts `limit` and `archived`; `GramGetMessagesParams` accepts
 `limit`, `minId`, and `maxId` (for pagination).
+
+### Media, chats, and message operations
+
+Beyond text, `TelegramUserService` exposes the common MTProto operations real automations
+need. Every one returns library DTOs and goes through the `IGramClient` seam, so the GramJS
+isolation boundary holds and your code/tests never import `telegram`.
+
+```ts
+// ── Media ──────────────────────────────────────────────────────────────────
+// Send a document; pass a local path, a direct URL, or a Buffer (give a Buffer a
+// `.name` to control the filename). `asPhoto` chooses photo vs. document presentation.
+await this.user.sendFile('me', { file: './report.pdf', caption: 'done' });
+await this.user.sendFile('@me', { file: photoBuffer, asPhoto: true });
+
+// Download a message's media. `GramMessage.hasMedia` tells you when there's anything
+// to fetch; the bytes come back as a Buffer (or `undefined` when there is none).
+const [latest] = await this.user.getMessages('@channel', { limit: 1 });
+if (latest?.hasMedia) {
+  const bytes = await this.user.downloadMedia(latest.peerId, latest.id);
+}
+const avatar = await this.user.downloadProfilePhoto('@durov');
+
+// ── Chats & channels ────────────────────────────────────────────────────────
+await this.user.joinChannel('@some_public_channel');
+await this.user.leaveChannel('@some_public_channel');
+
+const members = await this.user.getParticipants('@my_group', { limit: 100 });
+const hits = await this.user.searchMessages('@my_group', 'invoice', { limit: 20 });
+
+const info = await this.user.getFullChat('@my_group');
+// info: GramChatInfo — { id, type, title, about?, participantsCount?, username?, verified }
+
+// ── Message operations ──────────────────────────────────────────────────────
+const sent = await this.user.sendMessage('me', 'draft');
+await this.user.editMessage('me', sent.id, 'final');
+await this.user.pinMessage('me', sent.id, { notify: false });
+await this.user.markAsRead('@my_group');
+await this.user.forwardMessages('me', '@my_group', [sent.id]);
+await this.user.deleteMessages('me', [sent.id]); // revoke: true by default
+```
+
+`GramSendFileParams`:
+
+| Field | Type | Description |
+|---|---|---|
+| `file` | `string \| Buffer` | Local path, direct URL, or in-memory bytes. |
+| `caption` | `string` | Optional caption shown beneath the media. |
+| `asPhoto` | `boolean` | `true` → viewable photo/video; `false` → document; omitted → inferred from the extension. |
+| `parseMode` | `'html' \| 'md'` | Optional formatting mode applied to `caption`. |
+| `replyTo` | `number` | Id of the message to reply to. |
+| `silent` | `boolean` | Send without a notification sound. |
+
+`getParticipants` takes `GramGetParticipantsParams` (`limit`, `search`); `searchMessages` takes
+`GramSearchMessagesParams` (`limit`); `deleteMessages` takes `GramDeleteMessagesParams`
+(`revoke`, default `true` — delete for everyone); `pinMessage` takes `GramPinMessageParams`
+(`notify`, default `false`).
+
+> [!NOTE]
+> `downloadMedia` takes the message's `peerId` and `id` (rather than a raw GramJS message) so
+> the DTO boundary stays intact — the adapter re-fetches the message and downloads its media.
 
 ### Receiving inbound messages
 
@@ -602,6 +675,25 @@ interface GramMessage {
   date: number;        // unix timestamp in seconds
   out: boolean;        // true when sent by the logged-in account
   senderId?: string;   // sender id as a decimal string, when known
+  hasMedia?: boolean;  // true when the message carries downloadable media
+}
+```
+
+`hasMedia` is always populated on messages produced by the adapter (it is optional only so a
+hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
+`downloadMedia(message.peerId, message.id)`.
+
+### `GramChatInfo`
+
+```ts
+interface GramChatInfo {
+  id: string;                // peer id as a decimal string
+  type: 'user' | 'group' | 'channel';
+  title: string;             // chat/channel title, or the user's full name
+  username?: string;         // without the leading '@'
+  about?: string;            // bio (user) or description (group/channel)
+  participantsCount?: number; // member count for groups/channels; undefined for users
+  verified: boolean;         // whether the peer has Telegram's verified badge
 }
 ```
 
@@ -616,8 +708,11 @@ Related sign-in DTOs you may encounter: `GramSendCodeResult`
 Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
 operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
 `signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
-`sendMessage`, `exportSession`). The concrete `GramJsClientAdapter` — created by
-`createGramJsClient` — is the **only** implementation that touches the `telegram` package.
+`sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `joinChannel`,
+`leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,
+`deleteMessages`, `forwardMessages`, `markAsRead`, `pinMessage`, `exportSession`,
+`onNewMessage`). The concrete `GramJsClientAdapter` — created by `createGramJsClient` — is the
+**only** implementation that touches the `telegram` package.
 
 This boundary makes the services unit-testable with a trivial fake and keeps GramJS out of
 consumer compilation units. There are two ways to substitute a fake:
@@ -628,6 +723,9 @@ consumer compilation units. There are two ways to substitute a fake:
 import type { IGramClient } from 'nestjs-telegram';
 import { TelegramUserService } from 'nestjs-telegram';
 
+// Abbreviated for illustration — a complete `IGramClient` also implements the
+// media / chat / message operations (`sendFile`, `downloadMedia`, `joinChannel`,
+// `getParticipants`, `getFullChat`, `editMessage`, …) and `onNewMessage`.
 const fake: IGramClient = {
   isConnected: () => true,
   connect: async () => {},
@@ -639,15 +737,21 @@ const fake: IGramClient = {
   sendMessage: async (_peer, params) => ({
     id: 1, peerId: '42', text: params.message, date: 0, out: true,
   }),
+  // …media / chat / message ops + onNewMessage omitted for brevity…
   sendCode: async () => ({ phoneCodeHash: 'h', isCodeViaApp: true }),
   signInWithCode: async () => ({ status: 'authorized', user: { id: '42', isSelf: true, isBot: false, isPremium: false } }),
   signInWithPassword: async () => ({ id: '42', isSelf: true, isBot: false, isPremium: false }),
   logOut: async () => {},
   exportSession: () => '',
-};
+} as IGramClient;
 
 const user = new TelegramUserService(fake);
 ```
+
+> [!TIP]
+> For a **complete**, ready-made fake, use `createMockGramClient()` from the
+> `nestjs-telegram/testing` subpath — every method is a pre-stubbed `jest.fn()`, so you only
+> override the calls your test cares about. See [§ Testing](./TESTING.md).
 
 **(b) Pass `clientFactory`** so the module builds your fake instead of a real GramJS client.
 `GramClientFactory` has the signature `(options, session) => IGramClient`. Combine it with

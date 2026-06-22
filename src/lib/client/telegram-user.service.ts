@@ -36,11 +36,17 @@ import { Observable, Subject } from 'rxjs';
 
 import type { IGramClient } from './gram-client.interface';
 import type {
+  GramChatInfo,
+  GramDeleteMessagesParams,
   GramDialog,
   GramGetDialogsParams,
   GramGetMessagesParams,
+  GramGetParticipantsParams,
   GramMessage,
   GramPeer,
+  GramPinMessageParams,
+  GramSearchMessagesParams,
+  GramSendFileParams,
   GramSendMessageParams,
   GramUser,
 } from './gram-client.types';
@@ -178,6 +184,227 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    */
   public async sendToSelf(text: string): Promise<GramMessage> {
     return this.sendMessage('me', text);
+  }
+
+  // ── Media ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Sends a file (photo, video, document, …) as the logged-in account.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - The file plus optional caption / presentation options.
+   * @returns The sent message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   *
+   * @example
+   * ```ts
+   * await user.sendFile('me', { file: './report.pdf', caption: 'done' });
+   * await user.sendFile('@me', { file: photoBuffer, asPhoto: true });
+   * ```
+   */
+  public async sendFile(
+    peer: GramPeer,
+    params: GramSendFileParams,
+  ): Promise<GramMessage> {
+    await this.ensureConnected();
+    return this.client.sendFile(peer, params);
+  }
+
+  /**
+   * Downloads the media attached to a message into a {@link Buffer}.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to download.
+   * @returns The media bytes, or `undefined` when the message has no
+   *   downloadable media (or no longer exists).
+   * @throws {import('../common').TelegramClientError} On failure.
+   *
+   * @example
+   * ```ts
+   * const [msg] = await user.getMessages('@channel', { limit: 1 });
+   * if (msg?.hasMedia) {
+   *   const bytes = await user.downloadMedia(msg.peerId, msg.id);
+   * }
+   * ```
+   */
+  public async downloadMedia(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Buffer | undefined> {
+    await this.ensureConnected();
+    return this.client.downloadMedia(peer, messageId);
+  }
+
+  /**
+   * Downloads a peer's current profile photo into a {@link Buffer}.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The photo bytes, or `undefined` when the peer has no photo.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async downloadProfilePhoto(
+    peer: GramPeer,
+  ): Promise<Buffer | undefined> {
+    await this.ensureConnected();
+    return this.client.downloadProfilePhoto(peer);
+  }
+
+  // ── Chats & channels ───────────────────────────────────────────────────────
+
+  /**
+   * Joins a public channel or group.
+   *
+   * @param peer - The channel/group to join (@username or numeric id).
+   * @returns Resolves once joined.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async joinChannel(peer: GramPeer): Promise<void> {
+    await this.ensureConnected();
+    return this.client.joinChannel(peer);
+  }
+
+  /**
+   * Leaves a channel or group.
+   *
+   * @param peer - The channel/group to leave (@username or numeric id).
+   * @returns Resolves once left.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async leaveChannel(peer: GramPeer): Promise<void> {
+    await this.ensureConnected();
+    return this.client.leaveChannel(peer);
+  }
+
+  /**
+   * Lists the participants of a group or channel.
+   *
+   * @param peer - The group/channel (@username or numeric id).
+   * @param params - Optional limit / name filter.
+   * @returns The matching participants as user DTOs.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async getParticipants(
+    peer: GramPeer,
+    params?: GramGetParticipantsParams,
+  ): Promise<GramUser[]> {
+    await this.ensureConnected();
+    return this.client.getParticipants(peer, params);
+  }
+
+  /**
+   * Searches a peer's history for messages matching a text query.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param query - The text to search for.
+   * @param params - Optional limit.
+   * @returns The matching messages, newest first.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async searchMessages(
+    peer: GramPeer,
+    query: string,
+    params?: GramSearchMessagesParams,
+  ): Promise<GramMessage[]> {
+    await this.ensureConnected();
+    return this.client.searchMessages(peer, query, params);
+  }
+
+  /**
+   * Fetches extended ("full") information about a chat, channel, or user.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The chat/channel/user info DTO.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async getFullChat(peer: GramPeer): Promise<GramChatInfo> {
+    await this.ensureConnected();
+    return this.client.getFullChat(peer);
+  }
+
+  // ── Message operations ─────────────────────────────────────────────────────
+
+  /**
+   * Edits the text of a message previously sent in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to edit.
+   * @param text - The new message text.
+   * @returns The edited message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async editMessage(
+    peer: GramPeer,
+    messageId: number,
+    text: string,
+  ): Promise<GramMessage> {
+    await this.ensureConnected();
+    return this.client.editMessage(peer, messageId, text);
+  }
+
+  /**
+   * Deletes one or more messages from a chat.
+   *
+   * @param peer - Peer the messages belong to (`'me'`, @username, or numeric id).
+   * @param messageIds - Ids of the messages to delete.
+   * @param params - Optional `revoke` flag (delete for everyone; default `true`).
+   * @returns Resolves once deleted.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async deleteMessages(
+    peer: GramPeer,
+    messageIds: number[],
+    params?: GramDeleteMessagesParams,
+  ): Promise<void> {
+    await this.ensureConnected();
+    return this.client.deleteMessages(peer, messageIds, params);
+  }
+
+  /**
+   * Forwards messages from one peer to another.
+   *
+   * @param toPeer - Destination peer.
+   * @param fromPeer - Source peer the messages currently live in.
+   * @param messageIds - Ids of the messages to forward.
+   * @returns The forwarded messages as they now exist in `toPeer`.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async forwardMessages(
+    toPeer: GramPeer,
+    fromPeer: GramPeer,
+    messageIds: number[],
+  ): Promise<GramMessage[]> {
+    await this.ensureConnected();
+    return this.client.forwardMessages(toPeer, fromPeer, messageIds);
+  }
+
+  /**
+   * Marks a peer's history as read (clears the unread badge).
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns Resolves once acknowledged.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async markAsRead(peer: GramPeer): Promise<void> {
+    await this.ensureConnected();
+    return this.client.markAsRead(peer);
+  }
+
+  /**
+   * Pins a message in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to pin.
+   * @param params - Optional `notify` flag.
+   * @returns Resolves once pinned.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async pinMessage(
+    peer: GramPeer,
+    messageId: number,
+    params?: GramPinMessageParams,
+  ): Promise<void> {
+    await this.ensureConnected();
+    return this.client.pinMessage(peer, messageId, params);
   }
 
   /**

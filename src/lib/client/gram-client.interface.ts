@@ -22,12 +22,18 @@
  */
 
 import type {
+  GramChatInfo,
+  GramDeleteMessagesParams,
   GramDialog,
   GramGetDialogsParams,
   GramGetMessagesParams,
+  GramGetParticipantsParams,
   GramMessage,
   GramPeer,
+  GramPinMessageParams,
+  GramSearchMessagesParams,
   GramSendCodeResult,
+  GramSendFileParams,
   GramSendMessageParams,
   GramSignInResult,
   GramSignInWithCodeInput,
@@ -148,6 +154,169 @@ export interface IGramClient {
     peer: GramPeer,
     params: GramSendMessageParams,
   ): Promise<GramMessage>;
+
+  // ── Media ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Sends a file (photo, video, document, …) as the logged-in account.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - The file plus optional caption / presentation options.
+   * @returns The sent message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  sendFile(peer: GramPeer, params: GramSendFileParams): Promise<GramMessage>;
+
+  /**
+   * Downloads the media attached to a message into a {@link Buffer}.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to download.
+   * @returns The media bytes, or `undefined` when the message has no
+   *   downloadable media (or no longer exists).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadMedia(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Buffer | undefined>;
+
+  /**
+   * Downloads a peer's current profile photo into a {@link Buffer}.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The photo bytes, or `undefined` when the peer has no photo.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadProfilePhoto(peer: GramPeer): Promise<Buffer | undefined>;
+
+  // ── Chats & channels ───────────────────────────────────────────────────────
+
+  /**
+   * Joins a public channel or group.
+   *
+   * @param peer - The channel/group to join (@username or numeric id).
+   * @returns Resolves once joined.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  joinChannel(peer: GramPeer): Promise<void>;
+
+  /**
+   * Leaves a channel or group.
+   *
+   * @param peer - The channel/group to leave (@username or numeric id).
+   * @returns Resolves once left.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  leaveChannel(peer: GramPeer): Promise<void>;
+
+  /**
+   * Lists the participants of a group or channel.
+   *
+   * @param peer - The group/channel (@username or numeric id).
+   * @param params - Optional limit / name filter.
+   * @returns The matching participants as user DTOs.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getParticipants(
+    peer: GramPeer,
+    params?: GramGetParticipantsParams,
+  ): Promise<GramUser[]>;
+
+  /**
+   * Searches a peer's history for messages matching a text query.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param query - The text to search for.
+   * @param params - Optional limit.
+   * @returns The matching messages, newest first.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  searchMessages(
+    peer: GramPeer,
+    query: string,
+    params?: GramSearchMessagesParams,
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Fetches extended ("full") information about a chat, channel, or user.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The chat/channel/user info DTO.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getFullChat(peer: GramPeer): Promise<GramChatInfo>;
+
+  // ── Message operations ─────────────────────────────────────────────────────
+
+  /**
+   * Edits the text of a message previously sent in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to edit.
+   * @param text - The new message text.
+   * @returns The edited message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  editMessage(
+    peer: GramPeer,
+    messageId: number,
+    text: string,
+  ): Promise<GramMessage>;
+
+  /**
+   * Deletes one or more messages from a chat.
+   *
+   * @param peer - Peer the messages belong to (`'me'`, @username, or numeric id).
+   * @param messageIds - Ids of the messages to delete.
+   * @param params - Optional `revoke` flag (delete for everyone; default `true`).
+   * @returns Resolves once deleted.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  deleteMessages(
+    peer: GramPeer,
+    messageIds: number[],
+    params?: GramDeleteMessagesParams,
+  ): Promise<void>;
+
+  /**
+   * Forwards messages from one peer to another.
+   *
+   * @param toPeer - Destination peer.
+   * @param fromPeer - Source peer the messages currently live in.
+   * @param messageIds - Ids of the messages to forward.
+   * @returns The forwarded messages as they now exist in `toPeer`.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  forwardMessages(
+    toPeer: GramPeer,
+    fromPeer: GramPeer,
+    messageIds: number[],
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Marks a peer's history as read (clears the unread badge).
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns Resolves once acknowledged.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  markAsRead(peer: GramPeer): Promise<void>;
+
+  /**
+   * Pins a message in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to pin.
+   * @param params - Optional `notify` flag.
+   * @returns Resolves once pinned.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  pinMessage(
+    peer: GramPeer,
+    messageId: number,
+    params?: GramPinMessageParams,
+  ): Promise<void>;
 
   /**
    * Serializes the current session to a portable string for persistence.

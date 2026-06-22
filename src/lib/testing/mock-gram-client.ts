@@ -91,7 +91,7 @@ export function createMockGramClient(
     getDialogs: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(aGramMessage()),
-    exportSession: jest.fn().mockReturnValue(''),
+    exportSession: jest.fn().mockReturnValue('TEST_SESSION'),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
 

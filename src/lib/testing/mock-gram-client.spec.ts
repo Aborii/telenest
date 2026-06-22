@@ -55,7 +55,7 @@ describe('createMockGramClient', () => {
     await expect(client.sendMessage('me', { message: 'x' })).resolves.toEqual(
       aGramMessage(),
     );
-    expect(client.exportSession()).toBe('');
+    expect(client.exportSession()).toBe('TEST_SESSION');
   });
 
   it('defaults the auth flow to a completed sign-in', async () => {

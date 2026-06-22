@@ -155,16 +155,30 @@ export class TelegramBotApiError extends TelegramError {
   public readonly method?: string;
 
   /**
+   * Seconds to wait before retrying, present only when Telegram returned a
+   * `429 Too Many Requests` carrying a `retry_after` parameter. Consumed by the
+   * library's retry helper to back off for exactly the requested interval.
+   */
+  public readonly retryAfterSeconds?: number;
+
+  /**
    * @param message - Description of the failure.
-   * @param options - Optional Telegram status code, method name, and cause.
+   * @param options - Optional Telegram status code, method name, flood-wait
+   *   delay, and underlying cause.
    */
   public constructor(
     message: string,
-    options?: { statusCode?: number; method?: string; cause?: unknown },
+    options?: {
+      statusCode?: number;
+      method?: string;
+      retryAfterSeconds?: number;
+      cause?: unknown;
+    },
   ) {
     super(message, options?.cause);
     this.statusCode = options?.statusCode;
     this.method = options?.method;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
   }
 }
 

@@ -18,6 +18,11 @@ export {
   type TelegramBotModuleForRootOptions,
 } from './telegram-bot.module-definition';
 export * from './telegram-bot.service';
+export {
+  getBotInstanceToken,
+  getBotToken,
+  InjectBot,
+} from './telegram-bot.tokens';
 export * from './telegram-bot.module';
 export * from './keyboard.builder';
 export { createTelegrafInstance } from './telegram-bot.factory';

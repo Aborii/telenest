@@ -19,9 +19,11 @@ import {
   TelegramUpdate,
   Use,
 } from './telegram-update.decorator';
+import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
+  TELEGRAM_UPDATE_BOT_METADATA,
   UPDATE_BINDINGS_METADATA,
   type UpdateBinding,
 } from './telegram-update.types';
@@ -33,17 +35,35 @@ function bindingsOf(prototype: object, method: string): UpdateBinding[] {
 }
 
 describe('@TelegramUpdate class decorator', () => {
-  it('marks the class so the registrar will scan it', () => {
+  it('marks the class and targets the default bot when no options are given', () => {
     @TelegramUpdate()
     class Marked {}
 
     expect(Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, Marked)).toBe(true);
+    expect(Reflect.getMetadata(TELEGRAM_UPDATE_BOT_METADATA, Marked)).toBe(
+      DEFAULT_BOT_NAME,
+    );
+  });
+
+  it('records the target bot name from { bot } for a named bot', () => {
+    @TelegramUpdate({ bot: 'notify' })
+    class NotifyMarked {}
+
+    expect(Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, NotifyMarked)).toBe(
+      true,
+    );
+    expect(Reflect.getMetadata(TELEGRAM_UPDATE_BOT_METADATA, NotifyMarked)).toBe(
+      'notify',
+    );
   });
 
   it('leaves undecorated classes unmarked', () => {
     class Plain {}
     expect(
       Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, Plain),
+    ).toBeUndefined();
+    expect(
+      Reflect.getMetadata(TELEGRAM_UPDATE_BOT_METADATA, Plain),
     ).toBeUndefined();
   });
 });

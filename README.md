@@ -21,6 +21,7 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - Automatic launch/stop wired into the Nest lifecycle (long-polling by default, webhook mode supported); set `launch: false` to take manual control.
 - Escape hatches: `TelegramBotService.instance` (raw `Telegraf`) and `TelegramBotService.telegram` (raw Telegraf `Telegram` client), plus the `TELEGRAM_BOT` injection token — nothing is hidden behind the facade.
 - Fluent keyboard builders: `InlineKeyboardBuilder`, `ReplyKeyboardBuilder`, plus the `removeKeyboard` and `forceReply` helpers.
+- **Multiple named bots** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its facade with `@InjectBot(name)`, and scope decorator handlers with `@TelegramUpdate({ bot: name })` — each bot fully isolated, no `nestjs-telegraf`. Omitting `name` keeps the single-bot API unchanged. See [MULTIPLE-BOTS.md](./docs/MULTIPLE-BOTS.md).
 
 ### User-account side (GramJS / MTProto — sign in as yourself)
 
@@ -113,7 +114,7 @@ import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf lo
 
 ### By Topic
 
-- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
+- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
 - **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md)
 - **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
 
@@ -276,6 +277,7 @@ TelegramModule.forRoot({
 | [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
 | [docs/BOT-API.md](docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
 | [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
+| [docs/MULTIPLE-BOTS.md](docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
 | [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
 | [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |

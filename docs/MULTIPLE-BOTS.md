@@ -245,6 +245,9 @@ exactly as with one bot. Launching or stopping one bot never touches another.
 - **Backward compatible.** No `name` ⇒ the default bot under the legacy tokens
   (`TELEGRAM_BOT`, `TelegramBotService`). Existing single-bot apps need no changes.
 - **Names must be unique** across registrations (they map 1:1 to DI tokens).
+- **`'default'` is reserved** — it is the default bot's own name. Passing
+  `name: 'default'` targets the default bot (and would collide with an unnamed
+  `forRoot()`), not a separate one; pick any other name for an additional bot.
 - **A handler with no matching bot is never bound.** `@TelegramUpdate({ bot: 'x' })`
   with no bot registered as `x` simply binds nowhere (and logs nothing for `x`).
 - **Singleton scope**, like the single-bot registrar: request-scoped handler

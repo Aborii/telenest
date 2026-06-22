@@ -238,6 +238,26 @@ describe('TelegramBotModule — multiple named bots', () => {
     expect(broadcast.support.instance).toBe(support.bot);
   });
 
+  it('binds handlers automatically via the Nest lifecycle (no manual onModuleInit)', async () => {
+    const notify = createRecordingBot();
+
+    const moduleRef = await compile(
+      [
+        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
+      ],
+      [NotifyUpdate],
+      [{ token: getBotInstanceToken('notify'), bot: notify.bot }],
+    );
+
+    // ── Run the real lifecycle. `launch: false` keeps it offline; this proves
+    //    the factory-provided registrar's onModuleInit actually fires under
+    //    Nest (the same wiring backs the default bot), not just when called by
+    //    hand as the other specs do. ───────────────────────────────────────────
+    await moduleRef.init();
+    expect(notify.regs).toEqual([{ method: 'command', trigger: 'ping' }]);
+    await moduleRef.close();
+  });
+
   it('registers a named bot via forRootAsync', async () => {
     const reports = createRecordingBot();
 

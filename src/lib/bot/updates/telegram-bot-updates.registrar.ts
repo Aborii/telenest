@@ -97,7 +97,8 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
    * matches first would otherwise short-circuit before global middleware ran.
    *
    * @returns Nothing.
-   * @throws Never.
+   * @throws {import('../../common').TelegramConfigError} If an enhancer class
+   *   ref on a discovered handler cannot be resolved from the DI container.
    */
   public onModuleInit(): void {
     const collected: PendingBinding[] = [];

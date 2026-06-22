@@ -36,7 +36,7 @@ import {
   type Type,
 } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
-import { type Context, Telegraf } from 'telegraf';
+import { Telegraf, type Context } from 'telegraf';
 
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import { resolveHandlerArguments } from './argument-resolver';
@@ -47,11 +47,11 @@ import { TelegramExecutionContext } from './execution/telegram-execution-context
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
-  type ParamMetadata,
   TELEGRAM_UPDATE_BOT_METADATA,
-  type TelegramUpdateHandler,
   UPDATE_BINDINGS_METADATA,
   UPDATE_PARAMS_METADATA,
+  type ParamMetadata,
+  type TelegramUpdateHandler,
   type UpdateBinding,
 } from './telegram-update.types';
 

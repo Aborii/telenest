@@ -33,7 +33,7 @@
  * - TelegramModuleOptions: Combined options for both sub-modules.
  */
 
-import { type DynamicModule, Module } from '@nestjs/common';
+import { Module, type DynamicModule } from '@nestjs/common';
 
 import { TelegramBotModule } from './bot/telegram-bot.module';
 import type { TelegramBotModuleOptions } from './bot/telegram-bot.options';

@@ -32,8 +32,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { TelegramConfigError } from '../../common';
 import {
-  type ValidateWebAppInitDataOptions,
   WEB_APP_CHAT_TYPE_VALUES,
+  type ValidateWebAppInitDataOptions,
   type WebAppChat,
   type WebAppChatType,
   type WebAppInitData,

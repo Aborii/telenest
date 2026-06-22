@@ -13,8 +13,8 @@ import 'reflect-metadata';
 import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
 import {
   PARAM_KINDS,
-  type ParamMetadata,
   UPDATE_PARAMS_METADATA,
+  type ParamMetadata,
 } from './telegram-update.types';
 
 /** Reads the param-metadata array stored on a prototype method. */

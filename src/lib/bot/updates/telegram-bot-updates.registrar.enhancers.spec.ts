@@ -11,17 +11,17 @@
  */
 
 import {
+  Injectable,
+  Logger,
   type ArgumentsHost,
   type CallHandler,
   type CanActivate,
   type ExceptionFilter,
   type ExecutionContext,
-  Injectable,
-  Logger,
   type NestInterceptor,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { type Observable, tap } from 'rxjs';
+import { tap, type Observable } from 'rxjs';
 import type { Context, Telegraf } from 'telegraf';
 
 import { TELEGRAM_BOT } from '../telegram-bot.constants';

@@ -14,7 +14,7 @@ The whole library is designed around testability: the Bot API side hides the raw
 | Aspect            | Choice                                                                 |
 | ----------------- | ---------------------------------------------------------------------- |
 | Runner            | [Jest](https://jestjs.io) 30 with [`ts-jest`](https://kulshekhar.github.io/ts-jest/) |
-| Tests             | ~150 specs                                                             |
+| Tests             | ~290 specs                                                             |
 | Coverage          | ~95% of `src/lib`                                                      |
 | Network           | None — every test runs fully offline                                  |
 | Type strictness   | Specs compile under the same strict `tsconfig.json` as the source (no `any`, no enums) |
@@ -97,6 +97,81 @@ Use these existing specs as templates when writing tests:
 ## 2. Testing _your_ application code
 
 You import `nestjs-telegram` from your own NestJS app and inject its services. The goal of your tests is the same as the library's: **never hit the network**. Pick the right seam for the side you depend on.
+
+### Ready-made utilities (`nestjs-telegram/testing`)
+
+Rather than hand-rolling fakes, import them from the dedicated **`nestjs-telegram/testing`** subpath. These promote the very seams the library uses in its own specs into a supported, fully-typed DX feature:
+
+| Export | What it gives you |
+| ------ | ----------------- |
+| `createMockGramClient(overrides?)` | A `jest.Mocked<IGramClient>` with sensible, network-free defaults (an authorized "me" account). |
+| `provideMockGramClient(client?)` | A Nest `ValueProvider` binding a mock client to the `TELEGRAM_GRAM_CLIENT` token for a `TestingModule`. |
+| `createMockBotContext(partial?)` | A spyable Telegraf `Context` with the common reply/answer methods pre-stubbed as `jest.fn()`. |
+| `aGramUser` / `aGramMessage` / `aGramDialog` | Builders for the MTProto DTOs — sensible defaults merged with your overrides. |
+
+> **Subpath independence.** The subpath references Telegraf type-only and reads `jest.fn()` from the ambient global a Jest runtime provides — it never `import`s Telegraf, GramJS, or Jest. So importing it pulls **no** SDK or test runner into your module graph, and it adds no hard dependency to your `package.json`. The DTO builders run in any runtime; `createMockGramClient`/`createMockBotContext` (and `provideMockGramClient`'s default) build `jest.fn()` spies, so call them from inside Jest specs (you'll want `@types/jest` for the `jest.Mocked` typings).
+
+#### MTProto: a fake client in one call
+
+```ts
+// digest.service.spec.ts
+import { Test } from '@nestjs/testing';
+import { TelegramUserService } from 'nestjs-telegram';
+import {
+  aGramDialog,
+  createMockGramClient,
+  provideMockGramClient,
+} from 'nestjs-telegram/testing';
+import { DigestService } from './digest.service';
+
+describe('DigestService', () => {
+  it('sums unread counts and writes a digest to Saved Messages', async () => {
+    const client = createMockGramClient({
+      getDialogs: jest.fn().mockResolvedValue([
+        aGramDialog({ id: '1', title: 'Alice', unreadCount: 2 }),
+        aGramDialog({ id: '2', title: 'Team', type: 'group', unreadCount: 3 }),
+      ]),
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      // provideMockGramClient registers `client` under TELEGRAM_GRAM_CLIENT.
+      providers: [DigestService, TelegramUserService, provideMockGramClient(client)],
+    }).compile();
+
+    await moduleRef.get(DigestService).postUnreadDigest();
+
+    expect(client.sendMessage).toHaveBeenCalledWith('me', {
+      message: 'You have 5 unread messages.',
+    });
+  });
+});
+```
+
+`createMockGramClient` defaults `isConnected()` to `true` (so the services skip their lazy `connect()`); pass `{ isConnected: jest.fn().mockReturnValue(false) }` to exercise the lazy-connect path. Overrides may be `jest.fn()` spies **or** plain functions (`getMe: async () => aGramUser({ username: 'me' })`).
+
+For an imported central module you can't easily reach, the provider's value also works with `overrideProvider`:
+
+```ts
+.overrideProvider(TELEGRAM_GRAM_CLIENT).useValue(createMockGramClient())
+```
+
+#### Bot API: a spyable context in one call
+
+```ts
+import { createMockBotContext } from 'nestjs-telegram/testing';
+
+it('greets on /start', async () => {
+  const ctx = createMockBotContext({ text: '/start' });
+
+  await myStartHandler(ctx); // your handler: (ctx) => ctx.reply('Welcome!')
+
+  expect(ctx.reply).toHaveBeenCalledWith('Welcome!');
+});
+```
+
+`createMockBotContext` pre-stubs the reply/send, media-reply, answer, edit, and chat-management methods a handler commonly calls — `reply`, `replyWithHTML`/`replyWithMarkdown`/`replyWithMarkdownV2`, `sendMessage`, the `replyWith*` media helpers (photo, document, audio, video, animation, sticker, voice, location, contact, poll, dice, media group, invoice), `answerCbQuery`/`answerInlineQuery`/`answerShippingQuery`/`answerPreCheckoutQuery`, `editMessageText`/`editMessageCaption`/`editMessageReplyMarkup`, `deleteMessage`, `getChat`, `leaveChat`, `sendChatAction`, and the `*ChatMember`/`*ChatMessage` management methods — as `jest.fn()` spies. It also populates a default private-chat `from`/`chat`, an empty `state` bag, and a minimal `telegram`/`botInfo`. Pass anything in `partial` to override the data (`text`, `callbackQuery`, `message`, …) or to replace a stub with a spy that returns a canned value.
+
+The rest of this section explains the underlying seams these helpers wrap — read on if you want to hand-roll a fake or need a strategy the helpers don't cover.
 
 ### 2a. Bot API side
 
@@ -214,7 +289,9 @@ The user-account services — `TelegramAuthService` and `TelegramUserService` �
 
 #### A complete fake `IGramClient`
 
-`IGramClient` has exactly thirteen methods. Here is a complete, typed, in-memory fake you can reuse across tests. It mirrors the factory pattern used in the library's own specs ([`telegram-user.service.spec.ts`](../src/lib/client/telegram-user.service.spec.ts)):
+> Prefer the built-in `createMockGramClient` from `nestjs-telegram/testing` (see [Ready-made utilities](#ready-made-utilities-nestjs-telegramtesting) above) — it _is_ this factory, maintained in lockstep with the interface. The hand-rolled version below is kept for understanding, or if you want zero reliance on the testing subpath.
+
+`IGramClient` has fourteen methods. Here is a complete, typed, in-memory fake you can reuse across tests. It mirrors the factory pattern used in the library's own specs ([`telegram-user.service.spec.ts`](../src/lib/client/telegram-user.service.spec.ts)):
 
 ```ts
 // test-support/fake-gram-client.ts
@@ -268,6 +345,8 @@ export function createFakeGramClient(
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(FAKE_MESSAGE),
     exportSession: jest.fn().mockReturnValue('SESSION-STRING'),
+    // Returns the unsubscribe handle the user service stores on init.
+    onNewMessage: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
 
   return Object.assign(base, overrides);

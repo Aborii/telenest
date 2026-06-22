@@ -3,35 +3,36 @@
  *
  * PURPOSE
  * -------
- * Discovers every `@TelegramUpdate` provider at bootstrap and binds each of its
- * decorated methods onto the shared `Telegraf` instance, resolving handler
- * arguments through the parameter metadata and running each handler through any
- * guards, interceptors, and exception filters it declares via the `@UseTelegram*`
- * decorators. Binding happens in `onModuleInit`, which Nest runs before
+ * Discovers the `@TelegramUpdate` providers targeting **one** bot at bootstrap
+ * and binds each of their decorated methods onto that bot's `Telegraf` instance,
+ * resolving handler arguments through the parameter metadata and running each
+ * handler through any guards, interceptors, and exception filters it declares via
+ * the `@UseTelegram*` decorators. Binding happens in `onModuleInit`, which Nest
+ * runs before
  * {@link import('../telegram-bot.service').TelegramBotService}'s
  * `onApplicationBootstrap` launches the bot — so handlers (and their enhancers)
  * are always wired up before the first update is polled.
  *
+ * One registrar is created per registered bot (see `telegram-bot.module.ts`),
+ * each carrying its bot name and `Telegraf` instance. Discovery enumerates every
+ * provider in the app, so each registrar filters to the providers whose target
+ * bot (recorded by `@TelegramUpdate({ bot })`) matches its own name — that is how
+ * a handler is bound onto exactly one bot in a multi-bot application.
+ *
  * USAGE
  * -----
- * Registered automatically as a provider by `TelegramBotModule`. Not used
+ * Registered automatically (one per bot) by `TelegramBotModule`. Not used
  * directly by consumers.
  *
  * KEY EXPORTS
  * -----------
- * - TelegramBotUpdatesRegistrar: binds decorated handlers to Telegraf.
+ * - TelegramBotUpdatesRegistrar: binds decorated handlers to a named bot.
  */
 
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnModuleInit,
-  type Type,
-} from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit, type Type } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
-import { TELEGRAM_BOT } from '../telegram-bot.constants';
+import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import { resolveHandlerArguments } from './argument-resolver';
 import type { ResolvedEnhancers } from './execution/enhancer.types';
 import { RUN_OUTCOMES, runWithEnhancers } from './execution/handler-execution';
@@ -40,6 +41,7 @@ import { TelegramExecutionContext } from './execution/telegram-execution-context
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
+  TELEGRAM_UPDATE_BOT_METADATA,
   UPDATE_BINDINGS_METADATA,
   UPDATE_PARAMS_METADATA,
   type ParamMetadata,
@@ -64,29 +66,45 @@ interface PendingBinding {
 }
 
 /**
- * Scans `@TelegramUpdate` providers and bridges their decorated methods onto the
- * Bot API via the underlying `Telegraf` instance, applying each handler's guards,
- * interceptors, and exception filters around the call.
+ * Scans the `@TelegramUpdate` providers targeting one bot and bridges their
+ * decorated methods onto the Bot API via that bot's `Telegraf` instance, applying
+ * each handler's guards, interceptors, and exception filters around the call.
+ *
+ * Instantiated by `TelegramBotModule`'s per-bot factory provider (never as a
+ * plain class provider), which supplies the bot name, the enhancer resolver, and
+ * the `Telegraf` instance explicitly — so the non-injectable `_botName`
+ * constructor parameter is always provided by the factory, not resolved by DI.
  */
 @Injectable()
 export class TelegramBotUpdatesRegistrar implements OnModuleInit {
-  /** Logger scoped to the registrar. */
-  private readonly _logger = new Logger(TelegramBotUpdatesRegistrar.name);
+  /** Logger scoped to the registrar (annotated with the bot name when named). */
+  private readonly _logger: Logger;
 
   /**
+   * @param _botName - Name of the bot this registrar serves; only
+   *   `@TelegramUpdate` providers whose target bot matches are bound.
    * @param discovery - Enumerates the application's providers.
    * @param scanner - Lists method names on a provider prototype.
    * @param reflector - Reads the decorator metadata off classes and methods.
    * @param enhancers - Resolves a handler's guard/interceptor/filter refs.
-   * @param bot - The shared `Telegraf` instance handlers are bound onto.
+   * @param bot - The `Telegraf` instance this registrar's handlers are bound onto.
    */
   public constructor(
+    private readonly _botName: string,
     private readonly discovery: DiscoveryService,
     private readonly scanner: MetadataScanner,
     private readonly reflector: Reflector,
     private readonly enhancers: TelegramEnhancerResolver,
-    @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
-  ) {}
+    private readonly bot: Telegraf,
+  ) {
+    // ── For the default bot keep the bare class name; annotate named bots so
+    //    their binding logs are attributable in a multi-bot application. ──────
+    this._logger = new Logger(
+      _botName === DEFAULT_BOT_NAME
+        ? TelegramBotUpdatesRegistrar.name
+        : `${TelegramBotUpdatesRegistrar.name}[${_botName}]`,
+    );
+  }
 
   /**
    * Discovers and binds every decorated handler. Runs once, before launch.
@@ -114,6 +132,14 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
         metatype,
       );
       if (!isUpdate) continue;
+
+      // ── Scope to this registrar's bot: a provider declares its target bot via
+      //    @TelegramUpdate({ bot }) (defaulting to the default bot). Providers
+      //    for other bots are bound by their own registrar, not this one. ──────
+      const targetBot =
+        this.reflector.get<string>(TELEGRAM_UPDATE_BOT_METADATA, metatype) ??
+        DEFAULT_BOT_NAME;
+      if (targetBot !== this._botName) continue;
 
       const prototype = Object.getPrototypeOf(instance) as object | null;
       if (!prototype) continue;
@@ -212,7 +238,7 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
     }
 
     this._logger.log(
-      `Registered @TelegramUpdate handler: ${label} (${binding.kind})`,
+      `Registered @TelegramUpdate handler: ${label} (${binding.kind}) → bot "${this._botName}"`,
     );
   }
 

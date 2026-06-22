@@ -18,20 +18,30 @@
  *   @Start() onStart(@Ctx() ctx: Context) { return ctx.reply('hi'); }
  *   @Command('ping') onPing(@Ctx() ctx: Context) { return ctx.reply('pong'); }
  * }
+ *
+ * // Scope a provider's handlers to a specific named bot (multi-bot apps):
+ * @TelegramUpdate({ bot: 'support' })
+ * export class SupportUpdate {
+ *   @Command('ticket') onTicket(@Ctx() ctx: Context) { return ctx.reply('opened'); }
+ * }
  * ```
  *
  * KEY EXPORTS
  * -----------
- * - TelegramUpdate: class decorator marking an update provider.
+ * - TelegramUpdate: class decorator marking an update provider (optionally
+ *   scoped to a named bot).
+ * - TelegramUpdateOptions: options accepted by `@TelegramUpdate`.
  * - Start / Help / Command / Hears / Action / On / Use: method decorators.
  */
 
 import 'reflect-metadata';
 import { SetMetadata } from '@nestjs/common';
 import type { Telegraf } from 'telegraf';
+import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
+  TELEGRAM_UPDATE_BOT_METADATA,
   UPDATE_BINDINGS_METADATA,
   type UpdateBinding,
 } from './telegram-update.types';
@@ -69,21 +79,47 @@ function appendBinding(
   );
 }
 
+/** Options for the {@link TelegramUpdate} class decorator. */
+export interface TelegramUpdateOptions {
+  /**
+   * Name of the registered bot whose updates this provider's handlers bind to.
+   * Must match the `name` passed to the corresponding
+   * `TelegramBotModule.forRoot({ name })` / `forRootAsync({ name })`. Omit (or
+   * pass the default bot name) to bind to the default bot. In a multi-bot app
+   * each handler is bound onto exactly one bot — the one named here.
+   */
+  readonly bot?: string;
+}
+
 /**
  * Marks a class as a Telegram update provider. Only methods on classes wearing
  * this decorator are scanned and bound by the registrar.
  *
- * @returns A class decorator attaching the scan marker.
+ * Records two pieces of class metadata: the scan marker, and the **target bot
+ * name** (`options.bot`, defaulting to the default bot). The per-bot registrar
+ * binds only the providers whose target bot matches the bot it serves, so in a
+ * multi-bot application a provider's handlers are never bound onto another bot.
+ *
+ * @param options - Optional settings; `bot` scopes the provider to a named bot.
+ * @returns A class decorator attaching the scan marker and target-bot name.
  * @throws Never.
  *
  * @example
  * ```ts
- * @TelegramUpdate()
+ * @TelegramUpdate()                 // default bot
  * export class MyUpdate { ... }
+ *
+ * @TelegramUpdate({ bot: 'notify' }) // the bot registered as `name: 'notify'`
+ * export class NotifyUpdate { ... }
  * ```
  */
-export function TelegramUpdate(): ClassDecorator {
-  return SetMetadata(IS_TELEGRAM_UPDATE_METADATA, true);
+export function TelegramUpdate(options?: TelegramUpdateOptions): ClassDecorator {
+  const botName = options?.bot ?? DEFAULT_BOT_NAME;
+  return (target) => {
+    // ── Two markers: "scan me" + which bot these handlers belong to. ──────────
+    SetMetadata(IS_TELEGRAM_UPDATE_METADATA, true)(target);
+    SetMetadata(TELEGRAM_UPDATE_BOT_METADATA, botName)(target);
+  };
 }
 
 /**

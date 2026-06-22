@@ -19,6 +19,7 @@
  * KEY EXPORTS
  * -----------
  * - OnUserMessageFilter: Declarative match criteria for a handler.
+ * - OnUserMessageOptions: Routing options (which named account a handler serves).
  * - GramUserMessageContext: Per-message context (message + reply helper).
  */
 
@@ -45,6 +46,22 @@ export interface OnUserMessageFilter {
   pattern?: RegExp | string;
   /** Restrict to one or more chat/peer ids (matched against `message.peerId`). */
   chatId?: GramPeer | readonly GramPeer[];
+}
+
+/**
+ * Routing options for {@link import('./on-user-message.decorator').OnUserMessage}.
+ * Distinct from {@link OnUserMessageFilter}: the filter decides *whether* a
+ * message matches, these options decide *which account* the handler serves.
+ */
+export interface OnUserMessageOptions {
+  /**
+   * Name of the registered account whose inbound messages this handler listens
+   * to (and replies through). Must match the `name` passed to the corresponding
+   * `TelegramClientModule.forRoot({ name })` / `forRootAsync({ name })`. Omit (or
+   * pass the default account name) for the default account. In a multi-account
+   * app a handler is subscribed to exactly one account — the one named here.
+   */
+  readonly client?: string;
 }
 
 /**

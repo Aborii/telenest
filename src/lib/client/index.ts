@@ -21,6 +21,14 @@ export * from './gram-client.types';
 export * from './gram-client.interface';
 export * from './telegram-auth.service';
 export * from './telegram-user.service';
+export {
+  getGramClientToken,
+  getSessionStoreToken,
+  getTelegramAuthToken,
+  getTelegramUserToken,
+  InjectTelegramAuth,
+  InjectTelegramUser,
+} from './telegram-client.tokens';
 export * from './telegram-client.module';
 // Note: GramJsClientAdapter is intentionally NOT re-exported here — keeping the
 // concrete GramJS-typed class out of the public surface preserves the IGramClient

@@ -22,12 +22,26 @@ import { ConfigurableModuleBuilder } from '@nestjs/common';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
 
 /**
- * Extra (non-option) module settings. `isGlobal` registers the module globally
- * so the client and services can be injected without re-importing it.
+ * Extra (non-option) module settings.
+ *
+ * These are synchronous and known at `forRoot` / `forRootAsync` call time — even
+ * for the async factory — which is why `name` lives here rather than in
+ * {@link import('./telegram-client.options').TelegramClientModuleOptions}: the
+ * per-account DI tokens must be computed up front to build the dynamic module,
+ * before any async factory has resolved the options.
  */
 export interface TelegramClientModuleExtras {
   /** When `true`, the module is registered globally. Defaults to `false`. */
   isGlobal?: boolean;
+
+  /**
+   * Registers this account under a name so multiple user accounts can coexist in
+   * one app. Omit for the single default account. Inject a named account's
+   * services with `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)` and
+   * scope its inbound handlers with `@OnUserMessage(filter, { client: name })`.
+   * Each registered account must use a distinct name.
+   */
+  name?: string;
 }
 
 /**
@@ -50,12 +64,12 @@ export const {
   )
   .build();
 
-/** Shape accepted by `TelegramClientModule.forRoot` (options + `isGlobal`). */
+/** Shape accepted by `TelegramClientModule.forRoot` (options + `isGlobal` + `name`). */
 export type TelegramClientModuleForRootOptions = typeof OPTIONS_TYPE;
 
 /**
  * Shape accepted by `TelegramClientModule.forRootAsync` (`useFactory` /
- * `useClass` / `useExisting` + `isGlobal`). Use it to type a factory provider
- * separately from the call site.
+ * `useClass` / `useExisting` + `isGlobal` + `name`). Use it to type a factory
+ * provider separately from the call site.
  */
 export type TelegramClientModuleAsyncOptions = typeof ASYNC_OPTIONS_TYPE;

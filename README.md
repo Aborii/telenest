@@ -31,6 +31,7 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - Pluggable session persistence via the `SessionStore` interface, with `InMemorySessionStore` and `FileSessionStore` (writes `0o600`, owner-only) included — bring your own (Redis, a secrets manager, etc.) by implementing three methods (`load` / `save` / `clear`).
 - A clean test seam: services depend only on the `IGramClient` interface, and the GramJS package is touched in exactly one adapter file. Inject a fake via `clientFactory` and you never hit the network.
 - Library-owned DTOs (`GramUser`, `GramDialog`, `GramMessage`, `GramSendMessageParams`, …) so consumers never import GramJS just to model a user or a message.
+- **Multiple named user accounts** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its services with `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`, and scope inbound handlers with `@OnUserMessage(filter, { client: name })` — each account fully isolated, with its own session. Omitting `name` keeps the single-account API unchanged. See [MULTIPLE-ACCOUNTS.md](./docs/MULTIPLE-ACCOUNTS.md).
 
 ### Shared
 
@@ -115,7 +116,7 @@ import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf lo
 ### By Topic
 
 - **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
-- **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md)
+- **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md) | [Multiple Accounts](./docs/MULTIPLE-ACCOUNTS.md)
 - **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
 
 ```mermaid
@@ -280,6 +281,7 @@ TelegramModule.forRoot({
 | [docs/MULTIPLE-BOTS.md](docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
 | [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
 | [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
+| [docs/MULTIPLE-ACCOUNTS.md](docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
 | [docs/TESTING.md](docs/TESTING.md)                             | Unit-testing both sides via the `IGramClient` / `clientFactory` seam                                        |
 

@@ -46,6 +46,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - `@TelegramUpdate({ bot })` handler scoping
   - Per-bot isolation & lifecycle
 
+- **[MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)**
+  - Several named MTProto user accounts in one app
+  - `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`
+  - `@OnUserMessage(filter, { client })` handler scoping
+  - Per-account sessions, isolation & lifecycle
+
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)**
   - MTProto authentication deep-dive
   - Login state machine
@@ -117,6 +123,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 2. Learn: [USER-CLIENT-MTPROTO.md](./USER-CLIENT-MTPROTO.md)
 3. Auth: [AUTHENTICATION.md](./AUTHENTICATION.md)
 4. Examples: [EXAMPLES.md § MTProto](./EXAMPLES.md#mtproto-client-examples)
+5. Multiple accounts: [MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)
 
 ### I want to use both Bot + User Account
 
@@ -174,6 +181,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Multiple named bots      | [MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)                                              |
 | Callback queries         | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
 | Incoming messages (User) | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
+| Multiple user accounts   | [MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)                                      |
 
 ### Authentication
 
@@ -320,6 +328,7 @@ nestjs-telegram/
     │   ├── USER-CLIENT-MTPROTO.md ← MTProto client guide
     │   ├── BOT-UPDATE-DECORATORS.md ← Decorator handlers
     │   ├── MULTIPLE-BOTS.md      ← Several named bots in one app
+    │   ├── MULTIPLE-ACCOUNTS.md  ← Several named user accounts in one app
     │   └── AUTHENTICATION.md     ← Auth deep-dive
     │
     ├── Reference

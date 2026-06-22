@@ -94,8 +94,14 @@ export function splitMessageText(
     //    so following lines can still pack onto it. ──────────────────────────
     let rest = line;
     while (rest.length > limit) {
-      chunks.push(rest.slice(0, limit));
-      rest = rest.slice(limit);
+      // Avoid cutting a surrogate pair in half: if the boundary lands right
+      // after a high surrogate, back off one unit (but never to 0, so a
+      // degenerate `limit` of 1 still makes progress).
+      let end = limit;
+      const lastCode = rest.charCodeAt(end - 1);
+      if (lastCode >= 0xd800 && lastCode <= 0xdbff && end > 1) end -= 1;
+      chunks.push(rest.slice(0, end));
+      rest = rest.slice(end);
     }
     current = rest;
   }

@@ -38,6 +38,22 @@ describe('splitMessageText', () => {
     expect(chunks).toEqual(['xxxx', 'xxxx', 'xx']);
   });
 
+  it('never splits a surrogate pair when hard-splitting a long line', () => {
+    // Six emoji (😀 = 2 UTF-16 code units each = 12 units) with limit 5: a naive
+    // slice(0,5) would cut the 3rd emoji's surrogate pair in half.
+    const line = '😀'.repeat(6);
+    const chunks = splitMessageText(line, 5);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(5);
+      // A well-formed chunk has no lone surrogate at either edge.
+      expect(/[\uD800-\uDBFF]$/.test(chunk)).toBe(false);
+      expect(/^[\uDC00-\uDFFF]/.test(chunk)).toBe(false);
+    }
+    // Re-joining reconstructs the original with every emoji intact.
+    expect(chunks.join('')).toBe(line);
+    expect([...chunks.join('')].length).toBe(6);
+  });
+
   it('seeds the next chunk with a long-line remainder so following lines pack', () => {
     // 'xxxxx' (5) with limit 4 → 'xxxx' flushed, 'x' remainder; then 'y' packs
     // onto the remainder as 'x\ny' (3 ≤ 4).

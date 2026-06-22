@@ -18,17 +18,29 @@ describe('createMockBotContext', () => {
   it('pre-stubs the common reply/answer methods as jest spies', () => {
     const ctx = createMockBotContext();
     const spied = [
+      // Replies & sends + a representative media reply.
       ctx.reply,
       ctx.replyWithHTML,
+      ctx.replyWithMarkdown,
       ctx.replyWithMarkdownV2,
+      ctx.sendMessage,
       ctx.replyWithPhoto,
       ctx.replyWithDocument,
+      ctx.replyWithMediaGroup,
+      // Answers & edits.
       ctx.answerCbQuery,
+      ctx.answerInlineQuery,
+      ctx.answerPreCheckoutQuery,
       ctx.editMessageText,
+      ctx.editMessageCaption,
       ctx.editMessageReplyMarkup,
       ctx.deleteMessage,
+      // Chat management.
+      ctx.getChat,
       ctx.sendChatAction,
       ctx.leaveChat,
+      ctx.banChatMember,
+      ctx.promoteChatMember,
     ];
     for (const fn of spied) expect(jest.isMockFunction(fn)).toBe(true);
   });
@@ -37,6 +49,8 @@ describe('createMockBotContext', () => {
     const ctx = createMockBotContext();
     expect(ctx.from).toEqual({ id: 1, is_bot: false, first_name: 'Test' });
     expect(ctx.chat).toEqual({ id: 1, type: 'private' });
+    // The mutable middleware/session bag starts empty.
+    expect(ctx.state).toEqual({});
   });
 
   it('records calls so a handler can be asserted on', async () => {

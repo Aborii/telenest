@@ -169,7 +169,7 @@ it('greets on /start', async () => {
 });
 ```
 
-`createMockBotContext` pre-stubs `reply`, `replyWithHTML`, `replyWithMarkdownV2`, `replyWithPhoto`, `replyWithDocument`, `answerCbQuery`, `editMessageText`, `editMessageReplyMarkup`, `deleteMessage`, `sendChatAction`, and `leaveChat` as spies, and populates a default private-chat `from`/`chat`. Pass anything in `partial` to override the data (`text`, `callbackQuery`, `message`, …) or to replace a stub with a spy that returns a canned value.
+`createMockBotContext` pre-stubs the reply/send, media-reply, answer, edit, and chat-management methods a handler commonly calls — `reply`, `replyWithHTML`/`replyWithMarkdown`/`replyWithMarkdownV2`, `sendMessage`, the `replyWith*` media helpers (photo, document, audio, video, animation, sticker, voice, location, contact, poll, dice, media group, invoice), `answerCbQuery`/`answerInlineQuery`/`answerShippingQuery`/`answerPreCheckoutQuery`, `editMessageText`/`editMessageCaption`/`editMessageReplyMarkup`, `deleteMessage`, `getChat`, `leaveChat`, `sendChatAction`, and the `*ChatMember`/`*ChatMessage` management methods — as `jest.fn()` spies. It also populates a default private-chat `from`/`chat`, an empty `state` bag, and a minimal `telegram`/`botInfo`. Pass anything in `partial` to override the data (`text`, `callbackQuery`, `message`, …) or to replace a stub with a spy that returns a canned value.
 
 The rest of this section explains the underlying seams these helpers wrap — read on if you want to hand-roll a fake or need a strategy the helpers don't cover.
 

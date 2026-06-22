@@ -202,6 +202,9 @@ a bot token, conventionally `BOT_TOKEN`, supplied to `TelegramBotModule.forRoot`
 - **A new injectable parameter:** add a value to `PARAM_KINDS`, a parameter
   decorator that appends it, and a `case` in the resolver's `resolveParam` switch
   (again guarded by an exhaustiveness check).
-- **Guards / pipes:** the registrar is the single binding point — a future guards
-  feature would wrap the middleware here, keeping handlers unchanged.
+- **Guards / interceptors / exception filters:** the registrar is the single
+  binding point — it wraps every handler with the enhancers declared via
+  `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`,
+  keeping handlers unchanged. See
+  [BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md).
 ```

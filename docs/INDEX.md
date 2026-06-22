@@ -40,6 +40,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Parameter injection
   - Best practices
 
+- **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
+  - Guards, interceptors, exception filters
+  - `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`
+  - Built-in allowlist & rate-limit guards
+  - DI, execution order, custom enhancers
+
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)**
   - MTProto authentication deep-dive
   - Login state machine
@@ -163,10 +169,11 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 | Topic                    | Document                                                                            |
 | ------------------------ | ----------------------------------------------------------------------------------- |
-| Command handlers         | [BOT-API.md § Registering handlers](./BOT-API.md#5-registering-handlers)            |
-| Decorators               | [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)                              |
-| Callback queries         | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
-| Incoming messages (User) | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
+| Command handlers           | [BOT-API.md § Registering handlers](./BOT-API.md#5-registering-handlers)                |
+| Decorators                 | [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)                                  |
+| Guards/filters/interceptors | [BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)             |
+| Callback queries           | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling)     |
+| Incoming messages (User)   | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)           |
 
 ### Authentication
 

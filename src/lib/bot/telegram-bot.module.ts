@@ -33,6 +33,7 @@ import { TELEGRAM_BOT } from './telegram-bot.constants';
 import { telegramBotProvider } from './telegram-bot.factory';
 import { ConfigurableModuleClass } from './telegram-bot.module-definition';
 import { TelegramBotService } from './telegram-bot.service';
+import { TelegramEnhancerResolver } from './updates/execution/telegram-enhancer.resolver';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
 
 /**
@@ -41,13 +42,16 @@ import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.regi
  *
  * `DiscoveryModule` + {@link TelegramBotUpdatesRegistrar} power the
  * decorator-based handler system (`@TelegramUpdate`/`@Command`/…): the registrar
- * binds discovered handlers onto the bot at bootstrap, before launch.
+ * binds discovered handlers onto the bot at bootstrap, before launch, and runs
+ * each through the guards/interceptors/filters resolved by
+ * {@link TelegramEnhancerResolver}.
  */
 @Module({
   imports: [DiscoveryModule],
   providers: [
     telegramBotProvider,
     TelegramBotService,
+    TelegramEnhancerResolver,
     TelegramBotUpdatesRegistrar,
   ],
   exports: [TelegramBotService, TELEGRAM_BOT],

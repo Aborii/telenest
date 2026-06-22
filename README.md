@@ -113,7 +113,7 @@ import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf lo
 
 ### By Topic
 
-- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
+- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Guards/Filters/Interceptors](./docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
 - **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md)
 - **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
 
@@ -276,6 +276,7 @@ TelegramModule.forRoot({
 | [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
 | [docs/BOT-API.md](docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
 | [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
+| [docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md](docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | `@UseTelegramGuards`/`@UseTelegramInterceptors`/`@UseTelegramFilters`, built-in allowlist & rate-limit guards, default exception filter |
 | [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
 | [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |

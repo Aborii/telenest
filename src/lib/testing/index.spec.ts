@@ -158,6 +158,8 @@ describe('createMockGramClient', () => {
   it('onNewMessage returns an unsubscribe function by default', () => {
     const unsub = createMockGramClient().onNewMessage(() => undefined);
     expect(typeof unsub).toBe('function');
+    // The default unsubscribe is a no-op: calling it is safe and returns nothing.
+    expect(unsub()).toBeUndefined();
   });
 
   it('applies overrides correctly', async () => {

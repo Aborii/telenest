@@ -459,7 +459,7 @@ The utilities are generated from the same interfaces the library uses internally
 
 | Export | Kind | Description |
 | ------ | ---- | ----------- |
-| `createMockGramClient(overrides?)` | Factory | Returns `jest.Mocked<IGramClient>` — all 13 methods stubbed with `jest.fn()` and safe defaults. |
+| `createMockGramClient(overrides?)` | Factory | Returns `jest.Mocked<IGramClient>` — all 14 methods stubbed with `jest.fn()` and safe defaults. |
 | `createMockBotContext(overrides?)` | Factory | Returns a spyable Telegraf `Context` — all action/reply methods stubbed. |
 | `withMockGramClient(client)` | DI helper | Builds a `FactoryProvider` that registers `client` under `TELEGRAM_GRAM_CLIENT`. |
 | `aGramUser(partial?)` | DTO builder | Returns a `GramUser` with sensible defaults, merged with `partial`. |
@@ -573,6 +573,15 @@ describe('start command handler', () => {
 });
 ```
 
+> **Note:** the returned object is a plain structural mock, not a real Telegraf
+> `Context`, so the update-derived accessors (`ctx.message`, `ctx.chat`,
+> `ctx.from`, `ctx.callbackQuery`, …) are **not** computed from `update`. If the
+> code under test reads them directly, set them as extra fields instead:
+>
+> ```ts
+> const ctx = createMockBotContext({ message: { text: '/start', from: { id: 1 } } });
+> ```
+
 The `overrides` object is merged directly onto the context, so you can attach
 session data, scene state, or any custom middleware fields:
 
@@ -582,7 +591,8 @@ const ctx = createMockBotContext({ session: { step: 'await_phone' } });
 
 Stubbed action methods (all return `jest.fn()` with a safe default):
 `reply`, `replyWithHTML`, `replyWithMarkdown`, `replyWithMarkdownV2`,
-`sendMessage`, `answerCbQuery`, `answerInlineQuery`, `editMessageText`,
+`sendMessage`, `answerCbQuery`, `answerInlineQuery`, `answerShippingQuery`,
+`answerPreCheckoutQuery`, `editMessageText`,
 `editMessageCaption`, `editMessageReplyMarkup`, `deleteMessage`, `getChat`,
 `leaveChat`, `pinChatMessage`, `unpinChatMessage`, `banChatMember`,
 `unbanChatMember`, `restrictChatMember`, `promoteChatMember`,

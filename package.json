@@ -22,13 +22,18 @@
       "types": "./dist/lib/common/index.d.ts",
       "default": "./dist/lib/common/index.js"
     },
+    "./testing": {
+      "types": "./dist/lib/testing/index.d.ts",
+      "default": "./dist/lib/testing/index.js"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
     "*": {
       "bot": ["dist/lib/bot/index.d.ts"],
       "client": ["dist/lib/client/index.d.ts"],
-      "common": ["dist/lib/common/index.d.ts"]
+      "common": ["dist/lib/common/index.d.ts"],
+      "testing": ["dist/lib/testing/index.d.ts"]
     }
   },
   "files": [

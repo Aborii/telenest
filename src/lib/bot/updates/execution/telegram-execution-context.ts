@@ -31,6 +31,7 @@
 
 import type { ArgumentsHost, ExecutionContext, Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import type { TelegramUpdateHandler } from '../telegram-update.types';
 
 // ── The per-transport host types are not re-exported from the package root, so
@@ -219,7 +220,7 @@ export class TelegramExecutionContext implements ExecutionContext {
    * @returns The handler function.
    * @throws Never.
    */
-  // eslint-disable-next-line @typescript-eslint/ban-types -- ExecutionContext.getHandler is typed as Function by Nest.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- ExecutionContext.getHandler is typed as Function by Nest.
   public getHandler(): Function {
     return this._handler;
   }

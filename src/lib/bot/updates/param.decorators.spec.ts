@@ -9,11 +9,12 @@
  */
 
 import 'reflect-metadata';
+
 import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
 import {
   PARAM_KINDS,
-  UPDATE_PARAMS_METADATA,
   type ParamMetadata,
+  UPDATE_PARAMS_METADATA,
 } from './telegram-update.types';
 
 /** Reads the param-metadata array stored on a prototype method. */
@@ -26,17 +27,12 @@ function paramsOf(prototype: object, method: string): ParamMetadata[] {
 
 describe('parameter decorators', () => {
   class Handlers {
-    // eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
     single(@Ctx() _ctx: unknown): void {}
 
     multi(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       @Sender() _from: unknown,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       @MessageText() _text: unknown,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       @CallbackData() _data: unknown,
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
     ): void {}
   }
 

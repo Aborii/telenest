@@ -10,21 +10,21 @@
  * import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
  */
 
+export * from './keyboard.builder';
 export * from './telegram-bot.constants';
-export * from './telegram-bot.options';
+export { createTelegrafInstance } from './telegram-bot.factory';
+export * from './telegram-bot.module';
 export {
   TELEGRAM_BOT_OPTIONS,
   type TelegramBotModuleAsyncOptions,
   type TelegramBotModuleForRootOptions,
 } from './telegram-bot.module-definition';
+export * from './telegram-bot.options';
 export * from './telegram-bot.service';
 export {
   getBotInstanceToken,
   getBotToken,
   InjectBot,
 } from './telegram-bot.tokens';
-export * from './telegram-bot.module';
-export * from './keyboard.builder';
-export { createTelegrafInstance } from './telegram-bot.factory';
 export * from './updates';
 export * from './web-app';

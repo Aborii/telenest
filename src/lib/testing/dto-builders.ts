@@ -72,7 +72,9 @@ export function aGramUser(overrides: Partial<GramUser> = {}): GramUser {
  * const incoming = aGramMessage({ out: false, senderId: '2002', text: 'hi' });
  * ```
  */
-export function aGramMessage(overrides: Partial<GramMessage> = {}): GramMessage {
+export function aGramMessage(
+  overrides: Partial<GramMessage> = {},
+): GramMessage {
   return {
     id: 1,
     peerId: '1000',

@@ -10,6 +10,7 @@
 
 import { Logger, type LoggerService, type Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import { TelegramExecutionContext } from '../execution/telegram-execution-context';
 import { TelegramExceptionFilter } from './telegram-exception.filter';
 
@@ -19,7 +20,11 @@ function hostWith(reply: jest.Mock = jest.fn().mockResolvedValue(undefined)): {
   reply: jest.Mock;
 } {
   const ctx = { reply } as unknown as Context;
-  const host = new TelegramExecutionContext(ctx, class {} as Type, () => undefined);
+  const host = new TelegramExecutionContext(
+    ctx,
+    class {} as Type,
+    () => undefined,
+  );
   return { host, reply };
 }
 
@@ -42,9 +47,7 @@ describe('TelegramExceptionFilter', () => {
 
     await filter.catch(new Error('boom'), host);
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('boom'),
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('boom'));
     expect(reply).not.toHaveBeenCalled();
   });
 
@@ -85,7 +88,9 @@ describe('TelegramExceptionFilter', () => {
     const { host } = hostWith(reply);
     const filter = new TelegramExceptionFilter({ reply: 'hi' });
 
-    await expect(filter.catch(new Error('boom'), host)).resolves.toBeUndefined();
+    await expect(
+      filter.catch(new Error('boom'), host),
+    ).resolves.toBeUndefined();
     // ── Both the original error and the reply failure are logged. ─────────────
     expect(errorSpy).toHaveBeenCalledTimes(2);
   });

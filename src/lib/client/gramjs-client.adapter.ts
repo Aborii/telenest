@@ -19,13 +19,14 @@
  * - createGramJsClient: Builds a connected-capable adapter from options.
  */
 
-import { Api, TelegramClient, errors, password, sessions } from 'telegram';
+import { Api, errors, password, sessions, TelegramClient } from 'telegram';
 import { NewMessage, type NewMessageEvent } from 'telegram/events';
 import type { Dialog } from 'telegram/tl/custom/dialog';
+
 import {
   TelegramAuthError,
-  TelegramClientError,
   type TelegramAuthErrorCode,
+  TelegramClientError,
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import {

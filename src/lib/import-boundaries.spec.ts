@@ -10,7 +10,7 @@
  * source of each side and fails if a forbidden import appears.
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /** Absolute path to `src/lib` (this file's directory). */

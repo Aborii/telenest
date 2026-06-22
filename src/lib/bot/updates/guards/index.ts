@@ -11,5 +11,5 @@
  */
 
 export * from './chat-allowlist.guard';
-export * from './user-allowlist.guard';
 export * from './rate-limit.guard';
+export * from './user-allowlist.guard';

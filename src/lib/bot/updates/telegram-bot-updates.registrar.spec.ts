@@ -13,9 +13,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Context, Telegraf } from 'telegraf';
+
 import { TELEGRAM_BOT } from '../telegram-bot.constants';
 import { TelegramBotModule } from '../telegram-bot.module';
 import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
+import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 import {
   Action,
   Command,
@@ -26,7 +28,6 @@ import {
   TelegramUpdate,
   Use,
 } from './telegram-update.decorator';
-import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 
 /** A recorded `Telegraf` registration: which method, optional trigger, the mw. */
 interface Registration {
@@ -73,19 +74,16 @@ class DemoUpdate {
   public lastFrom: unknown;
 
   @Start()
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public onStart(@Ctx() _ctx: Context): void {
     this.events.push('start');
   }
 
   @Help()
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public onHelp(@Ctx() _ctx: Context): void {
     this.events.push('help');
   }
 
   @Hears('hi')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public onHi(@MessageText() _text: string | undefined): void {
     this.events.push('hears');
   }
@@ -109,7 +107,6 @@ class DemoUpdate {
   }
 
   @Use()
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public globalMw(@Ctx() _ctx: Context): void {
     this.events.push('use');
   }
@@ -142,9 +139,7 @@ class UnmarkedUpdate {
 }
 
 /** Compiles the bot module over the mock and runs the registrar once. */
-async function bootstrap(
-  providers: ReadonlyArray<new () => object>,
-): Promise<{
+async function bootstrap(providers: ReadonlyArray<new () => object>): Promise<{
   regs: Registration[];
   get: <T>(token: new () => T) => T;
 }> {

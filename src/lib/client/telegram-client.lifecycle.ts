@@ -21,7 +21,13 @@
  * - TelegramClientLifecycle: Disconnects the client on module destroy.
  */
 
-import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+} from '@nestjs/common';
+
 import type { IGramClient } from './gram-client.interface';
 import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
 

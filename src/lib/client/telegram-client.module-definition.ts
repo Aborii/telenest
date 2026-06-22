@@ -19,6 +19,7 @@
  */
 
 import { ConfigurableModuleBuilder } from '@nestjs/common';
+
 import type { TelegramClientModuleOptions } from './telegram-client.options';
 
 /**

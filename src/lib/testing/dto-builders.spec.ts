@@ -52,7 +52,11 @@ describe('DTO builders', () => {
     });
 
     it('applies overrides (e.g. an incoming message)', () => {
-      const incoming = aGramMessage({ out: false, senderId: '2002', text: 'hi' });
+      const incoming = aGramMessage({
+        out: false,
+        senderId: '2002',
+        text: 'hi',
+      });
       expect(incoming.out).toBe(false);
       expect(incoming.senderId).toBe('2002');
       expect(incoming.text).toBe('hi');

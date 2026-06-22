@@ -106,6 +106,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Integration tests
   - Mocking strategies
 
+- **[LINTING-AND-FORMATTING.md](./LINTING-AND-FORMATTING.md)**
+  - ESLint flat config (no-any / no-enum / boundary types)
+  - Prettier formatting + import sorting
+  - `lint` / `lint:fix` / `format` / `format:check` scripts
+  - How to extend the rules
+
 ---
 
 ## 🎯 Quick Navigation by Use Case

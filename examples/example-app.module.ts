@@ -20,6 +20,7 @@
 
 import { Injectable, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+
 import {
   FileSessionStore,
   InlineKeyboardBuilder,
@@ -74,7 +75,10 @@ export class ExampleService {
    * @returns Resolves once sent.
    * @throws {import('../src').TelegramBotApiError} On Bot API failure.
    */
-  public async broadcastAsBot(chatId: number | string, text: string): Promise<void> {
+  public async broadcastAsBot(
+    chatId: number | string,
+    text: string,
+  ): Promise<void> {
     await this.bot.sendMessage(chatId, text);
   }
 

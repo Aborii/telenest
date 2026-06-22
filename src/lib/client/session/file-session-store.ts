@@ -24,6 +24,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+
 import { TelegramSessionError } from '../../common';
 import type { SessionStore } from './session-store.interface';
 

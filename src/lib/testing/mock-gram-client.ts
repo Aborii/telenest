@@ -39,6 +39,7 @@
  */
 
 import type { ValueProvider } from '@nestjs/common';
+
 import type { IGramClient } from '../client/gram-client.interface';
 import { GRAM_SIGN_IN_STATUSES } from '../client/gram-client.types';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
@@ -79,12 +80,10 @@ export function createMockGramClient(
     sendCode: jest
       .fn()
       .mockResolvedValue({ phoneCodeHash: 'TEST_HASH', isCodeViaApp: true }),
-    signInWithCode: jest
-      .fn()
-      .mockResolvedValue({
-        status: GRAM_SIGN_IN_STATUSES.AUTHORIZED,
-        user: aGramUser(),
-      }),
+    signInWithCode: jest.fn().mockResolvedValue({
+      status: GRAM_SIGN_IN_STATUSES.AUTHORIZED,
+      user: aGramUser(),
+    }),
     signInWithPassword: jest.fn().mockResolvedValue(aGramUser()),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(aGramUser()),

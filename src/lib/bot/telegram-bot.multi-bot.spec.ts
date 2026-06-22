@@ -14,9 +14,10 @@
  * not run lifecycle hooks during `compile()`), so nothing is ever launched.
  */
 
-import { Injectable, type DynamicModule, type Provider } from '@nestjs/common';
+import { type DynamicModule, Injectable, type Provider } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Context, Telegraf } from 'telegraf';
+
 import { TelegramBotModule } from './telegram-bot.module';
 import { TelegramBotService } from './telegram-bot.service';
 import {
@@ -112,7 +113,10 @@ class BroadcastService {
 async function compile(
   imports: DynamicModule[],
   providers: Provider[],
-  overrides: ReadonlyArray<{ token: ReturnType<typeof getBotInstanceToken>; bot: Telegraf }>,
+  overrides: ReadonlyArray<{
+    token: ReturnType<typeof getBotInstanceToken>;
+    bot: Telegraf;
+  }>,
 ): Promise<TestingModule> {
   let builder = Test.createTestingModule({ imports, providers });
   for (const override of overrides)
@@ -127,8 +131,16 @@ describe('TelegramBotModule — multiple named bots', () => {
 
     const moduleRef = await compile(
       [
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
-        TelegramBotModule.forRoot({ name: 'support', token: '222:bbb', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
+        TelegramBotModule.forRoot({
+          name: 'support',
+          token: '222:bbb',
+          launch: false,
+        }),
       ],
       [],
       [
@@ -159,8 +171,16 @@ describe('TelegramBotModule — multiple named bots', () => {
 
     const moduleRef = await compile(
       [
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
-        TelegramBotModule.forRoot({ name: 'support', token: '222:bbb', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
+        TelegramBotModule.forRoot({
+          name: 'support',
+          token: '222:bbb',
+          launch: false,
+        }),
       ],
       [NotifyUpdate, SupportUpdate],
       [
@@ -192,7 +212,11 @@ describe('TelegramBotModule — multiple named bots', () => {
     const moduleRef = await compile(
       [
         TelegramBotModule.forRoot({ token: '000:ddd', launch: false }),
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
       ],
       [DefaultUpdate, NotifyUpdate],
       [
@@ -202,7 +226,9 @@ describe('TelegramBotModule — multiple named bots', () => {
     );
 
     moduleRef
-      .get<TelegramBotUpdatesRegistrar>(getBotRegistrarToken(), { strict: false })
+      .get<TelegramBotUpdatesRegistrar>(getBotRegistrarToken(), {
+        strict: false,
+      })
       .onModuleInit();
     moduleRef
       .get<TelegramBotUpdatesRegistrar>(getBotRegistrarToken('notify'), {
@@ -220,8 +246,16 @@ describe('TelegramBotModule — multiple named bots', () => {
 
     const moduleRef = await compile(
       [
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
-        TelegramBotModule.forRoot({ name: 'support', token: '222:bbb', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
+        TelegramBotModule.forRoot({
+          name: 'support',
+          token: '222:bbb',
+          launch: false,
+        }),
       ],
       [BroadcastService],
       [
@@ -243,7 +277,11 @@ describe('TelegramBotModule — multiple named bots', () => {
 
     const moduleRef = await compile(
       [
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
       ],
       [NotifyUpdate],
       [{ token: getBotInstanceToken('notify'), bot: notify.bot }],
@@ -285,8 +323,16 @@ describe('TelegramBotModule — multiple named bots', () => {
 
     const moduleRef = await compile(
       [
-        TelegramBotModule.forRoot({ name: 'notify', token: '111:aaa', launch: false }),
-        TelegramBotModule.forRoot({ name: 'support', token: '222:bbb', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '111:aaa',
+          launch: false,
+        }),
+        TelegramBotModule.forRoot({
+          name: 'support',
+          token: '222:bbb',
+          launch: false,
+        }),
       ],
       [],
       [

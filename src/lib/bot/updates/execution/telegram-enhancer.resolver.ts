@@ -22,16 +22,17 @@
 
 import { Injectable, type Type } from '@nestjs/common';
 import { ModuleRef, Reflector } from '@nestjs/core';
+
 import { TelegramConfigError } from '../../../common';
 import type { TelegramUpdateHandler } from '../telegram-update.types';
 import {
+  type ExceptionType,
   FILTER_CATCH_EXCEPTIONS_METADATA,
+  type ResolvedEnhancers,
+  type ResolvedExceptionFilter,
   TELEGRAM_FILTERS_METADATA,
   TELEGRAM_GUARDS_METADATA,
   TELEGRAM_INTERCEPTORS_METADATA,
-  type ExceptionType,
-  type ResolvedEnhancers,
-  type ResolvedExceptionFilter,
   type TelegramFilter,
   type TelegramFilterRef,
   type TelegramGuard,
@@ -117,7 +118,8 @@ export class TelegramEnhancerResolver {
     handler: TelegramUpdateHandler,
     methodFirst: boolean,
   ): TRef[] {
-    const classRefs = this._reflector.get<TRef[] | undefined>(key, target) ?? [];
+    const classRefs =
+      this._reflector.get<TRef[] | undefined>(key, target) ?? [];
     const methodRefs =
       this._reflector.get<TRef[] | undefined>(key, handler) ?? [];
     return methodFirst

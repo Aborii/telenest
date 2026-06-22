@@ -20,15 +20,16 @@
 
 import type { Provider } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
-import { createGramJsClient } from './gramjs-client.adapter';
+
 import type { IGramClient } from './gram-client.interface';
+import { createGramJsClient } from './gramjs-client.adapter';
+import type { SessionStore } from './session/session-store.interface';
 import {
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
 import { TELEGRAM_CLIENT_OPTIONS } from './telegram-client.module-definition';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
-import type { SessionStore } from './session/session-store.interface';
 
 /** Provider exposing the configured {@link SessionStore} (or `undefined`). */
 export const sessionStoreProvider: Provider = {

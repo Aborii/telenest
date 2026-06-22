@@ -9,6 +9,7 @@
  */
 
 import type { Context } from 'telegraf';
+
 import { resolveHandlerArguments } from './argument-resolver';
 import { PARAM_KINDS, type ParamMetadata } from './telegram-update.types';
 
@@ -60,7 +61,10 @@ describe('resolveHandlerArguments', () => {
       { index: 0, kind: PARAM_KINDS.MESSAGE_TEXT },
       { index: 1, kind: PARAM_KINDS.SENDER },
     ];
-    expect(resolveHandlerArguments(ctx, params)).toEqual([undefined, undefined]);
+    expect(resolveHandlerArguments(ctx, params)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   it('leaves gaps undefined when indices are sparse / unordered', () => {

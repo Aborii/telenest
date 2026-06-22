@@ -9,14 +9,15 @@
  * The tests focus on the adapter's two jobs: DTO mapping and error translation.
  */
 
-import { Api, type TelegramClient, errors, password, sessions } from 'telegram';
+import { Api, errors, password, sessions, type TelegramClient } from 'telegram';
 // ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
 //    so the import-equals form is required for the call to resolve at runtime. ─
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above: `export =` interop requires the import-equals form.
 import bigInt = require('big-integer');
 import { TelegramAuthError, TelegramClientError } from '../common';
 import {
-  GramJsClientAdapter,
   createGramJsClient,
+  GramJsClientAdapter,
 } from './gramjs-client.adapter';
 
 /** Minimal mock of the GramJS client surface the adapter calls. */
@@ -93,7 +94,9 @@ describe('GramJsClientAdapter', () => {
         connect: jest.fn().mockRejectedValue(new Error('no route')),
       });
       const adapter = createAdapter(mock);
-      await expect(adapter.connect()).rejects.toBeInstanceOf(TelegramClientError);
+      await expect(adapter.connect()).rejects.toBeInstanceOf(
+        TelegramClientError,
+      );
     });
 
     it('isAuthorized delegates to checkAuthorization', async () => {
@@ -134,7 +137,9 @@ describe('GramJsClientAdapter', () => {
 
     it('maps PHONE_NUMBER_INVALID to a PHONE_INVALID auth error', async () => {
       const mock = createMockClient({
-        sendCode: jest.fn().mockRejectedValue(new Error('PHONE_NUMBER_INVALID')),
+        sendCode: jest
+          .fn()
+          .mockRejectedValue(new Error('PHONE_NUMBER_INVALID')),
       });
       const adapter = createAdapter(mock);
 
@@ -181,11 +186,9 @@ describe('GramJsClientAdapter', () => {
   describe('signInWithCode', () => {
     it('returns authorized with a mapped user', async () => {
       const mock = createMockClient({
-        invoke: jest
-          .fn()
-          .mockResolvedValue({
-            user: { id: bigInt('1001'), self: true, firstName: 'Ada' },
-          }),
+        invoke: jest.fn().mockResolvedValue({
+          user: { id: bigInt('1001'), self: true, firstName: 'Ada' },
+        }),
       });
       const adapter = createAdapter(mock);
 
@@ -205,7 +208,9 @@ describe('GramJsClientAdapter', () => {
 
     it('returns password-required on SESSION_PASSWORD_NEEDED', async () => {
       const mock = createMockClient({
-        invoke: jest.fn().mockRejectedValue(new Error('SESSION_PASSWORD_NEEDED')),
+        invoke: jest
+          .fn()
+          .mockRejectedValue(new Error('SESSION_PASSWORD_NEEDED')),
       });
       const adapter = createAdapter(mock);
 
@@ -224,7 +229,11 @@ describe('GramJsClientAdapter', () => {
       const adapter = createAdapter(mock);
 
       const error = await adapter
-        .signInWithCode({ phoneNumber: '+1', phoneCodeHash: 'H', phoneCode: 'x' })
+        .signInWithCode({
+          phoneNumber: '+1',
+          phoneCodeHash: 'H',
+          phoneCode: 'x',
+        })
         .catch((e: unknown) => e);
       expect((error as TelegramAuthError).code).toBe('CODE_INVALID');
     });
@@ -250,7 +259,11 @@ describe('GramJsClientAdapter', () => {
       const adapter = createAdapter(mock);
 
       const error = await adapter
-        .signInWithCode({ phoneNumber: '+1', phoneCodeHash: 'H', phoneCode: '1' })
+        .signInWithCode({
+          phoneNumber: '+1',
+          phoneCodeHash: 'H',
+          phoneCode: '1',
+        })
         .catch((e: unknown) => e);
       expect((error as TelegramAuthError).code).toBe('SIGN_UP_REQUIRED');
     });
@@ -266,15 +279,13 @@ describe('GramJsClientAdapter', () => {
         .mockResolvedValueOnce({
           user: { id: bigInt('2002'), self: true, username: 'me' },
         });
-      const computeSpy = jest
-        .spyOn(password, 'computeCheck')
-        .mockResolvedValue(
-          new Api.InputCheckPasswordSRP({
-            srpId: bigInt('1'),
-            A: Buffer.alloc(1),
-            M1: Buffer.alloc(1),
-          }),
-        );
+      const computeSpy = jest.spyOn(password, 'computeCheck').mockResolvedValue(
+        new Api.InputCheckPasswordSRP({
+          srpId: bigInt('1'),
+          A: Buffer.alloc(1),
+          M1: Buffer.alloc(1),
+        }),
+      );
       const adapter = createAdapter(createMockClient({ invoke }));
 
       const user = await adapter.signInWithPassword('hunter2');
@@ -290,15 +301,13 @@ describe('GramJsClientAdapter', () => {
         .fn()
         .mockResolvedValueOnce({ srp_id: bigInt('1') })
         .mockResolvedValueOnce(new Api.auth.AuthorizationSignUpRequired({}));
-      jest
-        .spyOn(password, 'computeCheck')
-        .mockResolvedValue(
-          new Api.InputCheckPasswordSRP({
-            srpId: bigInt('1'),
-            A: Buffer.alloc(1),
-            M1: Buffer.alloc(1),
-          }),
-        );
+      jest.spyOn(password, 'computeCheck').mockResolvedValue(
+        new Api.InputCheckPasswordSRP({
+          srpId: bigInt('1'),
+          A: Buffer.alloc(1),
+          M1: Buffer.alloc(1),
+        }),
+      );
       const adapter = createAdapter(createMockClient({ invoke }));
 
       const error = await adapter
@@ -324,7 +333,9 @@ describe('GramJsClientAdapter', () => {
 
   describe('logOut', () => {
     it('invokes auth.LogOut', async () => {
-      const mock = createMockClient({ invoke: jest.fn().mockResolvedValue(true) });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(true),
+      });
       const adapter = createAdapter(mock);
       await adapter.logOut();
       expect(mock.invoke).toHaveBeenCalledTimes(1);
@@ -335,7 +346,9 @@ describe('GramJsClientAdapter', () => {
         invoke: jest.fn().mockRejectedValue(new Error('boom')),
       });
       const adapter = createAdapter(mock);
-      await expect(adapter.logOut()).rejects.toBeInstanceOf(TelegramClientError);
+      await expect(adapter.logOut()).rejects.toBeInstanceOf(
+        TelegramClientError,
+      );
     });
   });
 
@@ -369,7 +382,9 @@ describe('GramJsClientAdapter', () => {
 
     it('maps a UserEmpty into a minimal GramUser', async () => {
       const mock = createMockClient({
-        getMe: jest.fn().mockResolvedValue(new Api.UserEmpty({ id: bigInt('0') })),
+        getMe: jest
+          .fn()
+          .mockResolvedValue(new Api.UserEmpty({ id: bigInt('0') })),
       });
       const adapter = createAdapter(mock);
 
@@ -399,7 +414,13 @@ describe('GramJsClientAdapter', () => {
       const adapter = createAdapter(mock);
 
       await expect(adapter.getDialogs()).resolves.toEqual([
-        { id: '5', title: 'My Group', type: 'group', unreadCount: 3, pinned: true },
+        {
+          id: '5',
+          title: 'My Group',
+          type: 'group',
+          unreadCount: 3,
+          pinned: true,
+        },
       ]);
     });
 
@@ -480,7 +501,14 @@ describe('GramJsClientAdapter', () => {
     ])('maps dialog flags %o to type %s', async (flags, expected) => {
       const mock = createMockClient({
         getDialogs: jest.fn().mockResolvedValue([
-          { ...flags, id: bigInt('1'), title: 'T', name: '', unreadCount: 0, pinned: false },
+          {
+            ...flags,
+            id: bigInt('1'),
+            title: 'T',
+            name: '',
+            unreadCount: 0,
+            pinned: false,
+          },
         ]),
       });
       const [dialog] = await createAdapter(mock).getDialogs();
@@ -509,7 +537,10 @@ describe('GramJsClientAdapter', () => {
 
     it.each([
       ['getMe', (a: GramJsClientAdapter): Promise<unknown> => a.getMe()],
-      ['getMessages', (a: GramJsClientAdapter): Promise<unknown> => a.getMessages('me')],
+      [
+        'getMessages',
+        (a: GramJsClientAdapter): Promise<unknown> => a.getMessages('me'),
+      ],
       [
         'sendMessage',
         (a: GramJsClientAdapter): Promise<unknown> =>
@@ -527,7 +558,14 @@ describe('GramJsClientAdapter', () => {
     it('maps an unresolvable peer id to an empty string', async () => {
       const mock = createMockClient({
         getMessages: jest.fn().mockResolvedValue([
-          { id: 1, peerId: {}, message: 'x', date: 1, out: false, senderId: undefined },
+          {
+            id: 1,
+            peerId: {},
+            message: 'x',
+            date: 1,
+            out: false,
+            senderId: undefined,
+          },
         ]),
       });
       const [message] = await createAdapter(mock).getMessages('me');
@@ -572,7 +610,7 @@ describe('GramJsClientAdapter', () => {
       const adapter = createAdapter(mock);
       const received: unknown[] = [];
 
-      const unsubscribe = adapter.onNewMessage((message) => received.push(message));
+      adapter.onNewMessage((message) => received.push(message));
 
       expect(mock.addEventHandler).toHaveBeenCalledTimes(1);
 

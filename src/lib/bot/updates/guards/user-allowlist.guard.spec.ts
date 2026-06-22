@@ -9,6 +9,7 @@
 
 import type { ExecutionContext, Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import { TelegramExecutionContext } from '../execution/telegram-execution-context';
 import { UserAllowlistGuard } from './user-allowlist.guard';
 

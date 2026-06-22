@@ -10,6 +10,7 @@
 
 import type { ArgumentsHost, ExecutionContext, Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import {
   TELEGRAM_CONTEXT_TYPE,
   TelegramExecutionContext,
@@ -26,11 +27,7 @@ function fakeContext(partial: Record<string, unknown> = {}): Context {
 describe('TelegramExecutionContext', () => {
   const ctx = fakeContext({ chat: { id: 99 } });
   const handler = (): string => 'handled';
-  const context = new TelegramExecutionContext(
-    ctx,
-    DemoHost as Type,
-    handler,
-  );
+  const context = new TelegramExecutionContext(ctx, DemoHost as Type, handler);
 
   it('exposes the update context, class, handler, and type', () => {
     expect(context.getContext()).toBe(ctx);

@@ -9,13 +9,14 @@
  */
 
 import type { FactoryProvider } from '@nestjs/common';
+
 import type { IGramClient } from './gram-client.interface';
+import type { SessionStore } from './session/session-store.interface';
 import {
   gramClientProvider,
   sessionStoreProvider,
 } from './telegram-client.factory';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
-import type { SessionStore } from './session/session-store.interface';
 
 /** Invokes the gram-client provider factory with explicit args. */
 const buildClient = (
@@ -30,7 +31,9 @@ const buildClient = (
 };
 
 /** Builds a fake client whose `connect` is observable. */
-function fakeClient(connect = jest.fn().mockResolvedValue(undefined)): IGramClient {
+function fakeClient(
+  connect = jest.fn().mockResolvedValue(undefined),
+): IGramClient {
   return {
     connect,
     disconnect: jest.fn(),
@@ -86,7 +89,13 @@ describe('gramClientProvider', () => {
     };
 
     await buildClient(
-      { apiId: 1, apiHash: 'h', autoConnect: false, session: 'FROM-OPTIONS', clientFactory },
+      {
+        apiId: 1,
+        apiHash: 'h',
+        autoConnect: false,
+        session: 'FROM-OPTIONS',
+        clientFactory,
+      },
       store,
     );
     await buildClient(
@@ -107,11 +116,17 @@ describe('gramClientProvider', () => {
 
 describe('sessionStoreProvider', () => {
   it('exposes the configured store', () => {
-    const store: SessionStore = { load: jest.fn(), save: jest.fn(), clear: jest.fn() };
+    const store: SessionStore = {
+      load: jest.fn(),
+      save: jest.fn(),
+      clear: jest.fn(),
+    };
     const factory = (sessionStoreProvider as FactoryProvider).useFactory as (
       o: TelegramClientModuleOptions,
     ) => SessionStore | undefined;
-    expect(factory({ apiId: 1, apiHash: 'h', sessionStore: store })).toBe(store);
+    expect(factory({ apiId: 1, apiHash: 'h', sessionStore: store })).toBe(
+      store,
+    );
   });
 
   it('returns undefined when no store is configured', () => {

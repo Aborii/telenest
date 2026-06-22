@@ -10,6 +10,7 @@
 
 import type { ExecutionContext, Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import { TelegramConfigError } from '../../../common';
 import { TelegramExecutionContext } from '../execution/telegram-execution-context';
 import { RateLimitGuard, type RateLimitOptions } from './rate-limit.guard';
@@ -22,7 +23,7 @@ function contextFor(chat?: { id: number }): ExecutionContext {
 
 describe('RateLimitGuard', () => {
   it('allows up to capacity, then throttles within the same interval', () => {
-    let now = 1000;
+    const now = 1000;
     const guard = new RateLimitGuard({ capacity: 2, now: () => now });
     const ctx = contextFor({ id: 1 });
 
@@ -75,7 +76,7 @@ describe('RateLimitGuard', () => {
   });
 
   it('keeps buckets independent per key', () => {
-    let now = 0;
+    const now = 0;
     const guard = new RateLimitGuard({ capacity: 1, now: () => now });
     const a = contextFor({ id: 1 });
     const b = contextFor({ id: 2 });
@@ -96,7 +97,7 @@ describe('RateLimitGuard', () => {
   });
 
   it('supports a custom key derivation', () => {
-    let now = 0;
+    const now = 0;
     const guard = new RateLimitGuard({
       capacity: 1,
       key: (ctx) => ctx.from?.id,

@@ -18,6 +18,7 @@
  */
 
 import { ConfigurableModuleBuilder } from '@nestjs/common';
+
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 
 /**

@@ -26,16 +26,16 @@
  */
 
 import {
+  type CallHandler,
+  type ExecutionContext,
   Injectable,
   Logger,
   Module,
-  type CallHandler,
-  type CanActivate,
-  type ExecutionContext,
   type NestInterceptor,
 } from '@nestjs/common';
-import { tap, type Observable } from 'rxjs';
+import { type Observable, tap } from 'rxjs';
 import type { Context } from 'telegraf';
+
 import {
   ChatAllowlistGuard,
   Command,
@@ -44,11 +44,11 @@ import {
   TelegramBotModule,
   TelegramExceptionFilter,
   TelegramExecutionContext,
+  type TelegramGuard,
   TelegramUpdate,
   UseTelegramFilters,
   UseTelegramGuards,
   UseTelegramInterceptors,
-  type TelegramGuard,
 } from '../src';
 
 /** Numeric chat ID this example restricts the bot to (replace with your own). */
@@ -92,13 +92,15 @@ export class TimingInterceptor implements NestInterceptor {
   ): Observable<unknown> {
     const ctx = TelegramExecutionContext.create(context).getContext();
     const startedAt = Date.now();
-    return next.handle().pipe(
-      tap(() =>
-        this._logger.debug(
-          `update ${ctx.updateType} handled in ${Date.now() - startedAt}ms`,
+    return next
+      .handle()
+      .pipe(
+        tap(() =>
+          this._logger.debug(
+            `update ${ctx.updateType} handled in ${Date.now() - startedAt}ms`,
+          ),
         ),
-      ),
-    );
+      );
   }
 }
 

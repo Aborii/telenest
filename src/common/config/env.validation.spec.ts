@@ -35,9 +35,9 @@ describe('validateEnvironment', () => {
   });
 
   it('throws when a required token is missing', () => {
-    expect(() =>
-      validateEnvironment({ GREETER_BOT_TOKEN: 'b' }),
-    ).toThrow(/Missing required environment variable: ECHO_BOT_TOKEN/);
+    expect(() => validateEnvironment({ GREETER_BOT_TOKEN: 'b' })).toThrow(
+      /Missing required environment variable: ECHO_BOT_TOKEN/,
+    );
   });
 
   it('throws when a required token is empty/whitespace', () => {

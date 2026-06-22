@@ -10,6 +10,7 @@
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
 import { TelegramSessionError } from '../../common';
 import { FileSessionStore } from './file-session-store';
 
@@ -72,9 +73,9 @@ describe('FileSessionStore', () => {
 
     it('wraps non-ENOENT load failures', async () => {
       jest.spyOn(fs, 'readFile').mockRejectedValueOnce(eacces());
-      await expect(new FileSessionStore(filePath).load()).rejects.toBeInstanceOf(
-        TelegramSessionError,
-      );
+      await expect(
+        new FileSessionStore(filePath).load(),
+      ).rejects.toBeInstanceOf(TelegramSessionError);
     });
 
     it('wraps save failures', async () => {
@@ -86,9 +87,9 @@ describe('FileSessionStore', () => {
 
     it('wraps non-ENOENT clear failures', async () => {
       jest.spyOn(fs, 'unlink').mockRejectedValueOnce(eacces());
-      await expect(new FileSessionStore(filePath).clear()).rejects.toBeInstanceOf(
-        TelegramSessionError,
-      );
+      await expect(
+        new FileSessionStore(filePath).clear(),
+      ).rejects.toBeInstanceOf(TelegramSessionError);
     });
 
     it('re-asserts 0o600 via chmod on POSIX platforms', async () => {
@@ -96,9 +97,7 @@ describe('FileSessionStore', () => {
       //    so the test does not depend on the real filesystem's mode bits. ────
       const original = process.platform;
       Object.defineProperty(process, 'platform', { value: 'linux' });
-      const chmodSpy = jest
-        .spyOn(fs, 'chmod')
-        .mockResolvedValue(undefined);
+      const chmodSpy = jest.spyOn(fs, 'chmod').mockResolvedValue(undefined);
       try {
         await new FileSessionStore(filePath).save('secret');
         expect(chmodSpy).toHaveBeenCalledWith(expect.any(String), 0o600);

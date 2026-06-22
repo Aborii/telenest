@@ -26,6 +26,7 @@
  */
 
 import { SetMetadata } from '@nestjs/common';
+
 import type { OnUserMessageFilter } from './on-user-message.types';
 
 /** Metadata key under which a handler's {@link OnUserMessageFilter} is stored. */

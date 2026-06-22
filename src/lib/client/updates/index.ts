@@ -10,7 +10,7 @@
  * import { OnUserMessage, GramUserMessageContext } from 'nestjs-telegram';
  */
 
-export * from './on-user-message.types';
-export * from './on-user-message.decorator';
 export * from './match-user-message';
+export * from './on-user-message.decorator';
+export * from './on-user-message.types';
 export * from './telegram-user-updates.registrar';

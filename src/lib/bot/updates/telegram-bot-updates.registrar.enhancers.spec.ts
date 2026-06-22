@@ -11,18 +11,19 @@
  */
 
 import {
-  Injectable,
-  Logger,
   type ArgumentsHost,
   type CallHandler,
   type CanActivate,
   type ExceptionFilter,
   type ExecutionContext,
+  Injectable,
+  Logger,
   type NestInterceptor,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { tap, type Observable } from 'rxjs';
+import { type Observable, tap } from 'rxjs';
 import type { Context, Telegraf } from 'telegraf';
+
 import { TELEGRAM_BOT } from '../telegram-bot.constants';
 import { TelegramBotModule } from '../telegram-bot.module';
 import {
@@ -187,9 +188,7 @@ function commandFor(
   regs: Registration[],
   trigger: string,
 ): Registration['middleware'] {
-  const reg = regs.find(
-    (r) => r.method === 'command' && r.trigger === trigger,
-  );
+  const reg = regs.find((r) => r.method === 'command' && r.trigger === trigger);
   if (!reg) throw new Error(`no command registered for "${trigger}"`);
   return reg.middleware;
 }
@@ -221,7 +220,11 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
   });
 
   it('blocks an update when a (DI-resolved) guard denies it', async () => {
-    const { regs, get } = await bootstrap([GuardedUpdate, DenyGuard, AllowGuard]);
+    const { regs, get } = await bootstrap([
+      GuardedUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
     const update = get(GuardedUpdate);
 
     await commandFor(regs, 'blocked')(fakeContext(), next);
@@ -233,7 +236,11 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
   });
 
   it('runs an update when the guard allows it', async () => {
-    const { regs, get } = await bootstrap([GuardedUpdate, DenyGuard, AllowGuard]);
+    const { regs, get } = await bootstrap([
+      GuardedUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
     const update = get(GuardedUpdate);
 
     await commandFor(regs, 'open')(fakeContext(), next);
@@ -270,8 +277,6 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
     await expect(
       commandFor(regs, 'crash')(fakeContext(), next),
     ).resolves.toBeUndefined();
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('uncaught'),
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('uncaught'));
   });
 });

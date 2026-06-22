@@ -9,6 +9,7 @@
  */
 
 import 'reflect-metadata';
+
 import {
   UseTelegramFilters,
   UseTelegramGuards,
@@ -80,12 +81,8 @@ describe('enhancer decorators', () => {
     it('is a no-op when the decorated method cannot be found on the target', () => {
       const decorate = UseTelegramGuards(guardA) as MethodDecorator;
       // ── target has no "missing" member → nothing to attach metadata to. ─────
-      expect(() =>
-        decorate({}, 'missing', { value: undefined }),
-      ).not.toThrow();
-      expect(
-        Reflect.getMetadata(TELEGRAM_GUARDS_METADATA, {}),
-      ).toBeUndefined();
+      expect(() => decorate({}, 'missing', { value: undefined })).not.toThrow();
+      expect(Reflect.getMetadata(TELEGRAM_GUARDS_METADATA, {})).toBeUndefined();
     });
   });
 

@@ -10,8 +10,9 @@
  */
 
 import type { CallHandler, ExecutionContext, Type } from '@nestjs/common';
-import { of, tap, type Observable } from 'rxjs';
+import { type Observable, of, tap } from 'rxjs';
 import type { Context } from 'telegraf';
+
 import type {
   ResolvedEnhancers,
   ResolvedExceptionFilter,
@@ -19,9 +20,9 @@ import type {
   TelegramInterceptor,
 } from './enhancer.types';
 import {
+  type HandlerThunk,
   RUN_OUTCOMES,
   runWithEnhancers,
-  type HandlerThunk,
 } from './handler-execution';
 import { TelegramExecutionContext } from './telegram-execution-context';
 
@@ -47,9 +48,7 @@ function enhancers(partial: Partial<ResolvedEnhancers>): ResolvedEnhancers {
 }
 
 /** A guard with a fixed (or computed) verdict. */
-function guard(
-  canActivate: TelegramGuard['canActivate'],
-): TelegramGuard {
+function guard(canActivate: TelegramGuard['canActivate']): TelegramGuard {
   return { canActivate };
 }
 
@@ -98,10 +97,7 @@ describe('runWithEnhancers', () => {
       const outcome = await runWithEnhancers({
         context: makeContext(),
         enhancers: enhancers({
-          guards: [
-            guard(() => Promise.resolve(true)),
-            guard(() => of(true)),
-          ],
+          guards: [guard(() => Promise.resolve(true)), guard(() => of(true))],
         }),
         handler,
       });
@@ -143,7 +139,9 @@ describe('runWithEnhancers', () => {
 
       const outcome = await runWithEnhancers({
         context: makeContext(),
-        enhancers: enhancers({ interceptors: [trace('outer'), trace('inner')] }),
+        enhancers: enhancers({
+          interceptors: [trace('outer'), trace('inner')],
+        }),
         handler,
       });
 
@@ -328,7 +326,10 @@ describe('runWithEnhancers', () => {
       });
 
       expect(outcome).toBe(RUN_OUTCOMES.COMPLETED);
-      expect(filterCatch).toHaveBeenCalledWith('just a string', expect.anything());
+      expect(filterCatch).toHaveBeenCalledWith(
+        'just a string',
+        expect.anything(),
+      );
     });
 
     it('picks the first matching filter in order', async () => {

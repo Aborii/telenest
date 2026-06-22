@@ -11,7 +11,7 @@
  * import { TelegramBotModule, TelegramClientModule, TelegramModule } from 'nestjs-telegram';
  */
 
-export * from './common';
 export * from './bot';
 export * from './client';
+export * from './common';
 export * from './telegram.module';

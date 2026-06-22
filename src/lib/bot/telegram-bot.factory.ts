@@ -18,6 +18,7 @@
  */
 
 import { Telegraf } from 'telegraf';
+
 import { TelegramConfigError } from '../common';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 

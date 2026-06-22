@@ -9,6 +9,7 @@
 
 import type { ExecutionContext, Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
+
 import { TelegramExecutionContext } from '../execution/telegram-execution-context';
 import { ChatAllowlistGuard } from './chat-allowlist.guard';
 
@@ -35,7 +36,10 @@ describe('ChatAllowlistGuard', () => {
   });
 
   it('allows an update with no chat when allowWhenNoChat is true', () => {
-    const guard = new ChatAllowlistGuard({ allow: [10], allowWhenNoChat: true });
+    const guard = new ChatAllowlistGuard({
+      allow: [10],
+      allowWhenNoChat: true,
+    });
     expect(guard.canActivate(contextFor(undefined))).toBe(true);
   });
 });

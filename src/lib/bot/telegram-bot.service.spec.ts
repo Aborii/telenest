@@ -9,6 +9,7 @@
  */
 
 import type { Telegraf } from 'telegraf';
+
 import { TelegramBotApiError } from '../common';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 import { TelegramBotService } from './telegram-bot.service';
@@ -63,9 +64,14 @@ describe('TelegramBotService', () => {
 
     it('wraps a Telegram error exposing .code', async () => {
       const { service, telegram } = createService();
-      telegram.sendMessage.mockRejectedValue({ code: 429, message: 'Too Many' });
+      telegram.sendMessage.mockRejectedValue({
+        code: 429,
+        message: 'Too Many',
+      });
 
-      const error = await service.sendMessage(42, 'hi').catch((e: unknown) => e);
+      const error = await service
+        .sendMessage(42, 'hi')
+        .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(TelegramBotApiError);
       expect(error).toMatchObject({ statusCode: 429, method: 'sendMessage' });
     });
@@ -77,7 +83,9 @@ describe('TelegramBotService', () => {
         message: 'Bad Request',
       });
 
-      const error = await service.sendMessage(42, 'hi').catch((e: unknown) => e);
+      const error = await service
+        .sendMessage(42, 'hi')
+        .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(TelegramBotApiError);
       expect((error as TelegramBotApiError).statusCode).toBe(400);
     });

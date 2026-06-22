@@ -61,7 +61,10 @@ describe('TelegramUserService', () => {
     const client = createFakeClient();
     const service = new TelegramUserService(client);
     await service.getDialogs({ limit: 10, archived: true });
-    expect(client.getDialogs).toHaveBeenCalledWith({ limit: 10, archived: true });
+    expect(client.getDialogs).toHaveBeenCalledWith({
+      limit: 10,
+      archived: true,
+    });
   });
 
   it('getMessages forwards peer and params', async () => {
@@ -81,7 +84,10 @@ describe('TelegramUserService', () => {
   it('sendMessage passes a params object through unchanged', async () => {
     const client = createFakeClient();
     const service = new TelegramUserService(client);
-    await service.sendMessage('@x', { message: '<b>hi</b>', parseMode: 'html' });
+    await service.sendMessage('@x', {
+      message: '<b>hi</b>',
+      parseMode: 'html',
+    });
     expect(client.sendMessage).toHaveBeenCalledWith('@x', {
       message: '<b>hi</b>',
       parseMode: 'html',

@@ -28,17 +28,18 @@
 
 import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import {
-  gramClientProvider,
-  sessionStoreProvider,
-} from './telegram-client.factory';
-import { ConfigurableModuleClass } from './telegram-client.module-definition';
+
+import { TelegramAuthService } from './telegram-auth.service';
 import {
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
-import { TelegramAuthService } from './telegram-auth.service';
+import {
+  gramClientProvider,
+  sessionStoreProvider,
+} from './telegram-client.factory';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
+import { ConfigurableModuleClass } from './telegram-client.module-definition';
 import { TelegramUserService } from './telegram-user.service';
 import { TelegramUserUpdatesRegistrar } from './updates/telegram-user-updates.registrar';
 

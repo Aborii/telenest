@@ -6,10 +6,7 @@
  * Unit tests for the greeter bot's update handlers, including scene/wizard entry.
  */
 
-import {
-  PROFILE_WIZARD_ID,
-  RANDOM_NUMBER_SCENE_ID,
-} from './greeter.constants';
+import { PROFILE_WIZARD_ID, RANDOM_NUMBER_SCENE_ID } from './greeter.constants';
 import { GreeterUpdate } from './greeter.update';
 import type { GreeterContext } from './interfaces/greeter-context.interface';
 

@@ -10,6 +10,7 @@
 
 import { Test } from '@nestjs/testing';
 import { Telegraf } from 'telegraf';
+
 import { TELEGRAM_BOT } from './telegram-bot.constants';
 import { TelegramBotModule } from './telegram-bot.module';
 import { TelegramBotService } from './telegram-bot.service';

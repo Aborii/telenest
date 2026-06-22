@@ -20,7 +20,8 @@
  * - UserAllowlistGuard: the guard implementation.
  */
 
-import { Injectable, type ExecutionContext } from '@nestjs/common';
+import { type ExecutionContext, Injectable } from '@nestjs/common';
+
 import type { TelegramGuard } from '../execution/enhancer.types';
 import { TelegramExecutionContext } from '../execution/telegram-execution-context';
 

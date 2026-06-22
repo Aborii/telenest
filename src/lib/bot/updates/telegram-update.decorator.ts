@@ -35,8 +35,10 @@
  */
 
 import 'reflect-metadata';
+
 import { SetMetadata } from '@nestjs/common';
 import type { Telegraf } from 'telegraf';
+
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   BOT_UPDATE_KINDS,
@@ -113,7 +115,9 @@ export interface TelegramUpdateOptions {
  * export class NotifyUpdate { ... }
  * ```
  */
-export function TelegramUpdate(options?: TelegramUpdateOptions): ClassDecorator {
+export function TelegramUpdate(
+  options?: TelegramUpdateOptions,
+): ClassDecorator {
   const botName = options?.bot ?? DEFAULT_BOT_NAME;
   return (target) => {
     // ── Two markers: "scan me" + which bot these handlers belong to. ──────────

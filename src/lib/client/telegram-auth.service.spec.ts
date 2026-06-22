@@ -8,11 +8,12 @@
  */
 
 import { Logger } from '@nestjs/common';
+
 import { TelegramAuthError } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type { GramUser } from './gram-client.types';
-import { TelegramAuthService } from './telegram-auth.service';
 import type { SessionStore } from './session/session-store.interface';
+import { TelegramAuthService } from './telegram-auth.service';
 
 /** A representative authenticated user DTO. */
 const FAKE_USER: GramUser = {
@@ -153,7 +154,9 @@ describe('TelegramAuthService', () => {
   });
 
   it('connects lazily before operations when disconnected', async () => {
-    const client = createFakeClient({ isConnected: jest.fn().mockReturnValue(false) });
+    const client = createFakeClient({
+      isConnected: jest.fn().mockReturnValue(false),
+    });
     const service = new TelegramAuthService(client);
 
     await service.isAuthorized();

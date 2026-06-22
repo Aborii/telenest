@@ -9,10 +9,11 @@
  */
 
 import { Test } from '@nestjs/testing';
+
 import type { IGramClient } from './gram-client.interface';
 import type { GramUser } from './gram-client.types';
-import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
 import { TelegramAuthService } from './telegram-auth.service';
+import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
 import { TelegramClientModule } from './telegram-client.module';
 import { TelegramUserService } from './telegram-user.service';
 

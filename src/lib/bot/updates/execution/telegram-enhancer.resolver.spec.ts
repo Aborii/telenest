@@ -11,13 +11,14 @@
  */
 
 import {
-  Catch,
   type CanActivate,
+  Catch,
   type ExceptionFilter,
   type NestInterceptor,
   type Type,
 } from '@nestjs/common';
-import { Reflector, type ModuleRef } from '@nestjs/core';
+import { type ModuleRef, Reflector } from '@nestjs/core';
+
 import { TelegramConfigError } from '../../../common';
 import {
   UseTelegramFilters,

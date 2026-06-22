@@ -11,10 +11,8 @@
  */
 
 import { Command, Ctx, Hears, Start, Update } from 'nestjs-telegraf';
-import {
-  PROFILE_WIZARD_ID,
-  RANDOM_NUMBER_SCENE_ID,
-} from './greeter.constants';
+
+import { PROFILE_WIZARD_ID, RANDOM_NUMBER_SCENE_ID } from './greeter.constants';
 import { GreeterContext } from './interfaces/greeter-context.interface';
 
 /**
@@ -31,7 +29,9 @@ export class GreeterUpdate {
    */
   @Start()
   async onStart(@Ctx() ctx: GreeterContext): Promise<void> {
-    await ctx.reply('Say hello, use /scene for random numbers, or /wizard for profile setup.');
+    await ctx.reply(
+      'Say hello, use /scene for random numbers, or /wizard for profile setup.',
+    );
   }
 
   /**

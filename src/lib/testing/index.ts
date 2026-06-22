@@ -31,5 +31,5 @@
  */
 
 export * from './dto-builders';
-export * from './mock-gram-client';
 export * from './mock-bot-context';
+export * from './mock-gram-client';

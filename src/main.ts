@@ -11,8 +11,10 @@
  */
 
 import 'dotenv/config';
+
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+
 import { APP_BOOT_MESSAGE } from './app.constants';
 import { AppModule } from './app.module';
 

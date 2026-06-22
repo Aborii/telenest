@@ -19,4 +19,4 @@ export interface GreeterSession extends Scenes.WizardSessionData {
 }
 
 /** Context type used by greeter handlers that rely on scene/wizard APIs. */
-export interface GreeterContext extends Scenes.WizardContext<GreeterSession> {}
+export type GreeterContext = Scenes.WizardContext<GreeterSession>;

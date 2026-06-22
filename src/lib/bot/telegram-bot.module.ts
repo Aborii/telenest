@@ -46,9 +46,9 @@
  */
 
 import {
-  Module,
   type DynamicModule,
   type InjectionToken,
+  Module,
   type Provider,
 } from '@nestjs/common';
 import {
@@ -58,6 +58,7 @@ import {
   Reflector,
 } from '@nestjs/core';
 import type { Telegraf } from 'telegraf';
+
 import { DEFAULT_BOT_NAME } from './telegram-bot.constants';
 import { createTelegrafInstance } from './telegram-bot.factory';
 import {

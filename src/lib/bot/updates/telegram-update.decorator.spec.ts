@@ -9,6 +9,8 @@
  */
 
 import 'reflect-metadata';
+
+import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   Action,
   Command,
@@ -19,7 +21,6 @@ import {
   TelegramUpdate,
   Use,
 } from './telegram-update.decorator';
-import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
@@ -31,7 +32,9 @@ import {
 /** Reads the binding array a method decorator stored on a prototype method. */
 function bindingsOf(prototype: object, method: string): UpdateBinding[] {
   const fn = (prototype as Record<string, unknown>)[method] as object;
-  return (Reflect.getMetadata(UPDATE_BINDINGS_METADATA, fn) as UpdateBinding[]) ?? [];
+  return (
+    (Reflect.getMetadata(UPDATE_BINDINGS_METADATA, fn) as UpdateBinding[]) ?? []
+  );
 }
 
 describe('@TelegramUpdate class decorator', () => {
@@ -52,9 +55,9 @@ describe('@TelegramUpdate class decorator', () => {
     expect(Reflect.getMetadata(IS_TELEGRAM_UPDATE_METADATA, NotifyMarked)).toBe(
       true,
     );
-    expect(Reflect.getMetadata(TELEGRAM_UPDATE_BOT_METADATA, NotifyMarked)).toBe(
-      'notify',
-    );
+    expect(
+      Reflect.getMetadata(TELEGRAM_UPDATE_BOT_METADATA, NotifyMarked),
+    ).toBe('notify');
   });
 
   it('leaves undecorated classes unmarked', () => {
@@ -69,7 +72,6 @@ describe('@TelegramUpdate class decorator', () => {
 });
 
 describe('method decorators', () => {
-  /* eslint-disable @typescript-eslint/no-empty-function */
   class Handlers {
     @Start() onStart(): void {}
     @Help() onHelp(): void {}
@@ -79,7 +81,6 @@ describe('method decorators', () => {
     @On('text') onText(): void {}
     @Use() onUse(): void {}
   }
-  /* eslint-enable @typescript-eslint/no-empty-function */
 
   const proto = Handlers.prototype;
 
@@ -112,7 +113,6 @@ describe('method decorators', () => {
 
   it('accumulates multiple stacked decorators on one method', () => {
     class Stacked {
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
       @Command('a') @Command('b') both(): void {}
     }
 

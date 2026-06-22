@@ -52,9 +52,7 @@ describe('ProfileWizard', () => {
   it('re-prompts and does not leave on a non-text reply', async () => {
     const { ctx, reply, leave, state } = createCtx({ noText: true });
     await wizard.saveName(ctx);
-    expect(reply).toHaveBeenCalledWith(
-      expect.stringContaining('plain text'),
-    );
+    expect(reply).toHaveBeenCalledWith(expect.stringContaining('plain text'));
     expect(state.profileName).toBeUndefined();
     expect(leave).not.toHaveBeenCalled();
   });

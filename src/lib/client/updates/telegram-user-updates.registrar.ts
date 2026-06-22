@@ -25,8 +25,9 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
-import { filter as rxFilter } from 'rxjs/operators';
 import type { Subscription } from 'rxjs';
+import { filter as rxFilter } from 'rxjs/operators';
+
 import type { GramMessage } from '../gram-client.types';
 import { TelegramUserService } from '../telegram-user.service';
 import { matchesUserMessageFilter } from './match-user-message';

@@ -10,11 +10,15 @@
  */
 
 import { Test } from '@nestjs/testing';
+
 import type { IGramClient } from '../client/gram-client.interface';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
 import { TelegramUserService } from '../client/telegram-user.service';
 import { aGramMessage, aGramUser } from './dto-builders';
-import { createMockGramClient, provideMockGramClient } from './mock-gram-client';
+import {
+  createMockGramClient,
+  provideMockGramClient,
+} from './mock-gram-client';
 
 /** Every method declared on {@link IGramClient}. */
 const CLIENT_METHODS: ReadonlyArray<keyof IGramClient> = [
@@ -97,7 +101,9 @@ describe('createMockGramClient', () => {
     const client = createMockGramClient({
       getMe: async () => aGramUser({ username: 'me' }),
     });
-    await expect(client.getMe()).resolves.toEqual(aGramUser({ username: 'me' }));
+    await expect(client.getMe()).resolves.toEqual(
+      aGramUser({ username: 'me' }),
+    );
   });
 
   it('drops into a real TelegramUserService (no network)', async () => {

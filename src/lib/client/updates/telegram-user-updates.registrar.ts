@@ -3,19 +3,27 @@
  *
  * PURPOSE
  * -------
- * Discovers every `@OnUserMessage`-decorated provider method at bootstrap and
- * subscribes it to {@link TelegramUserService.updates$}, applying the method's
- * filter and invoking it with the message plus a reply context. All
- * subscriptions are torn down on module destroy.
+ * Discovers the `@OnUserMessage`-decorated provider methods targeting **one**
+ * account at bootstrap and subscribes each to that account's
+ * {@link TelegramUserService.updates$}, applying the method's filter and invoking
+ * it with the message plus a reply context. All subscriptions are torn down on
+ * module destroy.
+ *
+ * One registrar is created per registered account (see `telegram-client.module.ts`),
+ * each carrying its account name and `TelegramUserService`. Discovery enumerates
+ * every provider in the app, so each registrar subscribes only the handlers whose
+ * target account (recorded by `@OnUserMessage(filter, { client })`) matches its
+ * own name — that is how a handler listens to exactly one account in a
+ * multi-account application.
  *
  * USAGE
  * -----
- * Registered automatically as a provider by `TelegramClientModule`. Not used
+ * Registered automatically (one per account) by `TelegramClientModule`. Not used
  * directly by consumers.
  *
  * KEY EXPORTS
  * -----------
- * - TelegramUserUpdatesRegistrar: Wires decorated handlers to the message stream.
+ * - TelegramUserUpdatesRegistrar: Wires decorated handlers to an account's stream.
  */
 
 import {
@@ -29,9 +37,13 @@ import type { Subscription } from 'rxjs';
 import { filter as rxFilter } from 'rxjs/operators';
 
 import type { GramMessage } from '../gram-client.types';
+import { DEFAULT_CLIENT_NAME } from '../telegram-client.constants';
 import { TelegramUserService } from '../telegram-user.service';
 import { matchesUserMessageFilter } from './match-user-message';
-import { ON_USER_MESSAGE_METADATA } from './on-user-message.decorator';
+import {
+  ON_USER_MESSAGE_CLIENT_METADATA,
+  ON_USER_MESSAGE_METADATA,
+} from './on-user-message.decorator';
 import type {
   GramUserMessageContext,
   OnUserMessageFilter,
@@ -39,31 +51,47 @@ import type {
 } from './on-user-message.types';
 
 /**
- * Scans providers for `@OnUserMessage` handlers and bridges them to the inbound
- * message stream.
+ * Scans providers for the `@OnUserMessage` handlers targeting one account and
+ * bridges them to that account's inbound message stream.
+ *
+ * Instantiated by `TelegramClientModule`'s per-account factory provider (never as
+ * a plain class provider), which supplies the account name and
+ * `TelegramUserService` explicitly — so the non-injectable `_accountName`
+ * constructor parameter is always provided by the factory, not resolved by DI.
  */
 @Injectable()
 export class TelegramUserUpdatesRegistrar
   implements OnModuleInit, OnModuleDestroy
 {
-  /** Logger scoped to the registrar. */
-  private readonly _logger = new Logger(TelegramUserUpdatesRegistrar.name);
+  /** Logger scoped to the registrar (annotated with the account name when named). */
+  private readonly _logger: Logger;
 
   /** Active subscriptions, one per discovered handler. */
   private readonly _subscriptions: Subscription[] = [];
 
   /**
+   * @param _accountName - Name of the account this registrar serves; only
+   *   `@OnUserMessage` handlers whose target account matches are subscribed.
    * @param discovery - Enumerates the application's providers.
    * @param scanner - Lists method names on a provider prototype.
    * @param reflector - Reads the `@OnUserMessage` metadata off a method.
-   * @param userService - Source of `updates$` and the reply transport.
+   * @param userService - This account's source of `updates$` and reply transport.
    */
   public constructor(
+    private readonly _accountName: string,
     private readonly discovery: DiscoveryService,
     private readonly scanner: MetadataScanner,
     private readonly reflector: Reflector,
     private readonly userService: TelegramUserService,
-  ) {}
+  ) {
+    // ── For the default account keep the bare class name; annotate named
+    //    accounts so their subscription logs are attributable. ────────────────
+    this._logger = new Logger(
+      _accountName === DEFAULT_CLIENT_NAME
+        ? TelegramUserUpdatesRegistrar.name
+        : `${TelegramUserUpdatesRegistrar.name}[${_accountName}]`,
+    );
+  }
 
   /**
    * Discovers and subscribes every decorated handler.
@@ -88,6 +116,17 @@ export class TelegramUserUpdatesRegistrar
           method as (...args: unknown[]) => unknown,
         );
         if (!filter) continue;
+
+        // ── Scope to this registrar's account: a handler declares its target
+        //    account via @OnUserMessage(filter, { client }) (defaulting to the
+        //    default account). Other accounts' handlers are subscribed by their
+        //    own registrar, not this one. ─────────────────────────────────────
+        const targetClient =
+          this.reflector.get<string>(
+            ON_USER_MESSAGE_CLIENT_METADATA,
+            method as (...args: unknown[]) => unknown,
+          ) ?? DEFAULT_CLIENT_NAME;
+        if (targetClient !== this._accountName) continue;
 
         this.subscribe(
           instance as object,
@@ -133,7 +172,9 @@ export class TelegramUserUpdatesRegistrar
       });
 
     this._subscriptions.push(subscription);
-    this._logger.log(`Registered @OnUserMessage handler: ${label}`);
+    this._logger.log(
+      `Registered @OnUserMessage handler: ${label} → account "${this._accountName}"`,
+    );
   }
 
   /**

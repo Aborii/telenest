@@ -44,8 +44,9 @@ import {
  * Orchestrates the phone/code/2FA sign-in flow and persists the session.
  *
  * State (the pending phone number and code hash) is held on the instance, which
- * is correct because the module manages exactly one account. Do not share a
- * single instance across concurrent logins for different numbers.
+ * is correct because each registered account gets its own instance (the default
+ * account, or one per `forRoot({ name })`). Do not share a single instance across
+ * concurrent logins for different numbers.
  */
 @Injectable()
 export class TelegramAuthService {

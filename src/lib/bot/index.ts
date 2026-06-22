@@ -10,7 +10,10 @@
  * import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
  */
 
+export * from './callback-data.codec';
 export * from './keyboard.builder';
+export * from './message-splitter';
+export * from './retry';
 export * from './telegram-bot.constants';
 export { createTelegrafInstance } from './telegram-bot.factory';
 export * from './telegram-bot.module';

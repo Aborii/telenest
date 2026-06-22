@@ -5,11 +5,13 @@
  * -------
  * Discovers the `@TelegramUpdate` providers targeting **one** bot at bootstrap
  * and binds each of their decorated methods onto that bot's `Telegraf` instance,
- * resolving handler arguments through the parameter metadata and isolating
- * handler errors. Binding happens in `onModuleInit`, which Nest runs before
+ * resolving handler arguments through the parameter metadata and running each
+ * handler through any guards, interceptors, and exception filters it declares via
+ * the `@UseTelegram*` decorators. Binding happens in `onModuleInit`, which Nest
+ * runs before
  * {@link import('../telegram-bot.service').TelegramBotService}'s
- * `onApplicationBootstrap` launches the bot — so handlers are always wired up
- * before the first update is polled.
+ * `onApplicationBootstrap` launches the bot — so handlers (and their enhancers)
+ * are always wired up before the first update is polled.
  *
  * One registrar is created per registered bot (see `telegram-bot.module.ts`),
  * each carrying its bot name and `Telegraf` instance. Discovery enumerates every
@@ -27,11 +29,15 @@
  * - TelegramBotUpdatesRegistrar: binds decorated handlers to a named bot.
  */
 
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit, type Type } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import { resolveHandlerArguments } from './argument-resolver';
+import type { ResolvedEnhancers } from './execution/enhancer.types';
+import { RUN_OUTCOMES, runWithEnhancers } from './execution/handler-execution';
+import { TelegramEnhancerResolver } from './execution/telegram-enhancer.resolver';
+import { TelegramExecutionContext } from './execution/telegram-execution-context';
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
@@ -47,6 +53,8 @@ import {
 interface PendingBinding {
   /** The provider instance bound as `this`. */
   readonly instance: object;
+  /** The provider class (for class-level enhancer metadata + execution context). */
+  readonly metatype: Type;
   /** The decorated method. */
   readonly handler: TelegramUpdateHandler;
   /** The method's parameter descriptors. */
@@ -59,12 +67,13 @@ interface PendingBinding {
 
 /**
  * Scans the `@TelegramUpdate` providers targeting one bot and bridges their
- * decorated methods onto the Bot API via that bot's `Telegraf` instance.
+ * decorated methods onto the Bot API via that bot's `Telegraf` instance, applying
+ * each handler's guards, interceptors, and exception filters around the call.
  *
  * Instantiated by `TelegramBotModule`'s per-bot factory provider (never as a
- * plain class provider), which supplies the bot name and `Telegraf` instance
- * explicitly — so the non-injectable `_botName` constructor parameter is always
- * provided by the factory, not resolved by Nest's DI.
+ * plain class provider), which supplies the bot name, the enhancer resolver, and
+ * the `Telegraf` instance explicitly — so the non-injectable `_botName`
+ * constructor parameter is always provided by the factory, not resolved by DI.
  */
 @Injectable()
 export class TelegramBotUpdatesRegistrar implements OnModuleInit {
@@ -77,6 +86,7 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
    * @param discovery - Enumerates the application's providers.
    * @param scanner - Lists method names on a provider prototype.
    * @param reflector - Reads the decorator metadata off classes and methods.
+   * @param enhancers - Resolves a handler's guard/interceptor/filter refs.
    * @param bot - The `Telegraf` instance this registrar's handlers are bound onto.
    */
   public constructor(
@@ -84,6 +94,7 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
     private readonly discovery: DiscoveryService,
     private readonly scanner: MetadataScanner,
     private readonly reflector: Reflector,
+    private readonly enhancers: TelegramEnhancerResolver,
     private readonly bot: Telegraf,
   ) {
     // ── For the default bot keep the bare class name; annotate named bots so
@@ -104,7 +115,8 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
    * matches first would otherwise short-circuit before global middleware ran.
    *
    * @returns Nothing.
-   * @throws Never.
+   * @throws {import('../../common').TelegramConfigError} If an enhancer class
+   *   ref on a discovered handler cannot be resolved from the DI container.
    */
   public onModuleInit(): void {
     const collected: PendingBinding[] = [];
@@ -154,6 +166,8 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
         for (const binding of bindings)
           collected.push({
             instance: instance as object,
+            // ── A discovered @TelegramUpdate provider always has a class. ─────
+            metatype: metatype as Type,
             handler,
             params,
             binding,
@@ -166,70 +180,53 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
     //    second; discovery order is preserved within each group. ─────────────
     const isUse = (entry: PendingBinding): boolean =>
       entry.binding.kind === BOT_UPDATE_KINDS.USE;
-    for (const entry of collected)
-      if (isUse(entry))
-        this.bind(entry.instance, entry.handler, entry.params, entry.binding, entry.label);
-    for (const entry of collected)
-      if (!isUse(entry))
-        this.bind(entry.instance, entry.handler, entry.params, entry.binding, entry.label);
+    for (const entry of collected) if (isUse(entry)) this.bind(entry);
+    for (const entry of collected) if (!isUse(entry)) this.bind(entry);
   }
 
   /**
-   * Binds a single handler/binding pair onto the matching `Telegraf` method.
+   * Binds a single pending binding onto the matching `Telegraf` method, wrapping
+   * dispatch with the handler's resolved enhancers.
    *
    * Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`) are
    * terminal — they do not call `next`. `@Use()` middleware calls `next` after
    * the handler so the middleware chain continues.
    *
-   * @param instance - The provider instance (bound as `this`).
-   * @param handler - The decorated method.
-   * @param params - The method's parameter descriptors.
-   * @param binding - The binding describing how to register the handler.
-   * @param label - Human-readable identifier for logs.
+   * @param entry - The pending binding to apply.
    * @returns Nothing.
-   * @throws Never.
+   * @throws {import('../../common').TelegramConfigError} If an enhancer class ref
+   *   cannot be resolved from the DI container.
    */
-  private bind(
-    instance: object,
-    handler: TelegramUpdateHandler,
-    params: readonly ParamMetadata[],
-    binding: UpdateBinding,
-    label: string,
-  ): void {
+  private bind(entry: PendingBinding): void {
+    const { instance, metatype, handler, params, binding, label } = entry;
+
+    // ── Resolve enhancers once per binding (metadata is fixed at bootstrap). ──
+    const enhancers = this.enhancers.resolve(metatype, handler);
+    const run = (ctx: Context): Promise<void> =>
+      this.dispatch(instance, metatype, handler, params, ctx, label, enhancers);
+
     switch (binding.kind) {
       case BOT_UPDATE_KINDS.START:
-        this.bot.start((ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.start((ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.HELP:
-        this.bot.help((ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.help((ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.COMMAND:
-        this.bot.command(binding.trigger, (ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.command(binding.trigger, (ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.HEARS:
-        this.bot.hears(binding.trigger, (ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.hears(binding.trigger, (ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.ACTION:
-        this.bot.action(binding.trigger, (ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.action(binding.trigger, (ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.ON:
-        this.bot.on(binding.trigger, (ctx: Context) =>
-          this.invoke(instance, handler, params, ctx, label),
-        );
+        this.bot.on(binding.trigger, (ctx: Context) => run(ctx));
         break;
       case BOT_UPDATE_KINDS.USE:
         this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
-          await this.invoke(instance, handler, params, ctx, label);
+          await run(ctx);
           await next();
         });
         break;
@@ -246,8 +243,60 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
   }
 
   /**
+   * Dispatches one update to a handler. Handlers without any enhancers take the
+   * fast path ({@link TelegramBotUpdatesRegistrar.invoke}); otherwise the call is
+   * run through the guard/interceptor/filter pipeline.
+   *
+   * @param instance - The provider instance (bound as `this`).
+   * @param metatype - The provider class (for the execution context).
+   * @param handler - The decorated method.
+   * @param params - The method's parameter descriptors.
+   * @param ctx - The Telegraf context for the current update.
+   * @param label - Identifier for diagnostics.
+   * @param enhancers - The handler's resolved guards/interceptors/filters.
+   * @returns Resolves once the handler (and any enhancers) settle.
+   * @throws Never (errors are routed to filters, else logged).
+   */
+  private async dispatch(
+    instance: object,
+    metatype: Type,
+    handler: TelegramUpdateHandler,
+    params: readonly ParamMetadata[],
+    ctx: Context,
+    label: string,
+    enhancers: ResolvedEnhancers,
+  ): Promise<void> {
+    // ── Fast path: nothing to wrap, behave exactly like the plain invoke. ─────
+    if (
+      enhancers.guards.length === 0 &&
+      enhancers.interceptors.length === 0 &&
+      enhancers.filters.length === 0
+    )
+      return this.invoke(instance, handler, params, ctx, label);
+
+    const context = new TelegramExecutionContext(ctx, metatype, handler);
+    try {
+      const outcome = await runWithEnhancers({
+        context,
+        enhancers,
+        handler: () =>
+          handler.apply(instance, resolveHandlerArguments(ctx, params)),
+      });
+      if (outcome === RUN_OUTCOMES.DENIED)
+        this._logger.debug(
+          `@TelegramUpdate handler ${label} was blocked by a guard`,
+        );
+    } catch (error) {
+      // ── No filter handled it: preserve the isolate-and-log guarantee. ───────
+      const reason = error instanceof Error ? error.message : String(error);
+      this._logger.error(`@TelegramUpdate handler ${label} threw: ${reason}`);
+    }
+  }
+
+  /**
    * Invokes a handler with resolved arguments, isolating errors so one failing
-   * handler never breaks the update pipeline for the others.
+   * handler never breaks the update pipeline for the others. Used for handlers
+   * with no enhancers configured.
    *
    * @param instance - The provider instance (bound as `this`).
    * @param handler - The decorated method.

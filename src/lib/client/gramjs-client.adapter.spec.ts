@@ -10,15 +10,17 @@
  */
 
 import { Api, errors, password, sessions, type TelegramClient } from 'telegram';
-// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
-//    so the import-equals form is required for the call to resolve at runtime. ─
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above: `export =` interop requires the import-equals form.
-import bigInt = require('big-integer');
+
 import { TelegramAuthError, TelegramClientError } from '../common';
 import {
   createGramJsClient,
   GramJsClientAdapter,
 } from './gramjs-client.adapter';
+
+// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
+//    so the import-equals form is required for the call to resolve at runtime. ─
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above: `export =` interop requires the import-equals form.
+import bigInt = require('big-integer');
 
 /** Minimal mock of the GramJS client surface the adapter calls. */
 type MockClient = {

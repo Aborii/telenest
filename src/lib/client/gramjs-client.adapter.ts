@@ -25,8 +25,8 @@ import type { Dialog } from 'telegram/tl/custom/dialog';
 
 import {
   TelegramAuthError,
-  type TelegramAuthErrorCode,
   TelegramClientError,
+  type TelegramAuthErrorCode,
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import {

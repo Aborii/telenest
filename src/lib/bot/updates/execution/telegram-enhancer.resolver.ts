@@ -26,13 +26,13 @@ import { ModuleRef, Reflector } from '@nestjs/core';
 import { TelegramConfigError } from '../../../common';
 import type { TelegramUpdateHandler } from '../telegram-update.types';
 import {
-  type ExceptionType,
   FILTER_CATCH_EXCEPTIONS_METADATA,
-  type ResolvedEnhancers,
-  type ResolvedExceptionFilter,
   TELEGRAM_FILTERS_METADATA,
   TELEGRAM_GUARDS_METADATA,
   TELEGRAM_INTERCEPTORS_METADATA,
+  type ExceptionType,
+  type ResolvedEnhancers,
+  type ResolvedExceptionFilter,
   type TelegramFilter,
   type TelegramFilterRef,
   type TelegramGuard,

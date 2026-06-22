@@ -14,7 +14,7 @@
  * not run lifecycle hooks during `compile()`), so nothing is ever launched.
  */
 
-import { type DynamicModule, Injectable, type Provider } from '@nestjs/common';
+import { Injectable, type DynamicModule, type Provider } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { Context, Telegraf } from 'telegraf';
 

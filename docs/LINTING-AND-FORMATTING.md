@@ -3,9 +3,9 @@
 This project enforces its code conventions automatically with **ESLint** (rules)
 and **Prettier** (formatting), wired so the two never disagree. ESLint turns the
 hard rules in [`CLAUDE.md`](../CLAUDE.md) — no `any`, no `enum`, explicit public
-types — into machine-checked errors and keeps imports sorted; Prettier owns all
-whitespace/quote/comma formatting. Both are deterministic and runnable locally or
-in CI.
+types — into machine-checked errors; Prettier owns all whitespace/quote/comma
+formatting **and import ordering**. Both are deterministic and runnable locally
+or in CI.
 
 ## Table of Contents
 
@@ -22,10 +22,10 @@ in CI.
 
 Two tools with a clean division of labor:
 
-| Tool         | Owns                                            | Config              |
-| ------------ | ----------------------------------------------- | ------------------- |
-| **ESLint**   | Code-correctness rules + import/export ordering | `eslint.config.js`  |
-| **Prettier** | Pure formatting (quotes, commas, width, indent) | `.prettierrc.json`  |
+| Tool         | Owns                                              | Config             |
+| ------------ | ------------------------------------------------- | ------------------ |
+| **ESLint**   | Code-correctness rules (no `any`/`enum`, typing)  | `eslint.config.js` |
+| **Prettier** | Formatting (quotes, commas, width, indent) + import order | `.prettierrc.json` |
 
 `eslint-config-prettier` is loaded **last** in the ESLint flat config. It turns
 off every ESLint rule that would conflict with Prettier, so running both never
@@ -36,8 +36,8 @@ about *layout*.
 
 ```text
 .
-├── eslint.config.js     # ESLint 9 flat config — rules + import sorting + prettier-off
-├── .prettierrc.json     # Prettier options (single quotes, trailing commas, 80 cols, LF)
+├── eslint.config.js     # ESLint 9 flat config — correctness rules + prettier-off
+├── .prettierrc.json     # Prettier options (style + import sorting via @ianvs plugin)
 └── .prettierignore      # Paths Prettier skips (dist, coverage, lockfile, *.md)
 ```
 
@@ -77,17 +77,32 @@ explicit rather than relying on defaults:
 - `singleQuote: true`, `semi: true`, `trailingComma: "all"`
 - `printWidth: 80`, `tabWidth: 2`, `arrowParens: "always"`
 - `endOfLine: "lf"` — commit content stays LF regardless of OS checkout settings.
+- `plugins: ["@ianvs/prettier-plugin-sort-imports"]` — see [Import Sorting](#import-sorting).
 
 Markdown is intentionally excluded (`.prettierignore`) so Prettier never reflows
 the hand-authored docs or breaks Mermaid diagram fences.
 
 ## Import Sorting
 
-`eslint-plugin-simple-import-sort` provides deterministic, **auto-fixable**
-import and export ordering (`simple-import-sort/imports`,
-`simple-import-sort/exports`). It groups third-party packages, then relative
-imports, with a blank line between groups, and sorts alphabetically within each.
-Run `npm run lint:fix` to apply.
+Import ordering is owned by **Prettier**, via the
+[`@ianvs/prettier-plugin-sort-imports`](https://github.com/IanVS/prettier-plugin-sort-imports)
+plugin, so it is applied by the same `npm run format` pass as the rest of the
+formatting (no separate `lint:fix` step). The order is configured in
+`.prettierrc.json`:
+
+```json
+"importOrder": ["<BUILTIN_MODULES>", "<THIRD_PARTY_MODULES>", "", "^[.]"],
+"importOrderParserPlugins": ["typescript", "decorators-legacy"]
+```
+
+- Node built-ins and third-party packages come first, then — after a blank line
+  (the empty `""` group) — relative (`./`, `../`) imports, sorted alphabetically
+  within each group. This reproduces the grouping the codebase already used.
+- `importOrderParserPlugins` enables the TypeScript + legacy-decorator syntax
+  this NestJS codebase relies on, so decorated classes parse correctly.
+
+> Note: the plugin sorts **imports** only, not re-export (`export … from`)
+> statements; barrel files (`index.ts`) keep their hand-authored export order.
 
 ## Environment Variables
 

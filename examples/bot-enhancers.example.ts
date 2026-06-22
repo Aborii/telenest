@@ -26,14 +26,14 @@
  */
 
 import {
-  type CallHandler,
-  type ExecutionContext,
   Injectable,
   Logger,
   Module,
+  type CallHandler,
+  type ExecutionContext,
   type NestInterceptor,
 } from '@nestjs/common';
-import { type Observable, tap } from 'rxjs';
+import { tap, type Observable } from 'rxjs';
 import type { Context } from 'telegraf';
 
 import {
@@ -44,11 +44,11 @@ import {
   TelegramBotModule,
   TelegramExceptionFilter,
   TelegramExecutionContext,
-  type TelegramGuard,
   TelegramUpdate,
   UseTelegramFilters,
   UseTelegramGuards,
   UseTelegramInterceptors,
+  type TelegramGuard,
 } from '../src';
 
 /** Numeric chat ID this example restricts the bot to (replace with your own). */

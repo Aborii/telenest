@@ -26,9 +26,9 @@ import 'reflect-metadata';
 
 import {
   PARAM_KINDS,
+  UPDATE_PARAMS_METADATA,
   type ParamKind,
   type ParamMetadata,
-  UPDATE_PARAMS_METADATA,
 } from './telegram-update.types';
 
 /**

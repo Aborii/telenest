@@ -46,9 +46,9 @@
  */
 
 import {
+  Module,
   type DynamicModule,
   type InjectionToken,
-  Module,
   type Provider,
 } from '@nestjs/common';
 import {

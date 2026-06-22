@@ -23,7 +23,7 @@
  * - RateLimitGuard: the guard implementation.
  */
 
-import { type ExecutionContext, Injectable } from '@nestjs/common';
+import { Injectable, type ExecutionContext } from '@nestjs/common';
 import type { Context } from 'telegraf';
 
 import { TelegramConfigError } from '../../../common';

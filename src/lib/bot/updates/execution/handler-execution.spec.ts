@@ -10,7 +10,7 @@
  */
 
 import type { CallHandler, ExecutionContext, Type } from '@nestjs/common';
-import { type Observable, of, tap } from 'rxjs';
+import { of, tap, type Observable } from 'rxjs';
 import type { Context } from 'telegraf';
 
 import type {
@@ -20,9 +20,9 @@ import type {
   TelegramInterceptor,
 } from './enhancer.types';
 import {
-  type HandlerThunk,
   RUN_OUTCOMES,
   runWithEnhancers,
+  type HandlerThunk,
 } from './handler-execution';
 import { TelegramExecutionContext } from './telegram-execution-context';
 

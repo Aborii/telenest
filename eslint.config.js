@@ -5,16 +5,17 @@
  * -------
  * ESLint flat config (ESLint 9) that enforces this repository's hard
  * conventions in CI and locally. It turns the prose rules in `CLAUDE.md`
- * ("No enums", "No `any`", full typing) into machine-checked lint errors and
- * keeps import order deterministic.
+ * ("No enums", "No `any`", full typing) into machine-checked lint errors.
  *
  * USAGE
  * -----
  *   npm run lint        # check (fails on any finding) — used by CI
- *   npm run lint:fix    # auto-fix what can be fixed (e.g. import order)
+ *   npm run lint:fix    # auto-fix what can be fixed
  *
- * Formatting concerns are owned by Prettier (`.prettierrc`); this config wires
- * in `eslint-config-prettier` last so the two tools never disagree.
+ * Formatting concerns — including deterministic import ordering — are owned by
+ * Prettier (`.prettierrc.json`, via `@ianvs/prettier-plugin-sort-imports`);
+ * this config wires in `eslint-config-prettier` last so the two tools never
+ * disagree.
  *
  * KEY EXPORTS
  * -----------
@@ -22,7 +23,6 @@
  */
 
 const tseslint = require('typescript-eslint');
-const simpleImportSort = require('eslint-plugin-simple-import-sort');
 const eslintConfigPrettier = require('eslint-config-prettier');
 
 module.exports = tseslint.config(
@@ -37,10 +37,6 @@ module.exports = tseslint.config(
   // ── Project conventions (apply to all TypeScript sources) ──────────────────
   {
     files: ['**/*.ts'],
-    plugins: {
-      // Deterministic, auto-fixable import/export ordering.
-      'simple-import-sort': simpleImportSort,
-    },
     rules: {
       // Hard rule: never `any`, explicit or via assertion.
       '@typescript-eslint/no-explicit-any': 'error',
@@ -69,10 +65,6 @@ module.exports = tseslint.config(
             'Do not use `enum`. Use an `as const` object plus a derived union type (see CLAUDE.md, "No enums").',
         },
       ],
-
-      // Deterministic import/export ordering (auto-fixable via `lint:fix`).
-      'simple-import-sort/imports': 'error',
-      'simple-import-sort/exports': 'error',
     },
   },
 

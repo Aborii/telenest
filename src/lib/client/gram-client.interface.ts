@@ -214,7 +214,9 @@ export interface IGramClient {
    * Lists the participants of a group or channel.
    *
    * @param peer - The group/channel (@username or numeric id).
-   * @param params - Optional limit / name filter.
+   * @param params - Optional limit / name filter. With no `limit`, **every**
+   *   participant is fetched (GramJS' default), which is slow and can trigger
+   *   `FLOOD_WAIT` on large peers — pass a `limit` unless you need the full roster.
    * @returns The matching participants as user DTOs.
    * @throws {import('../common').TelegramClientError} On failure.
    */

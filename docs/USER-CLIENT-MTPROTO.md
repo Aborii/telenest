@@ -533,6 +533,8 @@ const avatar = await this.user.downloadProfilePhoto('@durov');
 await this.user.joinChannel('@some_public_channel');
 await this.user.leaveChannel('@some_public_channel');
 
+// Always pass a `limit` — with none, GramJS fetches *every* member, which is
+// slow and can trip FLOOD_WAIT (and looks like member harvesting) on big peers.
 const members = await this.user.getParticipants('@my_group', { limit: 100 });
 const hits = await this.user.searchMessages('@my_group', 'invoice', { limit: 20 });
 

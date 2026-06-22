@@ -232,7 +232,12 @@ export interface GramSendFileParams {
 
 /** Parameters for listing a chat's or channel's participants. */
 export interface GramGetParticipantsParams {
-  /** Maximum number of participants to return. */
+  /**
+   * Maximum number of participants to return. **When omitted, every
+   * participant is fetched** (GramJS' default) — on a large group/channel this
+   * is slow and can trigger `FLOOD_WAIT`. Set a `limit` unless you truly need
+   * the full roster.
+   */
   limit?: number;
   /** Filter participants by a display-name / username query. */
   search?: string;

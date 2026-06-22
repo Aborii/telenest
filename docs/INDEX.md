@@ -40,6 +40,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Parameter injection
   - Best practices
 
+- **[MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)**
+  - Several named bots in one app
+  - `@InjectBot(name)` + `getBotToken`
+  - `@TelegramUpdate({ bot })` handler scoping
+  - Per-bot isolation & lifecycle
+
 - **[AUTHENTICATION.md](./AUTHENTICATION.md)**
   - MTProto authentication deep-dive
   - Login state machine
@@ -165,6 +171,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | ------------------------ | ----------------------------------------------------------------------------------- |
 | Command handlers         | [BOT-API.md § Registering handlers](./BOT-API.md#5-registering-handlers)            |
 | Decorators               | [BOT-UPDATE-DECORATORS.md](./BOT-UPDATE-DECORATORS.md)                              |
+| Multiple named bots      | [MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)                                              |
 | Callback queries         | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
 | Incoming messages (User) | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
 
@@ -312,6 +319,7 @@ nestjs-telegram/
     │   ├── BOT-API.md            ← Complete Bot API guide
     │   ├── USER-CLIENT-MTPROTO.md ← MTProto client guide
     │   ├── BOT-UPDATE-DECORATORS.md ← Decorator handlers
+    │   ├── MULTIPLE-BOTS.md      ← Several named bots in one app
     │   └── AUTHENTICATION.md     ← Auth deep-dive
     │
     ├── Reference

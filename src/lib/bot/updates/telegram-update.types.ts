@@ -23,7 +23,7 @@
  * - PARAM_KINDS / ParamKind: the parameter-injection kinds.
  * - ParamMetadata: a single decorated-parameter descriptor.
  * - TelegramUpdateHandler: the call-shape of a decorated handler method.
- * - *_METADATA: reflect-metadata keys.
+ * - *_METADATA: reflect-metadata keys (including the per-provider target bot).
  */
 
 import type { Telegraf } from 'telegraf';
@@ -138,3 +138,12 @@ export const UPDATE_BINDINGS_METADATA = 'nestjs-telegram:update-bindings';
 
 /** Holds the array of {@link ParamMetadata} attached to a handler method. */
 export const UPDATE_PARAMS_METADATA = 'nestjs-telegram:update-params';
+
+/**
+ * Holds the name of the bot a `@TelegramUpdate` provider's handlers bind to.
+ * Recorded on the class by `@TelegramUpdate({ bot })`; defaults to
+ * {@link import('../telegram-bot.constants').DEFAULT_BOT_NAME} when omitted. The
+ * registrar reads it to scope discovered handlers to the bot it was created for,
+ * so handlers are never bound onto more than one bot in a multi-bot app.
+ */
+export const TELEGRAM_UPDATE_BOT_METADATA = 'nestjs-telegram:update-bot';

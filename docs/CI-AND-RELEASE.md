@@ -109,15 +109,18 @@ created by `npm run git:release` (see [scripts/release.mts](../scripts/release.m
 
 ### The NPM_TOKEN guard
 
-`npm publish` only runs when an `NPM_TOKEN` secret exists. Because the GitHub
-Actions `secrets` context cannot be referenced directly in an `if:` expression,
-the workflow maps the secret to an env var in a `Check for npm token` step and
-exposes a boolean step **output**:
+The token is checked **first**, in a tiny standalone `check` job that does **no
+checkout and no install** — so a tokenless tag spends a few seconds, not minutes
+of runner time on an install/build/test it would only throw away. Because the
+GitHub Actions `secrets` context cannot be referenced directly in a job-level
+`if:`, the `check` job maps the secret to an env var and exposes a boolean job
+**output** (`has_token`) that the `publish` job gates on via `needs`:
 
-- **Token present** → the `Publish to npm` step runs `npm publish --provenance --access public`.
-- **Token absent** → publish is skipped and a `::warning::` annotation is emitted
-  ("NPM_TOKEN secret is not set — skipping the npm publish"). The run still
-  succeeds (green), so tagging a release without a token is a harmless no-op.
+- **Token present** → the `publish` job runs (build + verify + `npm publish`).
+- **Token absent** → the `check` job emits a `::warning::` annotation and the
+  `publish` job is **skipped entirely** (shown as skipped in the UI). The run
+  still succeeds (green), so tagging a release without a token is a harmless,
+  near-instant no-op.
 
 This is the behavior requested for this repository: **no token → no npm release,
 just a warning.**
@@ -157,10 +160,10 @@ flowchart TD
   subgraph Release
     G[npm run git:release] --> H[bump + merge dev→main + tag v* + GitHub release]
     H --> I[push v* tag]
-    I --> J[release.yml: npm ci → typecheck → test → build]
-    J --> K{NPM_TOKEN set?}
-    K -- yes --> L[npm publish --provenance]
-    K -- no --> M[::warning:: skip publish, run stays green]
+    I --> K{check job: NPM_TOKEN set?}
+    K -- yes --> J[publish job: npm ci → typecheck → test → build]
+    J --> L[npm publish --provenance]
+    K -- no --> M[::warning:: publish job skipped, no build runs, run stays green]
   end
 ```
 

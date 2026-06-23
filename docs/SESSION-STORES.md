@@ -151,7 +151,7 @@ const store = new EncryptedSessionStore(
 | Constructor param | Type               | Notes                                                    |
 | ----------------- | ------------------ | -------------------------------------------------------- |
 | `inner`           | `SessionStore`     | The store that persists the encrypted payload.           |
-| `secret`          | `string \| Buffer` | Encryption secret; stretched to a 256-bit key via scrypt. |
+| `secret`          | `string \| Buffer` | Encryption secret (**≥ 16 bytes**); stretched to a 256-bit key via scrypt. |
 
 **Encryption format.** Each saved value is
 `tgenc1:` + `base64(iv ‖ authTag ‖ ciphertext)`, where the IV is a fresh random
@@ -189,7 +189,10 @@ injected by the caller. Conventionally you source them from the environment:
   medium is compromised. Wrap them in `EncryptedSessionStore` when at-rest
   protection matters (clustered/serverless deployments, shared infrastructure).
 - Supply a **high-entropy** `TG_SESSION_KEY` (e.g. 32 random bytes, base64/hex).
-  A weak secret weakens the encryption regardless of the algorithm.
+  A weak secret weakens the encryption regardless of the algorithm. The store
+  rejects any secret shorter than **16 bytes**, but length is a floor, not a
+  guarantee of entropy — scrypt cannot manufacture randomness a passphrase lacks.
+  Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
 - The encrypted store **fails closed**: tampering or a wrong key raises
   `TelegramSessionError` instead of returning a usable session.
 - Never log session strings or the encryption secret.

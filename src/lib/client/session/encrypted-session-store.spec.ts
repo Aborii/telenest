@@ -23,6 +23,19 @@ describe('EncryptedSessionStore', () => {
     );
   });
 
+  it('rejects a too-short secret (< 16 bytes)', () => {
+    expect(
+      () => new EncryptedSessionStore(new InMemorySessionStore(), 'short'),
+    ).toThrow(TelegramSessionError);
+  });
+
+  it('accepts a secret of exactly the minimum length (16 bytes)', async () => {
+    const inner = new InMemorySessionStore();
+    const store = new EncryptedSessionStore(inner, '0123456789abcdef');
+    await store.save('min-len');
+    await expect(store.load()).resolves.toBe('min-len');
+  });
+
   it('round-trips save → load through encryption', async () => {
     const inner = new InMemorySessionStore();
     const store = new EncryptedSessionStore(inner, SECRET);

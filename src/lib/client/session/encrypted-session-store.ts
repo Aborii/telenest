@@ -67,6 +67,13 @@ const FORMAT_PREFIX = 'tgenc1:';
  * still rests on the secret's entropy.
  */
 const KDF_SALT = Buffer.from('nestjs-telegram/session/v1', 'utf8');
+/**
+ * Minimum accepted secret length in bytes (128 bits). The secret protects a
+ * full account credential, so a trivially short value is rejected outright
+ * rather than silently stretched into a weak key. Prefer 32 random bytes —
+ * scrypt cannot manufacture entropy the secret does not already have.
+ */
+const MIN_SECRET_BYTES = 16;
 
 /**
  * Wraps an inner {@link SessionStore}, transparently encrypting on `save` and
@@ -79,8 +86,11 @@ export class EncryptedSessionStore implements SessionStore {
   /**
    * @param inner - The underlying store that persists the (encrypted) payload.
    * @param secret - The encryption secret (env-sourced string or raw `Buffer`).
-   *   Derived into a 256-bit key via `scrypt`; must be non-empty.
-   * @throws {TelegramSessionError} If `secret` is empty.
+   *   Derived into a 256-bit key via `scrypt`. Must be at least
+   *   {@link MIN_SECRET_BYTES} bytes; supply a high-entropy value (ideally 32
+   *   random bytes, e.g. `crypto.randomBytes(32).toString('base64')`).
+   * @throws {TelegramSessionError} If `secret` is shorter than
+   *   {@link MIN_SECRET_BYTES} bytes.
    */
   public constructor(
     private readonly inner: SessionStore,
@@ -88,9 +98,10 @@ export class EncryptedSessionStore implements SessionStore {
   ) {
     const material =
       typeof secret === 'string' ? Buffer.from(secret, 'utf8') : secret;
-    if (material.length === 0)
+    if (material.length < MIN_SECRET_BYTES)
       throw new TelegramSessionError(
-        'EncryptedSessionStore requires a non-empty encryption secret.',
+        `EncryptedSessionStore requires an encryption secret of at least ` +
+          `${MIN_SECRET_BYTES} bytes (got ${material.length}).`,
       );
     // ── Stretch the secret to a fixed 32-byte AES key. scrypt is deterministic
     //    for a given (secret, salt), so prior writes stay decryptable. ────────

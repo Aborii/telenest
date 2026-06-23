@@ -20,6 +20,21 @@ The library lives under `src/lib`; the public entry point is `src/index.ts`. The
 (decorator-style, using `nestjs-telegraf`) kept as an example and excluded from the
 published build. `examples/` holds a login CLI and a reference app module.
 
+### Scope & non-goals — no paid / premium Telegram features
+
+This library targets the **free** Telegram API surface only. Do **not** build,
+plan, or file issues for features that require payment or a paid Telegram tier:
+
+- **Telegram Payments / invoices** (`sendInvoice`, pre-checkout, successful-payment
+  flows, Telegram Stars, paid media) — out of scope.
+- **Telegram Premium-gated capabilities** (premium-only stickers/emoji, raised
+  limits, premium-only Bot API features, business accounts that require a paid
+  plan) — out of scope.
+- Anything else that bills the user or depends on a premium subscription to work.
+
+If a roadmap item or request touches paid/premium functionality, drop that part and
+note why — the library deliberately supports only the free, no-cost feature set.
+
 ### Layout
 
 ```text
@@ -75,6 +90,8 @@ below expand each one.
   "No enums".
 - **No `any`** (explicit or implicit) — use `unknown` at boundaries and narrow.
 - **Keep the Bot and MTProto sides decoupled** — see "Internal decoupling".
+- **No paid / premium Telegram features** — free API surface only; never build or
+  plan payments, Telegram Stars, or Premium-gated capabilities. See "Scope & non-goals".
 - **Full JSDoc** on every file, export, and non-obvious type member.
 - **Tests never hit the network**; co-locate `*.spec.ts`; keep the coverage bar.
 - **Feature work targets `dev`, never `main`** — see "Branching & releases".

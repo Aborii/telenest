@@ -29,11 +29,17 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 
+import {
+  NOOP_TELEGRAM_METRICS,
+  TELEGRAM_COUNTERS,
+  type TelegramMetricsRecorder,
+} from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type {
   GramChatInfo,
@@ -53,7 +59,10 @@ import type {
   GramStreamMediaOptions,
   GramUser,
 } from './gram-client.types';
-import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
+import {
+  TELEGRAM_CLIENT_METRICS,
+  TELEGRAM_GRAM_CLIENT,
+} from './telegram-client.constants';
 
 /**
  * Facade for acting as the logged-in account over MTProto.
@@ -74,6 +83,9 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
   /** Unsubscribe handle returned by `client.onNewMessage`. */
   private _unsubscribe?: () => void;
 
+  /** Metrics sink for this account's counters; no-op recorder when none wired. */
+  private readonly _metrics: TelegramMetricsRecorder;
+
   /**
    * Hot, multicast stream of inbound messages received by the logged-in
    * account. Subscribers added later only see messages from that point on.
@@ -83,10 +95,18 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * @param client - The MTProto client abstraction.
+   * @param metrics - Optional metrics sink. Provided by the module so the
+   *   account's `messagesSent` / `messagesReceived` counters are recorded;
+   *   omitted in direct unit construction, where it falls back to a no-op.
    */
   public constructor(
     @Inject(TELEGRAM_GRAM_CLIENT) private readonly client: IGramClient,
-  ) {}
+    @Optional()
+    @Inject(TELEGRAM_CLIENT_METRICS)
+    metrics?: TelegramMetricsRecorder,
+  ) {
+    this._metrics = metrics ?? NOOP_TELEGRAM_METRICS;
+  }
 
   /**
    * Begins fanning the client's new-message events into {@link updates$}.
@@ -95,9 +115,10 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    * @throws Never.
    */
   public onModuleInit(): void {
-    this._unsubscribe = this.client.onNewMessage((message) =>
-      this._messages.next(message),
-    );
+    this._unsubscribe = this.client.onNewMessage((message) => {
+      this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_RECEIVED);
+      this._messages.next(message);
+    });
     this._logger.log('Subscribed to inbound account messages.');
   }
 
@@ -175,7 +196,9 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
     await this.ensureConnected();
     const params: GramSendMessageParams =
       typeof text === 'string' ? { message: text } : text;
-    return this.client.sendMessage(peer, params);
+    const sent = await this.client.sendMessage(peer, params);
+    this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_SENT);
+    return sent;
   }
 
   /**
@@ -210,7 +233,9 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
     params: GramSendFileParams,
   ): Promise<GramMessage> {
     await this.ensureConnected();
-    return this.client.sendFile(peer, params);
+    const sent = await this.client.sendFile(peer, params);
+    this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_SENT);
+    return sent;
   }
 
   /**

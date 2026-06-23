@@ -31,20 +31,32 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { Telegraf, type Telegram } from 'telegraf';
 
-import { TelegramBotApiError } from '../common';
+import {
+  NOOP_TELEGRAM_METRICS,
+  NOOP_TELEGRAM_TRACER,
+  TELEGRAM_COUNTERS,
+  TelegramBotApiError,
+  type TelegramMetricsRecorder,
+  type TelegramTracer,
+} from '../common';
 import {
   decodeCallbackData as decodeCallbackDataFn,
   encodeCallbackData as encodeCallbackDataFn,
 } from './callback-data.codec';
 import { splitMessageText } from './message-splitter';
 import { withRetry as withRetryFn, type WithRetryOptions } from './retry';
-import { TELEGRAM_BOT } from './telegram-bot.constants';
+import {
+  TELEGRAM_BOT,
+  TELEGRAM_BOT_METRICS,
+  TELEGRAM_BOT_TRACER,
+} from './telegram-bot.constants';
 import { TELEGRAM_BOT_OPTIONS } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 
@@ -63,15 +75,31 @@ export class TelegramBotService
   /** Tracks whether {@link launch} has been invoked, so stop is idempotent. */
   private _launched = false;
 
+  /** Metrics sink for this bot's counters; the no-op recorder when none wired. */
+  private readonly _metrics: TelegramMetricsRecorder;
+
+  /** Tracer wrapping each Bot API call; the no-op tracer when none wired. */
+  private readonly _tracer: TelegramTracer;
+
   /**
    * @param bot - The raw `Telegraf` instance provided under `TELEGRAM_BOT`.
    * @param options - Validated module options controlling launch behaviour.
+   * @param metrics - Optional metrics sink. Provided by the module so counters
+   *   are recorded in production; omitted in direct unit construction, where it
+   *   falls back to a no-op recorder.
+   * @param tracer - Optional tracer wrapping each Bot API call. Defaults to a
+   *   no-op tracer; override the module's tracer provider to emit OTel spans.
    */
   public constructor(
     @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
     @Inject(TELEGRAM_BOT_OPTIONS)
     private readonly options: TelegramBotModuleOptions,
-  ) {}
+    @Optional() @Inject(TELEGRAM_BOT_METRICS) metrics?: TelegramMetricsRecorder,
+    @Optional() @Inject(TELEGRAM_BOT_TRACER) tracer?: TelegramTracer,
+  ) {
+    this._metrics = metrics ?? NOOP_TELEGRAM_METRICS;
+    this._tracer = tracer ?? NOOP_TELEGRAM_TRACER;
+  }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -1086,8 +1114,10 @@ export class TelegramBotService
   // ── Internal error handling ─────────────────────────────────────────────────
 
   /**
-   * Executes a Bot API call, normalizing any thrown value into a
-   * {@link TelegramBotApiError}.
+   * Executes a Bot API call inside a tracing span, normalizing any thrown value
+   * into a {@link TelegramBotApiError} and recording metrics: a successful
+   * `send*` call (other than `sendChatAction`) bumps `messagesSent`; a failure
+   * bumps `apiErrors`, plus `floodWaits` when Telegram returned a `retry_after`.
    *
    * @typeParam T - The resolved result type of the call.
    * @param method - Name of the Bot API method, for diagnostics.
@@ -1095,12 +1125,38 @@ export class TelegramBotService
    * @returns The result of `fn`.
    * @throws {TelegramBotApiError} Always, when `fn` rejects.
    */
-  private async exec<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      throw this.toBotApiError(method, error);
-    }
+  private exec<T>(method: string, fn: () => Promise<T>): Promise<T> {
+    return this._tracer.startActiveSpan(
+      `telegram.bot.${method}`,
+      async () => {
+        try {
+          const result = await fn();
+          if (TelegramBotService.isSendMethod(method))
+            this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_SENT);
+          return result;
+        } catch (error) {
+          const apiError = this.toBotApiError(method, error);
+          this._metrics.increment(TELEGRAM_COUNTERS.API_ERRORS);
+          if (apiError.retryAfterSeconds !== undefined)
+            this._metrics.increment(TELEGRAM_COUNTERS.FLOOD_WAITS);
+          throw apiError;
+        }
+      },
+      { 'telegram.bot.method': method },
+    );
+  }
+
+  /**
+   * Whether a Bot API method name counts as sending a message for metrics. Every
+   * `send*` method qualifies except `sendChatAction`, which only emits a
+   * typing/upload indicator rather than a real message.
+   *
+   * @param method - The Bot API method name.
+   * @returns `true` when a success should bump `messagesSent`.
+   * @throws Never.
+   */
+  private static isSendMethod(method: string): boolean {
+    return method.startsWith('send') && method !== 'sendChatAction';
   }
 
   /**

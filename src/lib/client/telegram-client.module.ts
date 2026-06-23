@@ -50,9 +50,9 @@
  */
 
 import {
+  Module,
   type DynamicModule,
   type InjectionToken,
-  Module,
   type Provider,
 } from '@nestjs/common';
 import {
@@ -62,11 +62,17 @@ import {
   Reflector,
 } from '@nestjs/core';
 
+import {
+  InMemoryTelegramMetrics,
+  type TelegramMetrics,
+  type TelegramMetricsRecorder,
+} from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type { SessionStore } from './session/session-store.interface';
 import { TelegramAuthService } from './telegram-auth.service';
 import { DEFAULT_CLIENT_NAME } from './telegram-client.constants';
 import { createConnectedGramClient } from './telegram-client.factory';
+import { TelegramClientHealthIndicator } from './telegram-client.health';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import {
   ConfigurableModuleClass,
@@ -76,7 +82,9 @@ import {
 } from './telegram-client.module-definition';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
 import {
+  getClientHealthToken,
   getClientLifecycleToken,
+  getClientMetricsToken,
   getClientRegistrarToken,
   getGramClientToken,
   getSessionStoreToken,
@@ -105,7 +113,13 @@ function createClientProviders(name: string): Provider[] {
   const clientToken = getGramClientToken(name);
   const storeToken = getSessionStoreToken(name);
   const userToken = getTelegramUserToken(name);
+  const metricsToken = getClientMetricsToken(name);
   return [
+    // ── Per-account metrics sink (in-memory; readable via .snapshot()). ───────
+    {
+      provide: metricsToken,
+      useFactory: (): TelegramMetrics => new InMemoryTelegramMetrics(),
+    },
     // ── Configured session store (or undefined) for this account. ─────────────
     {
       provide: storeToken,
@@ -135,8 +149,17 @@ function createClientProviders(name: string): Provider[] {
     // ── "Act as the account" facade + inbound updates$ source. ────────────────
     {
       provide: userToken,
-      useFactory: (client: IGramClient): TelegramUserService =>
-        new TelegramUserService(client),
+      useFactory: (
+        client: IGramClient,
+        metrics: TelegramMetricsRecorder,
+      ): TelegramUserService => new TelegramUserService(client, metrics),
+      inject: [clientToken, metricsToken],
+    },
+    // ── Health indicator probing connection/authorization for terminus. ───────
+    {
+      provide: getClientHealthToken(name),
+      useFactory: (client: IGramClient): TelegramClientHealthIndicator =>
+        new TelegramClientHealthIndicator(client),
       inject: [clientToken],
     },
     // ── Disconnects this account's client on shutdown. ────────────────────────
@@ -181,6 +204,8 @@ function createClientExports(name: string): InjectionToken[] {
     getSessionStoreToken(name),
     getTelegramAuthToken(name),
     getTelegramUserToken(name),
+    getClientMetricsToken(name),
+    getClientHealthToken(name),
   ];
 }
 

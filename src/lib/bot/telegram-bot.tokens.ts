@@ -32,12 +32,20 @@
  * - getBotToken: DI token for a bot's `TelegramBotService` facade.
  * - getBotInstanceToken: DI token for a bot's raw `Telegraf` instance.
  * - getBotRegistrarToken: DI token for a bot's update registrar (internal).
+ * - getBotMetricsToken / getBotTracerToken: tokens for a bot's metrics/tracer.
+ * - getBotHealthToken: DI token for a bot's health indicator.
  * - InjectBot: parameter/property decorator injecting a bot's facade by name.
  */
 
 import { Inject, type InjectionToken } from '@nestjs/common';
 
-import { DEFAULT_BOT_NAME, TELEGRAM_BOT } from './telegram-bot.constants';
+import {
+  DEFAULT_BOT_NAME,
+  TELEGRAM_BOT,
+  TELEGRAM_BOT_METRICS,
+  TELEGRAM_BOT_TRACER,
+} from './telegram-bot.constants';
+import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import { TelegramBotService } from './telegram-bot.service';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
 
@@ -49,6 +57,15 @@ const NAMED_BOT_SERVICE_PREFIX = 'NESTJS_TELEGRAM_BOT_SERVICE:';
 
 /** Token prefix for a named bot's update registrar. */
 const NAMED_BOT_REGISTRAR_PREFIX = 'NESTJS_TELEGRAM_BOT_REGISTRAR:';
+
+/** Token prefix for a named bot's metrics surface. */
+const NAMED_BOT_METRICS_PREFIX = 'NESTJS_TELEGRAM_BOT_METRICS:';
+
+/** Token prefix for a named bot's tracer. */
+const NAMED_BOT_TRACER_PREFIX = 'NESTJS_TELEGRAM_BOT_TRACER:';
+
+/** Token prefix for a named bot's health indicator. */
+const NAMED_BOT_HEALTH_PREFIX = 'NESTJS_TELEGRAM_BOT_HEALTH:';
 
 /**
  * Whether `name` refers to the default bot (unset, or the default sentinel).
@@ -115,6 +132,51 @@ export function getBotRegistrarToken(name?: string): InjectionToken {
   return isDefaultBot(name)
     ? TelegramBotUpdatesRegistrar
     : `${NAMED_BOT_REGISTRAR_PREFIX}${name}`;
+}
+
+/**
+ * Resolves the DI token for a bot's {@link import('../common').TelegramMetrics}
+ * surface — inject it to read the bot's counters via `.snapshot()`.
+ *
+ * @param name - The bot name; omit (or pass the default name) for the default bot.
+ * @returns The `TELEGRAM_BOT_METRICS` symbol for the default bot, else a
+ *   name-derived string token.
+ * @throws Never.
+ */
+export function getBotMetricsToken(name?: string): InjectionToken {
+  return isDefaultBot(name)
+    ? TELEGRAM_BOT_METRICS
+    : `${NAMED_BOT_METRICS_PREFIX}${name}`;
+}
+
+/**
+ * Resolves the DI token for a bot's {@link import('../common').TelegramTracer}.
+ * Override this provider to emit OpenTelemetry spans around Bot API calls.
+ *
+ * @param name - The bot name; omit (or pass the default name) for the default bot.
+ * @returns The `TELEGRAM_BOT_TRACER` symbol for the default bot, else a
+ *   name-derived string token.
+ * @throws Never.
+ */
+export function getBotTracerToken(name?: string): InjectionToken {
+  return isDefaultBot(name)
+    ? TELEGRAM_BOT_TRACER
+    : `${NAMED_BOT_TRACER_PREFIX}${name}`;
+}
+
+/**
+ * Resolves the DI token for a bot's
+ * {@link import('./telegram-bot.health').TelegramBotHealthIndicator}.
+ *
+ * @param name - The bot name; omit (or pass the default name) for the default bot.
+ * @returns The `TelegramBotHealthIndicator` class for the default bot, else a
+ *   name-derived string token.
+ * @throws Never.
+ */
+export function getBotHealthToken(name?: string): InjectionToken {
+  return isDefaultBot(name)
+    ? TelegramBotHealthIndicator
+    : `${NAMED_BOT_HEALTH_PREFIX}${name}`;
 }
 
 /**

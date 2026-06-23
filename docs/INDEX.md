@@ -70,6 +70,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - `EncryptedSessionStore` (AES-256-GCM at rest)
   - Composing stores & security notes
 
+- **[OBSERVABILITY.md](./OBSERVABILITY.md)**
+  - Per-side health indicators (`@nestjs/terminus`-compatible, zero-import)
+  - Metrics counters (sent/received/errors/flood-waits) + `snapshot()`
+  - OpenTelemetry tracing via a guarded, opt-in bridge
+  - DI tokens and how to bridge to Prometheus
+
 ### Reference Documentation
 
 - **[API-REFERENCE.md](./API-REFERENCE.md)** 📖
@@ -348,7 +354,8 @@ nestjs-telegram/
     │   ├── BOT-UPDATE-DECORATORS.md ← Decorator handlers
     │   ├── MULTIPLE-BOTS.md      ← Several named bots in one app
     │   ├── MULTIPLE-ACCOUNTS.md  ← Several named user accounts in one app
-    │   └── AUTHENTICATION.md     ← Auth deep-dive
+    │   ├── AUTHENTICATION.md     ← Auth deep-dive
+    │   └── OBSERVABILITY.md      ← Health, metrics & tracing
     │
     ├── Reference
     │   ├── API-REFERENCE.md      ← All APIs, methods, types

@@ -31,3 +31,4 @@ export {
 } from './telegram-bot.tokens';
 export * from './updates';
 export * from './web-app';
+export * from './webhook';

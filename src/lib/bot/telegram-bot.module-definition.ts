@@ -20,6 +20,7 @@
 import { ConfigurableModuleBuilder } from '@nestjs/common';
 
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
+import type { TelegramBotWebhookOptions } from './webhook/telegram-webhook.options';
 
 /**
  * Extra (non-option) settings accepted alongside the module options.
@@ -41,6 +42,17 @@ export interface TelegramBotModuleExtras {
    * `@TelegramUpdate({ bot: name })`. Each registered bot must use a distinct name.
    */
   name?: string;
+
+  /**
+   * Enables the built-in webhook controller for this bot: a `POST {path}` route
+   * that verifies Telegram's secret-token header and feeds updates into the bot.
+   * Lives here (an extra) rather than in
+   * {@link import('./telegram-bot.options').TelegramBotModuleOptions} because the
+   * route `path` must be known synchronously — even for `forRootAsync` — to build
+   * the controller, the same reason {@link TelegramBotModuleExtras.name} does.
+   * Omit to run in long-polling mode or to mount the webhook callback yourself.
+   */
+  webhook?: TelegramBotWebhookOptions;
 }
 
 /**

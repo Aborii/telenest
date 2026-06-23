@@ -14,7 +14,7 @@ import { Test } from '@nestjs/testing';
 import type { IGramClient } from '../client/gram-client.interface';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
 import { TelegramUserService } from '../client/telegram-user.service';
-import { aGramMessage, aGramUser } from './dto-builders';
+import { aGramChatInfo, aGramMessage, aGramUser } from './dto-builders';
 import {
   createMockGramClient,
   provideMockGramClient,
@@ -34,6 +34,19 @@ const CLIENT_METHODS: ReadonlyArray<keyof IGramClient> = [
   'getDialogs',
   'getMessages',
   'sendMessage',
+  'sendFile',
+  'downloadMedia',
+  'downloadProfilePhoto',
+  'joinChannel',
+  'leaveChannel',
+  'getParticipants',
+  'searchMessages',
+  'getFullChat',
+  'editMessage',
+  'deleteMessages',
+  'forwardMessages',
+  'markAsRead',
+  'pinMessage',
   'exportSession',
   'onNewMessage',
 ];
@@ -60,6 +73,32 @@ describe('createMockGramClient', () => {
       aGramMessage(),
     );
     expect(client.exportSession()).toBe('TEST_SESSION');
+  });
+
+  it('defaults the extended user operations to representative values', async () => {
+    const client = createMockGramClient();
+
+    await expect(client.sendFile('me', { file: 'a.png' })).resolves.toEqual(
+      aGramMessage({ hasMedia: true }),
+    );
+    await expect(client.downloadMedia('me', 1)).resolves.toEqual(
+      Buffer.from('TEST_MEDIA'),
+    );
+    await expect(client.downloadProfilePhoto('me')).resolves.toEqual(
+      Buffer.from('TEST_PHOTO'),
+    );
+    await expect(client.joinChannel('@x')).resolves.toBeUndefined();
+    await expect(client.leaveChannel('@x')).resolves.toBeUndefined();
+    await expect(client.getParticipants('@x')).resolves.toEqual([]);
+    await expect(client.searchMessages('@x', 'q')).resolves.toEqual([]);
+    await expect(client.getFullChat('@x')).resolves.toEqual(aGramChatInfo());
+    await expect(client.editMessage('me', 1, 'new')).resolves.toEqual(
+      aGramMessage(),
+    );
+    await expect(client.deleteMessages('me', [1])).resolves.toBeUndefined();
+    await expect(client.forwardMessages('me', '@x', [1])).resolves.toEqual([]);
+    await expect(client.markAsRead('me')).resolves.toBeUndefined();
+    await expect(client.pinMessage('me', 1)).resolves.toBeUndefined();
   });
 
   it('defaults the auth flow to a completed sign-in', async () => {

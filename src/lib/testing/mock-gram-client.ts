@@ -43,14 +43,17 @@ import type { ValueProvider } from '@nestjs/common';
 import type { IGramClient } from '../client/gram-client.interface';
 import { GRAM_SIGN_IN_STATUSES } from '../client/gram-client.types';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
-import { aGramMessage, aGramUser } from './dto-builders';
+import { aGramChatInfo, aGramMessage, aGramUser } from './dto-builders';
 
 /**
  * Builds a fully-mocked {@link IGramClient}. Every method is a `jest.fn()` with a
  * sensible default: the client reports itself connected and authorized, `getMe`
- * resolves a representative account, list calls resolve empty arrays, and
- * `sendMessage` echoes a representative message. Pass `overrides` to change the
- * behaviour of any method per test.
+ * resolves a representative account, list/search calls resolve empty arrays,
+ * `sendMessage` / `sendFile` / `editMessage` echo a representative message,
+ * `download*` calls resolve representative buffers, `getFullChat` resolves a
+ * representative group, and the void management calls (`join`/`leaveChannel`,
+ * `deleteMessages`, `markAsRead`, `pinMessage`) resolve. Pass `overrides` to
+ * change the behaviour of any method per test.
  *
  * Because the defaults make `isConnected()` return `true`, the user-account
  * services skip their lazy `connect()` call; override `isConnected` to return
@@ -90,6 +93,21 @@ export function createMockGramClient(
     getDialogs: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(aGramMessage()),
+    sendFile: jest.fn().mockResolvedValue(aGramMessage({ hasMedia: true })),
+    downloadMedia: jest.fn().mockResolvedValue(Buffer.from('TEST_MEDIA')),
+    downloadProfilePhoto: jest
+      .fn()
+      .mockResolvedValue(Buffer.from('TEST_PHOTO')),
+    joinChannel: jest.fn().mockResolvedValue(undefined),
+    leaveChannel: jest.fn().mockResolvedValue(undefined),
+    getParticipants: jest.fn().mockResolvedValue([]),
+    searchMessages: jest.fn().mockResolvedValue([]),
+    getFullChat: jest.fn().mockResolvedValue(aGramChatInfo()),
+    editMessage: jest.fn().mockResolvedValue(aGramMessage()),
+    deleteMessages: jest.fn().mockResolvedValue(undefined),
+    forwardMessages: jest.fn().mockResolvedValue([]),
+    markAsRead: jest.fn().mockResolvedValue(undefined),
+    pinMessage: jest.fn().mockResolvedValue(undefined),
     exportSession: jest.fn().mockReturnValue('TEST_SESSION'),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;

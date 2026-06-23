@@ -27,10 +27,12 @@
  * - aGramUser: Builds a {@link GramUser} (the logged-in account by default).
  * - aGramMessage: Builds a {@link GramMessage} (an outgoing text message).
  * - aGramDialog: Builds a {@link GramDialog} (a one-to-one user conversation).
+ * - aGramChatInfo: Builds a {@link GramChatInfo} (extended group info).
  */
 
 import {
   GRAM_DIALOG_TYPES,
+  type GramChatInfo,
   type GramDialog,
   type GramMessage,
   type GramUser,
@@ -105,6 +107,33 @@ export function aGramDialog(overrides: Partial<GramDialog> = {}): GramDialog {
     type: GRAM_DIALOG_TYPES.USER,
     unreadCount: 0,
     pinned: false,
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a representative {@link GramChatInfo}. The defaults describe a small
+ * public group; pass `overrides` to model users, channels, or member counts.
+ *
+ * @param overrides - Fields to replace on the default chat info.
+ * @returns A fully-typed {@link GramChatInfo}.
+ * @throws Never.
+ * @example
+ * ```ts
+ * const channel = aGramChatInfo({ type: 'channel', participantsCount: 12000 });
+ * ```
+ */
+export function aGramChatInfo(
+  overrides: Partial<GramChatInfo> = {},
+): GramChatInfo {
+  return {
+    id: '1000',
+    type: GRAM_DIALOG_TYPES.GROUP,
+    title: 'Test Group',
+    username: 'test_group',
+    about: 'A representative group.',
+    participantsCount: 3,
+    verified: false,
     ...overrides,
   };
 }

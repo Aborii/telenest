@@ -32,12 +32,19 @@ import type { IGramClient } from './gram-client.interface';
 import {
   GRAM_DIALOG_TYPES,
   GRAM_SIGN_IN_STATUSES,
+  type GramChatInfo,
+  type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogType,
   type GramGetDialogsParams,
   type GramGetMessagesParams,
+  type GramGetParticipantsParams,
   type GramMessage,
   type GramPeer,
+  type GramPinMessageParams,
+  type GramSearchMessagesParams,
   type GramSendCodeResult,
+  type GramSendFileParams,
   type GramSendMessageParams,
   type GramSignInResult,
   type GramSignInWithCodeInput,
@@ -277,6 +284,276 @@ export class GramJsClientAdapter implements IGramClient {
     }
   }
 
+  // ── Media ──────────────────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.sendFile} */
+  public async sendFile(
+    peer: GramPeer,
+    params: GramSendFileParams,
+  ): Promise<GramMessage> {
+    try {
+      const message = await this.client.sendFile(peer, {
+        file: params.file,
+        caption: params.caption,
+        // ── `asPhoto` inverts GramJS' `forceDocument`; leaving it undefined
+        //    keeps GramJS' extension-based inference. ──────────────────────────
+        forceDocument:
+          params.asPhoto === undefined ? undefined : !params.asPhoto,
+        parseMode: params.parseMode,
+        replyTo: params.replyTo,
+        silent: params.silent,
+      });
+      return this.mapMessage(message);
+    } catch (error) {
+      throw new TelegramClientError('Failed to send file.', {
+        operation: 'sendFile',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadMedia} */
+  public async downloadMedia(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Buffer | undefined> {
+    try {
+      const [message] = await this.client.getMessages(peer, {
+        ids: [messageId],
+      });
+      if (!message || !this.hasDownloadableMedia(message)) return undefined;
+      const data = await this.client.downloadMedia(message);
+      // ── Without an `outputFile`, GramJS resolves to the raw bytes; a string
+      //    would only appear if a file path were requested. ───────────────────
+      return Buffer.isBuffer(data) ? data : undefined;
+    } catch (error) {
+      throw new TelegramClientError('Failed to download media.', {
+        operation: 'downloadMedia',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadProfilePhoto} */
+  public async downloadProfilePhoto(
+    peer: GramPeer,
+  ): Promise<Buffer | undefined> {
+    try {
+      const data = await this.client.downloadProfilePhoto(peer);
+      return Buffer.isBuffer(data) ? data : undefined;
+    } catch (error) {
+      throw new TelegramClientError('Failed to download profile photo.', {
+        operation: 'downloadProfilePhoto',
+        cause: error,
+      });
+    }
+  }
+
+  // ── Chats & channels ───────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.joinChannel} */
+  public async joinChannel(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.invoke(new Api.channels.JoinChannel({ channel: peer }));
+    } catch (error) {
+      throw new TelegramClientError('Failed to join channel.', {
+        operation: 'joinChannel',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.leaveChannel} */
+  public async leaveChannel(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.invoke(
+        new Api.channels.LeaveChannel({ channel: peer }),
+      );
+    } catch (error) {
+      throw new TelegramClientError('Failed to leave channel.', {
+        operation: 'leaveChannel',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getParticipants} */
+  public async getParticipants(
+    peer: GramPeer,
+    params: GramGetParticipantsParams = {},
+  ): Promise<GramUser[]> {
+    try {
+      const participants = await this.client.getParticipants(peer, {
+        limit: params.limit,
+        search: params.search,
+      });
+      return participants.map((user) => this.mapUser(user));
+    } catch (error) {
+      throw new TelegramClientError('Failed to list participants.', {
+        operation: 'getParticipants',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchMessages} */
+  public async searchMessages(
+    peer: GramPeer,
+    query: string,
+    params: GramSearchMessagesParams = {},
+  ): Promise<GramMessage[]> {
+    try {
+      const messages = await this.client.getMessages(peer, {
+        search: query,
+        limit: params.limit,
+      });
+      return messages.map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw new TelegramClientError('Failed to search messages.', {
+        operation: 'searchMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getFullChat} */
+  public async getFullChat(peer: GramPeer): Promise<GramChatInfo> {
+    try {
+      const entity = await this.client.getEntity(peer);
+
+      // ── User: bio lives on `users.GetFullUser().fullUser.about`. ───────────
+      if (entity instanceof Api.User) {
+        const full = await this.client.invoke(
+          new Api.users.GetFullUser({ id: entity }),
+        );
+        return this.mapChatInfo(entity, full.fullUser.about, undefined);
+      }
+
+      // ── Channel / supergroup: description + count on `ChannelFull`. ─────────
+      if (entity instanceof Api.Channel) {
+        const full = await this.client.invoke(
+          new Api.channels.GetFullChannel({ channel: entity }),
+        );
+        const fullChat = full.fullChat;
+        const count =
+          fullChat instanceof Api.ChannelFull
+            ? fullChat.participantsCount
+            : undefined;
+        return this.mapChatInfo(entity, fullChat.about, count);
+      }
+
+      // ── Basic group: description on `ChatFull`; count on the entity. ────────
+      if (entity instanceof Api.Chat) {
+        const full = await this.client.invoke(
+          new Api.messages.GetFullChat({ chatId: entity.id }),
+        );
+        return this.mapChatInfo(
+          entity,
+          full.fullChat.about,
+          entity.participantsCount,
+        );
+      }
+
+      // ── Empty / forbidden peers carry no full info to surface. ─────────────
+      throw new TelegramClientError(
+        'Peer has no accessible chat information.',
+        { operation: 'getFullChat' },
+      );
+    } catch (error) {
+      throw this.toClientError(error, 'Failed to fetch chat info.', 'getFullChat');
+    }
+  }
+
+  // ── Message operations ─────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.editMessage} */
+  public async editMessage(
+    peer: GramPeer,
+    messageId: number,
+    text: string,
+  ): Promise<GramMessage> {
+    try {
+      const message = await this.client.editMessage(peer, {
+        message: messageId,
+        text,
+      });
+      return this.mapMessage(message);
+    } catch (error) {
+      throw new TelegramClientError('Failed to edit message.', {
+        operation: 'editMessage',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.deleteMessages} */
+  public async deleteMessages(
+    peer: GramPeer,
+    messageIds: number[],
+    params: GramDeleteMessagesParams = {},
+  ): Promise<void> {
+    try {
+      await this.client.deleteMessages(peer, messageIds, {
+        revoke: params.revoke ?? true,
+      });
+    } catch (error) {
+      throw new TelegramClientError('Failed to delete messages.', {
+        operation: 'deleteMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.forwardMessages} */
+  public async forwardMessages(
+    toPeer: GramPeer,
+    fromPeer: GramPeer,
+    messageIds: number[],
+  ): Promise<GramMessage[]> {
+    try {
+      const messages = await this.client.forwardMessages(toPeer, {
+        messages: messageIds,
+        fromPeer,
+      });
+      return messages.map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw new TelegramClientError('Failed to forward messages.', {
+        operation: 'forwardMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.markAsRead} */
+  public async markAsRead(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.markAsRead(peer);
+    } catch (error) {
+      throw new TelegramClientError('Failed to mark as read.', {
+        operation: 'markAsRead',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.pinMessage} */
+  public async pinMessage(
+    peer: GramPeer,
+    messageId: number,
+    params: GramPinMessageParams = {},
+  ): Promise<void> {
+    try {
+      await this.client.pinMessage(peer, messageId, {
+        notify: params.notify ?? false,
+      });
+    } catch (error) {
+      throw new TelegramClientError('Failed to pin message.', {
+        operation: 'pinMessage',
+        cause: error,
+      });
+    }
+  }
+
   /** {@inheritDoc IGramClient.exportSession} */
   public exportSession(): string {
     // ── StringSession.save() returns the encoded string; the abstract base
@@ -365,6 +642,74 @@ export class GramJsClientAdapter implements IGramClient {
       date: message.date,
       out: Boolean(message.out),
       senderId: sender ? sender.toString() : undefined,
+      hasMedia: this.hasDownloadableMedia(message),
+    };
+  }
+
+  /**
+   * Reports whether a message carries downloadable media. An empty media
+   * placeholder ({@link Api.MessageMediaEmpty}) does not count.
+   *
+   * @param message - The message to inspect.
+   * @returns `true` when the message has non-empty media.
+   * @throws Never.
+   */
+  private hasDownloadableMedia(message: Api.Message): boolean {
+    return (
+      Boolean(message.media) &&
+      !(message.media instanceof Api.MessageMediaEmpty)
+    );
+  }
+
+  /**
+   * Maps a GramJS resolved entity into a {@link GramChatInfo}, merging in the
+   * description / participant count read from a matching "full" request.
+   *
+   * @param entity - The resolved `Api.User` / `Api.Chat` / `Api.Channel`.
+   * @param about - The bio/description from the full request, when present.
+   * @param participantsCount - Member count from the full request, when present.
+   * @returns The normalized chat-info DTO.
+   * @throws Never.
+   */
+  private mapChatInfo(
+    entity: Api.User | Api.Chat | Api.Channel,
+    about: string | undefined,
+    participantsCount: number | undefined,
+  ): GramChatInfo {
+    if (entity instanceof Api.User) {
+      const fullName = [entity.firstName, entity.lastName]
+        .filter((part): part is string => Boolean(part))
+        .join(' ');
+      return {
+        id: entity.id.toString(),
+        type: GRAM_DIALOG_TYPES.USER,
+        title: fullName,
+        username: entity.username,
+        about,
+        participantsCount: undefined,
+        verified: Boolean(entity.verified),
+      };
+    }
+
+    // ── A basic group (`Api.Chat`) is always a group; a `Api.Channel` is a
+    //    channel unless its `megagroup` flag marks it as a supergroup. ────────
+    const type: GramDialogType =
+      entity instanceof Api.Chat
+        ? GRAM_DIALOG_TYPES.GROUP
+        : entity.megagroup
+          ? GRAM_DIALOG_TYPES.GROUP
+          : GRAM_DIALOG_TYPES.CHANNEL;
+
+    return {
+      id: entity.id.toString(),
+      type,
+      title: entity.title,
+      // ── Basic groups have no username; only channels/supergroups do. ───────
+      username: entity instanceof Api.Channel ? entity.username : undefined,
+      about,
+      participantsCount,
+      verified:
+        entity instanceof Api.Channel ? Boolean(entity.verified) : false,
     };
   }
 
@@ -383,6 +728,27 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   // ── Error mapping ──────────────────────────────────────────────────────────
+
+  /**
+   * Wraps a caught value in a {@link TelegramClientError}, passing an existing
+   * {@link TelegramClientError} through unchanged. Lets a method `throw` a
+   * precise client error from inside its own `try` block without it being
+   * double-wrapped by the surrounding `catch`.
+   *
+   * @param error - The caught value.
+   * @param message - Message for the wrapper when `error` is not already one.
+   * @param operation - The operation name recorded on the wrapper.
+   * @returns A {@link TelegramClientError}.
+   * @throws Never.
+   */
+  private toClientError(
+    error: unknown,
+    message: string,
+    operation: string,
+  ): TelegramClientError {
+    if (error instanceof TelegramClientError) return error;
+    return new TelegramClientError(message, { operation, cause: error });
+  }
 
   /**
    * Detects GramJS' `SESSION_PASSWORD_NEEDED` signal (2FA required).

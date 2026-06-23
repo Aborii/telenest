@@ -33,6 +33,16 @@ type MockClient = {
   getDialogs: jest.Mock;
   getMessages: jest.Mock;
   sendMessage: jest.Mock;
+  sendFile: jest.Mock;
+  downloadMedia: jest.Mock;
+  downloadProfilePhoto: jest.Mock;
+  getParticipants: jest.Mock;
+  getEntity: jest.Mock;
+  editMessage: jest.Mock;
+  deleteMessages: jest.Mock;
+  forwardMessages: jest.Mock;
+  markAsRead: jest.Mock;
+  pinMessage: jest.Mock;
   addEventHandler: jest.Mock;
   removeEventHandler: jest.Mock;
 };
@@ -49,6 +59,16 @@ function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
     getDialogs: jest.fn(),
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
+    sendFile: jest.fn(),
+    downloadMedia: jest.fn(),
+    downloadProfilePhoto: jest.fn(),
+    getParticipants: jest.fn(),
+    getEntity: jest.fn(),
+    editMessage: jest.fn(),
+    deleteMessages: jest.fn(),
+    forwardMessages: jest.fn(),
+    markAsRead: jest.fn(),
+    pinMessage: jest.fn(),
     addEventHandler: jest.fn(),
     removeEventHandler: jest.fn(),
     ...overrides,
@@ -62,6 +82,46 @@ function createAdapter(mock: MockClient): GramJsClientAdapter {
     new sessions.StringSession(''),
     { apiId: 1, apiHash: 'hash' },
   );
+}
+
+/**
+ * Builds an `Api.*` instance carrying only the fields a test needs, with the
+ * correct prototype so the adapter's `instanceof` checks pass — without having
+ * to satisfy every required constructor field.
+ *
+ * @param ctor - The `Api.*` class whose prototype to use.
+ * @param fields - The subset of fields the adapter reads.
+ * @returns An object that is `instanceof ctor`.
+ */
+function asEntity<T extends object>(
+  ctor: { prototype: T },
+  fields: Partial<T>,
+): T {
+  return Object.assign(Object.create(ctor.prototype) as T, fields);
+}
+
+/** A GramJS message-like fixture with optional non-empty media. */
+function aRawMessage(
+  overrides: Partial<{
+    id: number;
+    peerId: Api.TypePeer;
+    message: string;
+    date: number;
+    out: boolean;
+    senderId: ReturnType<typeof bigInt> | undefined;
+    media: Api.TypeMessageMedia | undefined;
+  }> = {},
+): unknown {
+  return {
+    id: 1,
+    peerId: new Api.PeerUser({ userId: bigInt('1001') }),
+    message: 'hi',
+    date: 1700000000,
+    out: true,
+    senderId: bigInt('1001'),
+    media: undefined,
+    ...overrides,
+  };
 }
 
 describe('GramJsClientAdapter', () => {
@@ -449,6 +509,7 @@ describe('GramJsClientAdapter', () => {
           date: 1700000000,
           out: true,
           senderId: '1001',
+          hasMedia: false,
         },
       ]);
     });
@@ -475,6 +536,7 @@ describe('GramJsClientAdapter', () => {
         date: 1700000001,
         out: true,
         senderId: undefined,
+        hasMedia: false,
       });
     });
 
@@ -639,6 +701,7 @@ describe('GramJsClientAdapter', () => {
           date: 5,
           out: false,
           senderId: '1001',
+          hasMedia: false,
         },
       ]);
     });
@@ -654,5 +717,475 @@ describe('GramJsClientAdapter', () => {
       expect(mock.removeEventHandler).toHaveBeenCalledTimes(1);
       expect(mock.removeEventHandler.mock.calls[0]?.[0]).toBe(registeredCb);
     });
+  });
+
+  describe('media operations', () => {
+    it('flags non-empty media via hasMedia when mapping', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.hasMedia).toBe(true);
+    });
+
+    it('treats MessageMediaEmpty as no media', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaEmpty() })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.hasMedia).toBe(false);
+    });
+
+    it('sendFile maps the message and sends asPhoto as forceDocument:false', async () => {
+      const mock = createMockClient({
+        sendFile: jest
+          .fn()
+          .mockResolvedValue(
+            aRawMessage({ id: 3, media: new Api.MessageMediaPhoto({}) }),
+          ),
+      });
+
+      const sent = await createAdapter(mock).sendFile('me', {
+        file: 'photo.jpg',
+        caption: 'hey',
+        asPhoto: true,
+      });
+
+      expect(sent.id).toBe(3);
+      expect(sent.hasMedia).toBe(true);
+      expect(mock.sendFile).toHaveBeenCalledWith(
+        'me',
+        expect.objectContaining({
+          file: 'photo.jpg',
+          caption: 'hey',
+          forceDocument: false,
+        }),
+      );
+    });
+
+    it('sendFile forces a document when asPhoto is false', async () => {
+      const mock = createMockClient({
+        sendFile: jest.fn().mockResolvedValue(aRawMessage()),
+      });
+      await createAdapter(mock).sendFile('me', { file: 'a.bin', asPhoto: false });
+      expect(mock.sendFile.mock.calls[0]?.[1]).toMatchObject({
+        forceDocument: true,
+      });
+    });
+
+    it('sendFile leaves forceDocument undefined when asPhoto is omitted', async () => {
+      const mock = createMockClient({
+        sendFile: jest.fn().mockResolvedValue(aRawMessage()),
+      });
+      await createAdapter(mock).sendFile('me', { file: 'a.bin' });
+      expect(mock.sendFile.mock.calls[0]?.[1].forceDocument).toBeUndefined();
+    });
+
+    it('downloadMedia fetches the message and returns its bytes', async () => {
+      const buffer = Buffer.from('PNGDATA');
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+        downloadMedia: jest.fn().mockResolvedValue(buffer),
+      });
+      await expect(createAdapter(mock).downloadMedia('me', 1)).resolves.toBe(
+        buffer,
+      );
+      expect(mock.getMessages).toHaveBeenCalledWith('me', { ids: [1] });
+    });
+
+    it('downloadMedia returns undefined when the message is missing', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await expect(
+        createAdapter(mock).downloadMedia('me', 9),
+      ).resolves.toBeUndefined();
+    });
+
+    it('downloadMedia returns undefined (and never downloads) without media', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aRawMessage()]),
+        downloadMedia: jest.fn(),
+      });
+      await expect(
+        createAdapter(mock).downloadMedia('me', 1),
+      ).resolves.toBeUndefined();
+      expect(mock.downloadMedia).not.toHaveBeenCalled();
+    });
+
+    it('downloadMedia returns undefined when GramJS resolves a non-Buffer', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+        downloadMedia: jest.fn().mockResolvedValue('/tmp/path'),
+      });
+      await expect(
+        createAdapter(mock).downloadMedia('me', 1),
+      ).resolves.toBeUndefined();
+    });
+
+    it('downloadProfilePhoto returns bytes, or undefined when absent', async () => {
+      const buffer = Buffer.from('JPEG');
+      const withPhoto = createMockClient({
+        downloadProfilePhoto: jest.fn().mockResolvedValue(buffer),
+      });
+      const without = createMockClient({
+        downloadProfilePhoto: jest.fn().mockResolvedValue(undefined),
+      });
+      await expect(
+        createAdapter(withPhoto).downloadProfilePhoto('me'),
+      ).resolves.toBe(buffer);
+      await expect(
+        createAdapter(without).downloadProfilePhoto('me'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('wraps downloadMedia failures in TelegramClientError', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockRejectedValue(new Error('rpc')),
+      });
+      await expect(
+        createAdapter(mock).downloadMedia('me', 1),
+      ).rejects.toBeInstanceOf(TelegramClientError);
+    });
+
+    it.each([
+      [
+        'sendFile',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.sendFile('me', { file: 'x' }),
+      ],
+      [
+        'downloadProfilePhoto',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.downloadProfilePhoto('me'),
+      ],
+    ])('wraps %s failures in TelegramClientError', async (method, call) => {
+      const mock = createMockClient({
+        [method]: jest.fn().mockRejectedValue(new Error('rpc')),
+      } as Partial<MockClient>);
+      await expect(call(createAdapter(mock))).rejects.toBeInstanceOf(
+        TelegramClientError,
+      );
+    });
+  });
+
+  describe('chat & channel operations', () => {
+    it('joinChannel invokes channels.JoinChannel', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(undefined),
+      });
+      await createAdapter(mock).joinChannel('@chan');
+      expect(mock.invoke.mock.calls[0]?.[0]).toBeInstanceOf(
+        Api.channels.JoinChannel,
+      );
+    });
+
+    it('leaveChannel invokes channels.LeaveChannel', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(undefined),
+      });
+      await createAdapter(mock).leaveChannel('@chan');
+      expect(mock.invoke.mock.calls[0]?.[0]).toBeInstanceOf(
+        Api.channels.LeaveChannel,
+      );
+    });
+
+    it('getParticipants maps users and forwards limit/search', async () => {
+      const mock = createMockClient({
+        getParticipants: jest.fn().mockResolvedValue([
+          { id: bigInt('1'), self: false, firstName: 'A' },
+          new Api.UserEmpty({ id: bigInt('2') }),
+        ]),
+      });
+      const users = await createAdapter(mock).getParticipants('@g', {
+        limit: 5,
+        search: 'a',
+      });
+      expect(users).toEqual([
+        { id: '1', isSelf: false, isBot: false, isPremium: false, firstName: 'A' },
+        { id: '2', isSelf: false, isBot: false, isPremium: false },
+      ]);
+      expect(mock.getParticipants).toHaveBeenCalledWith('@g', {
+        limit: 5,
+        search: 'a',
+      });
+    });
+
+    it('searchMessages maps results and forwards the query', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 11, message: 'found' })]),
+      });
+      const [message] = await createAdapter(mock).searchMessages('@g', 'find', {
+        limit: 3,
+      });
+      expect(message?.text).toBe('found');
+      expect(mock.getMessages).toHaveBeenCalledWith('@g', {
+        search: 'find',
+        limit: 3,
+      });
+    });
+
+    it('getFullChat maps a user (bio from GetFullUser)', async () => {
+      const user = asEntity(Api.User, {
+        id: bigInt('5'),
+        firstName: 'Ada',
+        lastName: 'L',
+        username: 'ada',
+        verified: true,
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(user),
+        invoke: jest.fn().mockResolvedValue({ fullUser: { about: 'hi there' } }),
+      });
+      await expect(createAdapter(mock).getFullChat('@ada')).resolves.toEqual({
+        id: '5',
+        type: 'user',
+        title: 'Ada L',
+        username: 'ada',
+        about: 'hi there',
+        participantsCount: undefined,
+        verified: true,
+      });
+    });
+
+    it('getFullChat maps a broadcast channel (count from ChannelFull)', async () => {
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'News',
+        username: 'news',
+        verified: true,
+        megagroup: undefined,
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(channel),
+        invoke: jest.fn().mockResolvedValue({
+          fullChat: asEntity(Api.ChannelFull, {
+            about: 'breaking',
+            participantsCount: 1200,
+          }),
+        }),
+      });
+      await expect(createAdapter(mock).getFullChat('@news')).resolves.toEqual({
+        id: '77',
+        type: 'channel',
+        title: 'News',
+        username: 'news',
+        about: 'breaking',
+        participantsCount: 1200,
+        verified: true,
+      });
+    });
+
+    it('getFullChat treats a megagroup channel as a group', async () => {
+      const supergroup = asEntity(Api.Channel, {
+        id: bigInt('88'),
+        title: 'Devs',
+        megagroup: true,
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(supergroup),
+        invoke: jest.fn().mockResolvedValue({
+          fullChat: asEntity(Api.ChannelFull, { about: '', participantsCount: 5 }),
+        }),
+      });
+      const info = await createAdapter(mock).getFullChat('@devs');
+      expect(info.type).toBe('group');
+      expect(info.participantsCount).toBe(5);
+    });
+
+    it('getFullChat tolerates a non-ChannelFull result (no count)', async () => {
+      const channel = asEntity(Api.Channel, { id: bigInt('90'), title: 'C' });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(channel),
+        invoke: jest.fn().mockResolvedValue({ fullChat: { about: 'x' } }),
+      });
+      const info = await createAdapter(mock).getFullChat('@c');
+      expect(info.participantsCount).toBeUndefined();
+      expect(info.about).toBe('x');
+    });
+
+    it('getFullChat maps a basic group (count from the entity)', async () => {
+      const chat = asEntity(Api.Chat, {
+        id: bigInt('9'),
+        title: 'Family',
+        participantsCount: 4,
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(chat),
+        invoke: jest.fn().mockResolvedValue({ fullChat: { about: 'kin' } }),
+      });
+      await expect(createAdapter(mock).getFullChat(9)).resolves.toEqual({
+        id: '9',
+        type: 'group',
+        title: 'Family',
+        username: undefined,
+        about: 'kin',
+        participantsCount: 4,
+        verified: false,
+      });
+    });
+
+    it('getFullChat throws TelegramClientError for an empty/forbidden peer', async () => {
+      const mock = createMockClient({
+        getEntity: jest
+          .fn()
+          .mockResolvedValue(new Api.UserEmpty({ id: bigInt('0') })),
+      });
+      const error = await createAdapter(mock)
+        .getFullChat('me')
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect((error as TelegramClientError).operation).toBe('getFullChat');
+    });
+
+    it('getFullChat wraps underlying failures without double-wrapping', async () => {
+      const mock = createMockClient({
+        getEntity: jest.fn().mockRejectedValue(new Error('rpc')),
+      });
+      await expect(
+        createAdapter(mock).getFullChat('@x'),
+      ).rejects.toBeInstanceOf(TelegramClientError);
+    });
+  });
+
+  describe('message operations', () => {
+    it('editMessage maps the edited message', async () => {
+      const mock = createMockClient({
+        editMessage: jest
+          .fn()
+          .mockResolvedValue(aRawMessage({ id: 12, message: 'edited' })),
+      });
+      const edited = await createAdapter(mock).editMessage('me', 12, 'edited');
+      expect(edited).toMatchObject({ id: 12, text: 'edited' });
+      expect(mock.editMessage).toHaveBeenCalledWith('me', {
+        message: 12,
+        text: 'edited',
+      });
+    });
+
+    it('deleteMessages revokes by default and respects an explicit flag', async () => {
+      const mock = createMockClient({
+        deleteMessages: jest.fn().mockResolvedValue([]),
+      });
+      const adapter = createAdapter(mock);
+
+      await adapter.deleteMessages('me', [1, 2]);
+      expect(mock.deleteMessages).toHaveBeenCalledWith('me', [1, 2], {
+        revoke: true,
+      });
+
+      await adapter.deleteMessages('me', [3], { revoke: false });
+      expect(mock.deleteMessages).toHaveBeenLastCalledWith('me', [3], {
+        revoke: false,
+      });
+    });
+
+    it('forwardMessages maps the forwarded messages', async () => {
+      const mock = createMockClient({
+        forwardMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 21 }), aRawMessage({ id: 22 })]),
+      });
+      const forwarded = await createAdapter(mock).forwardMessages(
+        '@to',
+        '@from',
+        [21, 22],
+      );
+      expect(forwarded.map((m) => m.id)).toEqual([21, 22]);
+      expect(mock.forwardMessages).toHaveBeenCalledWith('@to', {
+        messages: [21, 22],
+        fromPeer: '@from',
+      });
+    });
+
+    it('markAsRead delegates to the client', async () => {
+      const mock = createMockClient({
+        markAsRead: jest.fn().mockResolvedValue(true),
+      });
+      await createAdapter(mock).markAsRead('@g');
+      expect(mock.markAsRead).toHaveBeenCalledWith('@g');
+    });
+
+    it('pinMessage forwards notify (default false)', async () => {
+      const mock = createMockClient({
+        pinMessage: jest.fn().mockResolvedValue(undefined),
+      });
+      const adapter = createAdapter(mock);
+
+      await adapter.pinMessage('me', 7);
+      expect(mock.pinMessage).toHaveBeenCalledWith('me', 7, { notify: false });
+
+      await adapter.pinMessage('me', 8, { notify: true });
+      expect(mock.pinMessage).toHaveBeenLastCalledWith('me', 8, { notify: true });
+    });
+
+    it.each([
+      [
+        'joinChannel',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.joinChannel('@x'),
+      ],
+      [
+        'leaveChannel',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.leaveChannel('@x'),
+      ],
+      [
+        'getParticipants',
+        'getParticipants',
+        (a: GramJsClientAdapter): Promise<unknown> => a.getParticipants('@x'),
+      ],
+      [
+        'searchMessages',
+        'getMessages',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchMessages('@x', 'q'),
+      ],
+      [
+        'editMessage',
+        'editMessage',
+        (a: GramJsClientAdapter): Promise<unknown> => a.editMessage('me', 1, 't'),
+      ],
+      [
+        'deleteMessages',
+        'deleteMessages',
+        (a: GramJsClientAdapter): Promise<unknown> => a.deleteMessages('me', [1]),
+      ],
+      [
+        'forwardMessages',
+        'forwardMessages',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.forwardMessages('a', 'b', [1]),
+      ],
+      [
+        'markAsRead',
+        'markAsRead',
+        (a: GramJsClientAdapter): Promise<unknown> => a.markAsRead('me'),
+      ],
+      [
+        'pinMessage',
+        'pinMessage',
+        (a: GramJsClientAdapter): Promise<unknown> => a.pinMessage('me', 1),
+      ],
+    ])(
+      'wraps %s failures in TelegramClientError',
+      async (_method, underlying, call) => {
+        const mock = createMockClient({
+          [underlying]: jest.fn().mockRejectedValue(new Error('rpc')),
+        } as Partial<MockClient>);
+        await expect(call(createAdapter(mock))).rejects.toBeInstanceOf(
+          TelegramClientError,
+        );
+      },
+    );
   });
 });

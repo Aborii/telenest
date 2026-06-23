@@ -23,6 +23,12 @@ import { Api, errors, password, sessions, TelegramClient } from 'telegram';
 import { NewMessage, type NewMessageEvent } from 'telegram/events';
 import type { Dialog } from 'telegram/tl/custom/dialog';
 
+// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
+//    so the import-equals form is required. GramJS' download offset is a
+//    big-integer `BigInteger`, not a native `bigint`. ────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above.
+import bigInt = require('big-integer');
+
 import {
   TelegramAuthError,
   TelegramClientError,
@@ -31,6 +37,7 @@ import {
 import type { IGramClient } from './gram-client.interface';
 import {
   GRAM_DIALOG_TYPES,
+  GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
   type GramChatInfo,
   type GramDeleteMessagesParams,
@@ -39,6 +46,9 @@ import {
   type GramGetDialogsParams,
   type GramGetMessagesParams,
   type GramGetParticipantsParams,
+  type GramMediaInfo,
+  type GramMediaKind,
+  type GramMediaRange,
   type GramMessage,
   type GramPeer,
   type GramPinMessageParams,
@@ -48,9 +58,24 @@ import {
   type GramSendMessageParams,
   type GramSignInResult,
   type GramSignInWithCodeInput,
+  type GramStreamMediaOptions,
   type GramUser,
 } from './gram-client.types';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
+
+/**
+ * Per-request download size for streaming, in bytes. Must be a multiple of
+ * 4096 and at most GramJS' 512 KiB cap; 512 KiB minimizes the number of MTProto
+ * round-trips per streamed range.
+ */
+const STREAM_REQUEST_SIZE = 512 * 1024;
+
+/**
+ * Telegram's `upload.getFile` offset must be a multiple of this. We align the
+ * requested offset down to it and slice the surplus off the first chunk, which
+ * is valid for both of GramJS' direct and generic download iterators.
+ */
+const MEDIA_OFFSET_ALIGN = 4096;
 
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
@@ -347,6 +372,127 @@ export class GramJsClientAdapter implements IGramClient {
         cause: error,
       });
     }
+  }
+
+  /** {@inheritDoc IGramClient.getMediaInfo} */
+  public async getMediaInfo(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<GramMediaInfo | undefined> {
+    try {
+      const message = await this.fetchMediaMessage(peer, messageId);
+      if (!message) return undefined;
+      return this.mapMediaInfo(message.media);
+    } catch (error) {
+      throw new TelegramClientError('Failed to read media info.', {
+        operation: 'getMediaInfo',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadMediaRange} */
+  public async downloadMediaRange(
+    peer: GramPeer,
+    messageId: number,
+    range: GramMediaRange,
+  ): Promise<Buffer | undefined> {
+    try {
+      const message = await this.fetchMediaMessage(peer, messageId);
+      if (!message) return undefined;
+
+      // ── Align down to a valid Telegram offset, then slice the surplus. ─────
+      const skip = range.offset % MEDIA_OFFSET_ALIGN;
+      const alignedOffset = range.offset - skip;
+      const needed = skip + range.limit;
+
+      const buffers: Buffer[] = [];
+      let collected = 0;
+      for await (const chunk of this.client.iterDownload({
+        file: message.media,
+        offset: bigInt(alignedOffset),
+        requestSize: STREAM_REQUEST_SIZE,
+      })) {
+        buffers.push(chunk);
+        collected += chunk.length;
+        if (collected >= needed) break;
+      }
+
+      return Buffer.concat(buffers).subarray(skip, skip + range.limit);
+    } catch (error) {
+      throw new TelegramClientError('Failed to download media range.', {
+        operation: 'downloadMediaRange',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.streamMedia} */
+  public async streamMedia(
+    peer: GramPeer,
+    messageId: number,
+    options: GramStreamMediaOptions = {},
+  ): Promise<AsyncIterable<Buffer>> {
+    let message: Api.Message | undefined;
+    try {
+      message = await this.fetchMediaMessage(peer, messageId);
+    } catch (error) {
+      throw new TelegramClientError('Failed to stream media.', {
+        operation: 'streamMedia',
+        cause: error,
+      });
+    }
+    if (!message)
+      throw new TelegramClientError(
+        'Message has no downloadable media to stream.',
+        { operation: 'streamMedia' },
+      );
+
+    const media = message.media;
+    const client = this.client;
+    const offset = options.offset ?? 0;
+    const limit = options.limit;
+    const alignedOffset = offset - (offset % MEDIA_OFFSET_ALIGN);
+
+    // ── Lazy generator: GramJS yields aligned chunks; we trim the leading
+    //    surplus (offset % 4096) and stop once `limit` bytes are emitted. ─────
+    return (async function* streamChunks(): AsyncGenerator<Buffer> {
+      let skip = offset - alignedOffset;
+      let remaining = limit;
+      try {
+        for await (const raw of client.iterDownload({
+          file: media,
+          offset: bigInt(alignedOffset),
+          requestSize: STREAM_REQUEST_SIZE,
+        })) {
+          let chunk = raw;
+          if (skip > 0) {
+            if (chunk.length <= skip) {
+              skip -= chunk.length;
+              continue;
+            }
+            chunk = chunk.subarray(skip);
+            skip = 0;
+          }
+          if (remaining === undefined) {
+            yield chunk;
+            continue;
+          }
+          if (remaining <= 0) return;
+          if (chunk.length >= remaining) {
+            yield chunk.subarray(0, remaining);
+            return;
+          }
+          yield chunk;
+          remaining -= chunk.length;
+        }
+      } catch (error) {
+        throw new TelegramClientError('Failed to stream media.', {
+          operation: 'streamMedia',
+          cause: error,
+        });
+      }
+    })();
   }
 
   // ── Chats & channels ───────────────────────────────────────────────────────
@@ -659,6 +805,77 @@ export class GramJsClientAdapter implements IGramClient {
       Boolean(message.media) &&
       !(message.media instanceof Api.MessageMediaEmpty)
     );
+  }
+
+  /**
+   * Fetches a single message by id and returns it only when it carries
+   * downloadable media. Used by the media-info / range / stream operations.
+   *
+   * @param peer - Peer the message belongs to.
+   * @param messageId - Id of the message to fetch.
+   * @returns The message when it has non-empty media, else `undefined`.
+   * @throws Propagates the GramJS error (callers wrap it).
+   */
+  private async fetchMediaMessage(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Api.Message | undefined> {
+    const [message] = await this.client.getMessages(peer, {
+      ids: [messageId],
+    });
+    if (!message || !this.hasDownloadableMedia(message)) return undefined;
+    return message;
+  }
+
+  /**
+   * Maps a message's media into a {@link GramMediaInfo}.
+   *
+   * @param media - The message media (already known to be non-empty).
+   * @returns The descriptor, or `undefined` for media with no file body
+   *   (e.g. a web-page preview or geo point).
+   * @throws Never.
+   */
+  private mapMediaInfo(
+    media: Api.TypeMessageMedia | undefined,
+  ): GramMediaInfo | undefined {
+    // ── Photos have no single byte size here; report the kind only. ─────────
+    if (media instanceof Api.MessageMediaPhoto)
+      return { kind: GRAM_MEDIA_KINDS.PHOTO, mimeType: 'image/jpeg' };
+
+    if (!(media instanceof Api.MessageMediaDocument)) return undefined;
+    const doc = media.document;
+    if (!(doc instanceof Api.Document)) return undefined;
+
+    const video = doc.attributes.find(
+      (a): a is Api.DocumentAttributeVideo =>
+        a instanceof Api.DocumentAttributeVideo,
+    );
+    const audio = doc.attributes.find(
+      (a): a is Api.DocumentAttributeAudio =>
+        a instanceof Api.DocumentAttributeAudio,
+    );
+    const named = doc.attributes.find(
+      (a): a is Api.DocumentAttributeFilename =>
+        a instanceof Api.DocumentAttributeFilename,
+    );
+
+    // ── A video attribute wins; otherwise an audio attribute distinguishes a
+    //    voice note from music; otherwise it is a plain document. ────────────
+    let kind: GramMediaKind = GRAM_MEDIA_KINDS.DOCUMENT;
+    if (video) kind = GRAM_MEDIA_KINDS.VIDEO;
+    else if (audio)
+      kind = audio.voice ? GRAM_MEDIA_KINDS.VOICE : GRAM_MEDIA_KINDS.AUDIO;
+
+    return {
+      kind,
+      mimeType: doc.mimeType,
+      size: doc.size.toJSNumber(),
+      fileName: named?.fileName,
+      durationSeconds: video?.duration ?? audio?.duration,
+      width: video?.w,
+      height: video?.h,
+      supportsStreaming: video?.supportsStreaming,
+    };
   }
 
   /**

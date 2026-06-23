@@ -289,3 +289,73 @@ export interface GramChatInfo {
   /** Whether the peer carries Telegram's verified badge. */
   verified: boolean;
 }
+
+/**
+ * Closed set of media kinds reported by
+ * {@link import('./gram-client.interface').IGramClient.getMediaInfo}. Declared
+ * as an `as const` record (never an `enum`) so {@link GramMediaKind} derives
+ * from it.
+ */
+export const GRAM_MEDIA_KINDS = {
+  /** A photo. */
+  PHOTO: 'photo',
+  /** A video document. */
+  VIDEO: 'video',
+  /** A music / audio document. */
+  AUDIO: 'audio',
+  /** A voice note. */
+  VOICE: 'voice',
+  /** Any other document (file, gif, sticker, …). */
+  DOCUMENT: 'document',
+} as const;
+
+/** Union of the media kinds in {@link GRAM_MEDIA_KINDS}. */
+export type GramMediaKind =
+  (typeof GRAM_MEDIA_KINDS)[keyof typeof GRAM_MEDIA_KINDS];
+
+/**
+ * GramJS-free descriptor of a message's media, returned by
+ * {@link import('./gram-client.interface').IGramClient.getMediaInfo}. Carries
+ * exactly what an HTTP layer needs to serve the bytes (Content-Type,
+ * Content-Length, Accept-Ranges) plus light playback metadata.
+ */
+export interface GramMediaInfo {
+  /** Which kind of media this is. */
+  kind: GramMediaKind;
+  /** MIME type (e.g. `'video/mp4'`), when known. */
+  mimeType?: string;
+  /**
+   * Total size in bytes, when known. A `number` is safe: Telegram media is far
+   * below `2^53` bytes (unlike entity ids, which are returned as strings).
+   */
+  size?: number;
+  /** Original file name, when present. */
+  fileName?: string;
+  /** Duration in seconds for video / audio / voice, when known. */
+  durationSeconds?: number;
+  /** Pixel width for video, when known. */
+  width?: number;
+  /** Pixel height for video, when known. */
+  height?: number;
+  /**
+   * Whether the uploader flagged the video as streamable (clients can play it
+   * before the full download completes).
+   */
+  supportsStreaming?: boolean;
+}
+
+/** A byte range for {@link import('./gram-client.interface').IGramClient.downloadMediaRange}. */
+export interface GramMediaRange {
+  /** Zero-based byte offset to start at. */
+  offset: number;
+  /** Number of bytes to return (the response may be shorter at end-of-file). */
+  limit: number;
+}
+
+/** Options for {@link import('./gram-client.interface').IGramClient.streamMedia}. */
+export interface GramStreamMediaOptions {
+  /** Zero-based byte offset to start streaming from. Defaults to `0`. */
+  offset?: number;
+  /** Maximum number of bytes to stream. Defaults to "until end-of-file". */
+  limit?: number;
+}

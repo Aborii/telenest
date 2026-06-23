@@ -10,6 +10,7 @@
 import {
   aGramChatInfo,
   aGramDialog,
+  aGramMediaInfo,
   aGramMessage,
   aGramUser,
 } from './dto-builders';
@@ -118,6 +119,33 @@ describe('DTO builders', () => {
       expect(channel.verified).toBe(true);
       // Untouched fields keep their defaults.
       expect(channel.id).toBe('1000');
+    });
+  });
+
+  describe('aGramMediaInfo', () => {
+    it('returns a streamable video by default', () => {
+      expect(aGramMediaInfo()).toEqual({
+        kind: 'video',
+        mimeType: 'video/mp4',
+        size: 1_048_576,
+        fileName: 'clip.mp4',
+        durationSeconds: 12,
+        width: 1280,
+        height: 720,
+        supportsStreaming: true,
+      });
+    });
+
+    it('applies overrides (e.g. a PDF document)', () => {
+      const doc = aGramMediaInfo({
+        kind: 'document',
+        mimeType: 'application/pdf',
+        fileName: 'report.pdf',
+      });
+      expect(doc.kind).toBe('document');
+      expect(doc.mimeType).toBe('application/pdf');
+      // Untouched fields keep their defaults.
+      expect(doc.size).toBe(1_048_576);
     });
   });
 });

@@ -43,15 +43,21 @@ import type { ValueProvider } from '@nestjs/common';
 import type { IGramClient } from '../client/gram-client.interface';
 import { GRAM_SIGN_IN_STATUSES } from '../client/gram-client.types';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
-import { aGramChatInfo, aGramMessage, aGramUser } from './dto-builders';
+import {
+  aGramChatInfo,
+  aGramMediaInfo,
+  aGramMessage,
+  aGramUser,
+} from './dto-builders';
 
 /**
  * Builds a fully-mocked {@link IGramClient}. Every method is a `jest.fn()` with a
  * sensible default: the client reports itself connected and authorized, `getMe`
  * resolves a representative account, list/search calls resolve empty arrays,
  * `sendMessage` / `sendFile` / `editMessage` echo a representative message,
- * `download*` calls resolve representative buffers, `getFullChat` resolves a
- * representative group, and the void management calls (`join`/`leaveChannel`,
+ * `download*` calls resolve representative buffers, `getMediaInfo` resolves a
+ * representative video descriptor, `streamMedia` yields one chunk, `getFullChat`
+ * resolves a representative group, and the void management calls (`join`/`leaveChannel`,
  * `deleteMessages`, `markAsRead`, `pinMessage`) resolve. Pass `overrides` to
  * change the behaviour of any method per test.
  *
@@ -98,6 +104,18 @@ export function createMockGramClient(
     downloadProfilePhoto: jest
       .fn()
       .mockResolvedValue(Buffer.from('TEST_PHOTO')),
+    getMediaInfo: jest.fn().mockResolvedValue(aGramMediaInfo()),
+    downloadMediaRange: jest
+      .fn()
+      .mockResolvedValue(Buffer.from('TEST_RANGE')),
+    // ── A fresh single-chunk async iterable per call (re-iterable across
+    //    tests because `createMockGramClient` is invoked per test). ──────────
+    streamMedia: jest.fn().mockImplementation(
+      async () =>
+        (async function* () {
+          yield Buffer.from('TEST_MEDIA');
+        })(),
+    ),
     joinChannel: jest.fn().mockResolvedValue(undefined),
     leaveChannel: jest.fn().mockResolvedValue(undefined),
     getParticipants: jest.fn().mockResolvedValue([]),

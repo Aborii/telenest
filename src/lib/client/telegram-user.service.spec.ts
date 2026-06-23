@@ -47,6 +47,9 @@ function createFakeClient(
     sendFile: jest.fn(),
     downloadMedia: jest.fn(),
     downloadProfilePhoto: jest.fn(),
+    getMediaInfo: jest.fn(),
+    downloadMediaRange: jest.fn(),
+    streamMedia: jest.fn(),
     joinChannel: jest.fn(),
     leaveChannel: jest.fn(),
     getParticipants: jest.fn(),
@@ -148,6 +151,30 @@ describe('TelegramUserService', () => {
       const client = createFakeClient();
       await new TelegramUserService(client).downloadProfilePhoto('me');
       expect(client.downloadProfilePhoto).toHaveBeenCalledWith('me');
+    });
+
+    it('getMediaInfo forwards peer and message id', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).getMediaInfo('@x', 7);
+      expect(client.getMediaInfo).toHaveBeenCalledWith('@x', 7);
+    });
+
+    it('downloadMediaRange forwards peer, id and range', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).downloadMediaRange('@x', 7, {
+        offset: 100,
+        limit: 50,
+      });
+      expect(client.downloadMediaRange).toHaveBeenCalledWith('@x', 7, {
+        offset: 100,
+        limit: 50,
+      });
+    });
+
+    it('streamMedia forwards peer, id and options', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).streamMedia('@x', 7, { offset: 8 });
+      expect(client.streamMedia).toHaveBeenCalledWith('@x', 7, { offset: 8 });
     });
 
     it('joinChannel and leaveChannel forward the peer', async () => {

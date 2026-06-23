@@ -28,12 +28,15 @@
  * - aGramMessage: Builds a {@link GramMessage} (an outgoing text message).
  * - aGramDialog: Builds a {@link GramDialog} (a one-to-one user conversation).
  * - aGramChatInfo: Builds a {@link GramChatInfo} (extended group info).
+ * - aGramMediaInfo: Builds a {@link GramMediaInfo} (a streamable video).
  */
 
 import {
   GRAM_DIALOG_TYPES,
+  GRAM_MEDIA_KINDS,
   type GramChatInfo,
   type GramDialog,
+  type GramMediaInfo,
   type GramMessage,
   type GramUser,
 } from '../client/gram-client.types';
@@ -134,6 +137,34 @@ export function aGramChatInfo(
     about: 'A representative group.',
     participantsCount: 3,
     verified: false,
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a representative {@link GramMediaInfo}. The defaults describe a small
+ * streamable MP4 video; pass `overrides` to model audio, documents, or photos.
+ *
+ * @param overrides - Fields to replace on the default media info.
+ * @returns A fully-typed {@link GramMediaInfo}.
+ * @throws Never.
+ * @example
+ * ```ts
+ * const doc = aGramMediaInfo({ kind: 'document', mimeType: 'application/pdf' });
+ * ```
+ */
+export function aGramMediaInfo(
+  overrides: Partial<GramMediaInfo> = {},
+): GramMediaInfo {
+  return {
+    kind: GRAM_MEDIA_KINDS.VIDEO,
+    mimeType: 'video/mp4',
+    size: 1_048_576,
+    fileName: 'clip.mp4',
+    durationSeconds: 12,
+    width: 1280,
+    height: 720,
+    supportsStreaming: true,
     ...overrides,
   };
 }

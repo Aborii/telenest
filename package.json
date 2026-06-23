@@ -70,6 +70,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
+    "git:release": "node scripts/release.mts",
     "prepare": "npm run build"
   },
   "peerDependencies": {
@@ -88,8 +89,8 @@
       "optional": true
     }
   },
-  "dependencies": {},
   "devDependencies": {
+    "@clack/prompts": "^1.6.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@nestjs/cli": "^11.0.21",
     "@nestjs/common": "^11.1.21",

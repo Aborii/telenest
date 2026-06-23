@@ -41,14 +41,18 @@ describe('EncryptedSessionStore', () => {
   });
 
   it('produces a different ciphertext each save (random IV)', async () => {
-    const store = new EncryptedSessionStore(new InMemorySessionStore(), SECRET);
     const a = new InMemorySessionStore();
     const b = new InMemorySessionStore();
     await new EncryptedSessionStore(a, SECRET).save('same');
     await new EncryptedSessionStore(b, SECRET).save('same');
     expect(a.load()).not.toBe(b.load());
-    // ── Both still decrypt back to the same plaintext. ──────────────────────
-    await expect(store.save('same')).resolves.toBeUndefined();
+    // ── Distinct ciphertexts must both still decrypt to the same plaintext. ──
+    await expect(new EncryptedSessionStore(a, SECRET).load()).resolves.toBe(
+      'same',
+    );
+    await expect(new EncryptedSessionStore(b, SECRET).load()).resolves.toBe(
+      'same',
+    );
   });
 
   it('returns undefined when the inner store is empty', async () => {

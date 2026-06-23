@@ -14,6 +14,7 @@ export * from './gram-client.interface';
 export * from './gram-client.types';
 export * from './telegram-auth.service';
 export * from './telegram-client.constants';
+export * from './telegram-client.health';
 export * from './telegram-client.module';
 export {
   TELEGRAM_CLIENT_OPTIONS,
@@ -22,6 +23,8 @@ export {
 } from './telegram-client.module-definition';
 export * from './telegram-client.options';
 export {
+  getClientHealthToken,
+  getClientMetricsToken,
   getGramClientToken,
   getSessionStoreToken,
   getTelegramAuthToken,

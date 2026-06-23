@@ -13,12 +13,16 @@
 import { TelegramAuthService } from './telegram-auth.service';
 import {
   DEFAULT_CLIENT_NAME,
+  TELEGRAM_CLIENT_METRICS,
   TELEGRAM_GRAM_CLIENT,
   TELEGRAM_SESSION_STORE,
 } from './telegram-client.constants';
+import { TelegramClientHealthIndicator } from './telegram-client.health';
 import { TelegramClientLifecycle } from './telegram-client.lifecycle';
 import {
+  getClientHealthToken,
   getClientLifecycleToken,
+  getClientMetricsToken,
   getClientRegistrarToken,
   getGramClientToken,
   getSessionStoreToken,
@@ -42,6 +46,8 @@ describe('per-account token helpers', () => {
       expect(getTelegramUserToken()).toBe(TelegramUserService);
       expect(getClientLifecycleToken()).toBe(TelegramClientLifecycle);
       expect(getClientRegistrarToken()).toBe(TelegramUserUpdatesRegistrar);
+      expect(getClientMetricsToken()).toBe(TELEGRAM_CLIENT_METRICS);
+      expect(getClientHealthToken()).toBe(TelegramClientHealthIndicator);
     });
   });
 
@@ -58,6 +64,12 @@ describe('per-account token helpers', () => {
       );
       expect(getTelegramUserToken('personal')).toBe(
         'NESTJS_TELEGRAM_USER_SERVICE:personal',
+      );
+      expect(getClientMetricsToken('personal')).toBe(
+        'NESTJS_TELEGRAM_CLIENT_METRICS:personal',
+      );
+      expect(getClientHealthToken('personal')).toBe(
+        'NESTJS_TELEGRAM_CLIENT_HEALTH:personal',
       );
     });
   });
@@ -76,8 +88,10 @@ describe('per-account token helpers', () => {
         getTelegramUserToken('ops'),
         getClientLifecycleToken('ops'),
         getClientRegistrarToken('ops'),
+        getClientMetricsToken('ops'),
+        getClientHealthToken('ops'),
       ]);
-      expect(tokens.size).toBe(6);
+      expect(tokens.size).toBe(8);
     });
 
     it('keeps two different accounts on different tokens', () => {

@@ -19,6 +19,7 @@
  * -----------
  * - TELEGRAM_GRAM_CLIENT: Resolves to the default account's `IGramClient`.
  * - TELEGRAM_SESSION_STORE: Resolves to the default account's `SessionStore`, if any.
+ * - TELEGRAM_CLIENT_METRICS: Resolves to the default account's metrics surface.
  * - DEFAULT_CLIENT_NAME: Sentinel name for the unnamed (default) account.
  */
 
@@ -40,6 +41,17 @@ export const TELEGRAM_GRAM_CLIENT = Symbol('NESTJS_TELEGRAM_GRAM_CLIENT');
  * {@link import('./telegram-client.tokens').getSessionStoreToken}.
  */
 export const TELEGRAM_SESSION_STORE = Symbol('NESTJS_TELEGRAM_SESSION_STORE');
+
+/**
+ * Injection token resolving to the **default** account's
+ * {@link import('../common').TelegramMetrics} surface (an
+ * {@link import('../common').InMemoryTelegramMetrics} by default). Inject it to
+ * read the account's traffic counters (`messagesSent`, `messagesReceived`) via
+ * `.snapshot()`, or override the provider to bridge to your own backend. For a
+ * named account, resolve its metrics via
+ * {@link import('./telegram-client.tokens').getClientMetricsToken}.
+ */
+export const TELEGRAM_CLIENT_METRICS = Symbol('NESTJS_TELEGRAM_CLIENT_METRICS');
 
 /**
  * Sentinel name of the default account — the one registered by

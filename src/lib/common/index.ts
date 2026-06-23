@@ -10,5 +10,6 @@
  * import { TelegramError, ParseMode } from '../common';
  */
 
+export * from './observability';
 export * from './telegram.errors';
 export * from './telegram.types';

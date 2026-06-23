@@ -16,6 +16,8 @@ export * from './message-splitter';
 export * from './retry';
 export * from './telegram-bot.constants';
 export { createTelegrafInstance } from './telegram-bot.factory';
+export * from './telegram-bot.health';
+export * from './telegram-bot.metrics-middleware';
 export * from './telegram-bot.module';
 export {
   TELEGRAM_BOT_OPTIONS,
@@ -25,8 +27,11 @@ export {
 export * from './telegram-bot.options';
 export * from './telegram-bot.service';
 export {
+  getBotHealthToken,
   getBotInstanceToken,
+  getBotMetricsToken,
   getBotToken,
+  getBotTracerToken,
   InjectBot,
 } from './telegram-bot.tokens';
 export * from './updates';

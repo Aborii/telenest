@@ -59,8 +59,16 @@ import {
 } from '@nestjs/core';
 import type { Telegraf } from 'telegraf';
 
+import {
+  InMemoryTelegramMetrics,
+  NOOP_TELEGRAM_TRACER,
+  type TelegramMetrics,
+  type TelegramMetricsRecorder,
+  type TelegramTracer,
+} from '../common';
 import { DEFAULT_BOT_NAME } from './telegram-bot.constants';
 import { createTelegrafInstance } from './telegram-bot.factory';
+import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import {
   ConfigurableModuleClass,
   TELEGRAM_BOT_OPTIONS,
@@ -70,9 +78,12 @@ import {
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 import { TelegramBotService } from './telegram-bot.service';
 import {
+  getBotHealthToken,
   getBotInstanceToken,
+  getBotMetricsToken,
   getBotRegistrarToken,
   getBotToken,
+  getBotTracerToken,
 } from './telegram-bot.tokens';
 import { TelegramEnhancerResolver } from './updates/execution/telegram-enhancer.resolver';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
@@ -97,6 +108,9 @@ import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.regi
  */
 function createBotProviders(name: string): Provider[] {
   const instanceToken = getBotInstanceToken(name);
+  const metricsToken = getBotMetricsToken(name);
+  const tracerToken = getBotTracerToken(name);
+  const facadeToken = getBotToken(name);
   return [
     // ── Raw Telegraf instance, built from this registration's options. ────────
     {
@@ -105,14 +119,31 @@ function createBotProviders(name: string): Provider[] {
         createTelegrafInstance(options),
       inject: [TELEGRAM_BOT_OPTIONS],
     },
+    // ── Per-bot metrics sink (in-memory by default; readable via .snapshot()). ─
+    {
+      provide: metricsToken,
+      useFactory: (): TelegramMetrics => new InMemoryTelegramMetrics(),
+    },
+    // ── Per-bot tracer; no-op by default (override to emit OpenTelemetry spans). ─
+    { provide: tracerToken, useValue: NOOP_TELEGRAM_TRACER },
     // ── Typed facade over that instance (manages its own launch/stop). ────────
     {
-      provide: getBotToken(name),
+      provide: facadeToken,
       useFactory: (
         bot: Telegraf,
         options: TelegramBotModuleOptions,
-      ): TelegramBotService => new TelegramBotService(bot, options),
-      inject: [instanceToken, TELEGRAM_BOT_OPTIONS],
+        metrics: TelegramMetricsRecorder,
+        tracer: TelegramTracer,
+      ): TelegramBotService =>
+        new TelegramBotService(bot, options, metrics, tracer),
+      inject: [instanceToken, TELEGRAM_BOT_OPTIONS, metricsToken, tracerToken],
+    },
+    // ── Health indicator probing bot reachability for a terminus endpoint. ────
+    {
+      provide: getBotHealthToken(name),
+      useFactory: (bot: TelegramBotService): TelegramBotHealthIndicator =>
+        new TelegramBotHealthIndicator(bot),
+      inject: [facadeToken],
     },
     // ── Resolves a handler's guard/interceptor/filter refs (DI + @Catch). ─────
     TelegramEnhancerResolver,
@@ -154,7 +185,13 @@ function createBotProviders(name: string): Provider[] {
  * @throws Never.
  */
 function createBotExports(name: string): InjectionToken[] {
-  return [getBotToken(name), getBotInstanceToken(name)];
+  return [
+    getBotToken(name),
+    getBotInstanceToken(name),
+    getBotMetricsToken(name),
+    getBotTracerToken(name),
+    getBotHealthToken(name),
+  ];
 }
 
 /**

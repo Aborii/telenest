@@ -10,10 +10,15 @@
 
 import { Test } from '@nestjs/testing';
 
+import type { TelegramMetrics } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type { GramUser } from './gram-client.types';
 import { TelegramAuthService } from './telegram-auth.service';
-import { TELEGRAM_GRAM_CLIENT } from './telegram-client.constants';
+import {
+  TELEGRAM_CLIENT_METRICS,
+  TELEGRAM_GRAM_CLIENT,
+} from './telegram-client.constants';
+import { TelegramClientHealthIndicator } from './telegram-client.health';
 import { TelegramClientModule } from './telegram-client.module';
 import { TelegramUserService } from './telegram-user.service';
 
@@ -108,5 +113,63 @@ describe('TelegramClientModule', () => {
     expect(moduleRef.get(TelegramUserService)).toBeInstanceOf(
       TelegramUserService,
     );
+  });
+
+  describe('observability wiring', () => {
+    it('provides per-account metrics and a health indicator', async () => {
+      const fake = createFakeClient();
+
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramClientModule.forRoot({
+            apiId: 1,
+            apiHash: 'hash',
+            autoConnect: false,
+            clientFactory: () => fake,
+          }),
+        ],
+      }).compile();
+
+      const metrics = moduleRef.get<TelegramMetrics>(TELEGRAM_CLIENT_METRICS);
+      expect(metrics.snapshot()).toEqual({
+        messagesSent: 0,
+        messagesReceived: 0,
+        apiErrors: 0,
+        floodWaits: 0,
+      });
+
+      const health = moduleRef.get(TelegramClientHealthIndicator);
+      await expect(health.isHealthy()).resolves.toEqual({
+        'telegram-client': {
+          status: 'up',
+          connected: true,
+          authorized: true,
+          error: undefined,
+        },
+      });
+    });
+
+    it('records sends into the user facade through DI', async () => {
+      const fake = createFakeClient();
+      (fake.sendMessage as jest.Mock).mockResolvedValue({ id: 1 });
+
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramClientModule.forRoot({
+            apiId: 1,
+            apiHash: 'hash',
+            autoConnect: false,
+            clientFactory: () => fake,
+          }),
+        ],
+      }).compile();
+
+      const user = moduleRef.get(TelegramUserService);
+      const metrics = moduleRef.get<TelegramMetrics>(TELEGRAM_CLIENT_METRICS);
+
+      await user.sendMessage('me', 'hi');
+
+      expect(metrics.snapshot().messagesSent).toBe(1);
+    });
   });
 });

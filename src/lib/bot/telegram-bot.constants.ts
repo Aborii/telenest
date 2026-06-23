@@ -18,6 +18,8 @@
  * KEY EXPORTS
  * -----------
  * - TELEGRAM_BOT: Token that resolves to the default bot's `Telegraf` instance.
+ * - TELEGRAM_BOT_METRICS: Token resolving to the default bot's metrics surface.
+ * - TELEGRAM_BOT_TRACER: Token resolving to the default bot's tracer.
  * - DEFAULT_BOT_NAME: Sentinel name for the unnamed (default) bot registration.
  */
 
@@ -32,6 +34,26 @@
  * {@link import('./telegram-bot.tokens').getBotInstanceToken}.
  */
 export const TELEGRAM_BOT = Symbol('NESTJS_TELEGRAM_BOT');
+
+/**
+ * Injection token resolving to the **default** bot's
+ * {@link import('../common').TelegramMetrics} surface (an
+ * {@link import('../common').InMemoryTelegramMetrics} by default). Inject it to
+ * read counters (`messagesSent`, `apiErrors`, …) via `.snapshot()`, or override
+ * the provider to bridge to your own metrics backend. For a named bot, resolve
+ * its metrics via {@link import('./telegram-bot.tokens').getBotMetricsToken}.
+ */
+export const TELEGRAM_BOT_METRICS = Symbol('NESTJS_TELEGRAM_BOT_METRICS');
+
+/**
+ * Injection token resolving to the **default** bot's
+ * {@link import('../common').TelegramTracer}. Defaults to a no-op tracer;
+ * override the provider with
+ * {@link import('../common').createOpenTelemetryTracer} to emit OpenTelemetry
+ * spans around every Bot API call. For a named bot, resolve its tracer via
+ * {@link import('./telegram-bot.tokens').getBotTracerToken}.
+ */
+export const TELEGRAM_BOT_TRACER = Symbol('NESTJS_TELEGRAM_BOT_TRACER');
 
 /**
  * Sentinel name of the default bot — the one registered by

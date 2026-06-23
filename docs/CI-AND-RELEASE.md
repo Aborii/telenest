@@ -122,6 +122,13 @@ exposes a boolean step **output**:
 This is the behavior requested for this repository: **no token → no npm release,
 just a warning.**
 
+The publish command defaults to `npm publish --provenance --access public`, but
+the args are overridable via an optional `NPM_PUBLISH_ARGS` **repository
+variable** (Settings → Secrets and variables → Actions → Variables). Set it to,
+say, `--access public` to publish without provenance — useful because
+`--provenance` publishes to the public registry and requires a public package,
+which may not suit every future publish mode. No workflow edit needed.
+
 ### Relationship to the local release script
 
 `scripts/release.mts` already creates the **GitHub release** and pushes the
@@ -193,6 +200,9 @@ Where the implementation differs:
 - **Enable npm publishing:** add an `NPM_TOKEN` repository secret (Settings →
   Secrets and variables → Actions). No workflow change is needed — the guard
   flips on automatically.
+- **Change the publish mode:** set the `NPM_PUBLISH_ARGS` repository variable
+  (e.g. `--access public` to drop provenance). Defaults to
+  `--provenance --access public`.
 - **Publish a GitHub release from CI instead of locally:** add a `gh release
   create` (or `softprops/action-gh-release`) step to `release.yml` and remove the
   release-creation step from `scripts/release.mts` to keep a single owner.

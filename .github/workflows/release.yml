@@ -82,9 +82,13 @@ jobs:
             echo "::warning title=npm publish skipped::NPM_TOKEN secret is not set — skipping the npm publish. Add NPM_TOKEN under Settings → Secrets and variables → Actions to enable publishing."
           fi
 
+      # Default publishes with provenance to the public registry. Override via
+      # the optional `NPM_PUBLISH_ARGS` repo variable (Settings → Secrets and
+      # variables → Actions → Variables) to change the publish mode — e.g. drop
+      # `--provenance` — without editing this workflow.
       - name: Publish to npm
         if: steps.token.outputs.has_token == 'true'
-        run: npm publish --provenance --access public
+        run: npm publish ${{ vars.NPM_PUBLISH_ARGS || '--provenance --access public' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

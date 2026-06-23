@@ -71,7 +71,7 @@ describe('TelegramClientHealthIndicator', () => {
     expect(isAuthorized).not.toHaveBeenCalled();
   });
 
-  it('degrades to down when the authorization probe throws', async () => {
+  it('degrades to down when the auth probe throws, keeping the true connection state', async () => {
     const client = createMockGramClient({
       isConnected: jest.fn().mockReturnValue(true),
       isAuthorized: jest.fn().mockRejectedValue(new Error('transport gone')),
@@ -80,7 +80,7 @@ describe('TelegramClientHealthIndicator', () => {
 
     expect(result['telegram-client']).toEqual({
       status: HEALTH_STATUSES.DOWN,
-      connected: false,
+      connected: true,
       authorized: false,
       error: 'transport gone',
     });

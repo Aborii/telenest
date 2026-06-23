@@ -72,8 +72,11 @@ export class TelegramClientHealthIndicator {
   public async isHealthy(
     key: string = DEFAULT_CLIENT_HEALTH_KEY,
   ): Promise<TelegramHealthIndicatorResult> {
+    // ── `isConnected()` is synchronous and never throws, so read it up front:
+    //    that way the catch below still reports the true connection state even
+    //    when only the async `isAuthorized()` probe fails. ────────────────────
+    const connected = this.client.isConnected();
     try {
-      const connected = this.client.isConnected();
       // ── Only probe authorization when connected; a disconnected client can
       //    throw on `isAuthorized`, which the catch below would report anyway. ─
       const authorized = connected ? await this.client.isAuthorized() : false;
@@ -96,7 +99,7 @@ export class TelegramClientHealthIndicator {
       return {
         [key]: {
           status: HEALTH_STATUSES.DOWN,
-          connected: false,
+          connected,
           authorized: false,
           error: message,
         },

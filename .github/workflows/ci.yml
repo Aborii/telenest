@@ -1,0 +1,91 @@
+# ---------------------------------------------------------------------------
+# PURPOSE
+#   Continuous-integration gate for nestjs-telegram. Runs on every pull request
+#   and on pushes to the integration/release branches, across a Node version
+#   matrix, so regressions are caught automatically before code lands on `dev`.
+#
+# USAGE
+#   Triggered automatically by GitHub Actions (see `on:` below). To make it a
+#   required check, enable it in the repository branch-protection settings for
+#   `dev` (and `main`).
+#
+# GATES (all must pass — these mirror the project's local gates)
+#   - npm run typecheck   strict TypeScript, the primary gate
+#   - npm run lint        ESLint
+#   - npm run test:cov    Jest with coverage
+#   - npm run build       library build to dist/
+#
+# NOTE
+#   `npm run format:check` is run as a NON-BLOCKING advisory step only: the
+#   repository's baseline is not Prettier-clean (98 files), so gating on it
+#   would make every PR red on day one. It surfaces style drift without
+#   failing CI. Re-enable as a hard gate once the codebase is formatted.
+# ---------------------------------------------------------------------------
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+# Cancel superseded runs on the same ref so only the latest commit is tested.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only needs to read the repository contents.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Run the full matrix even if one Node version fails, so a single
+      # version-specific failure does not mask the others.
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Advisory only — see the NOTE in the file header. Never fails the build.
+      - name: Format check (advisory)
+        run: npm run format:check
+        continue-on-error: true
+
+      - name: Test (with coverage)
+        run: npm run test:cov
+
+      - name: Build
+        run: npm run build
+
+      # Publish the lcov report as a build artifact for one matrix entry only,
+      # so the coverage upload is not duplicated across Node versions.
+      - name: Upload coverage report
+        if: matrix.node-version == '22.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 14

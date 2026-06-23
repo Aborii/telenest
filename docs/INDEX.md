@@ -136,6 +136,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - `lint` / `lint:fix` / `format` / `format:check` scripts
   - How to extend the rules
 
+- **[CI-AND-RELEASE.md](./CI-AND-RELEASE.md)**
+  - GitHub Actions CI gate (Node 20 & 22 matrix)
+  - Tag-driven npm publish workflow (guarded by `NPM_TOKEN`)
+  - Relationship to the local `git:release` script
+  - README status badges
+
 ---
 
 ## 🎯 Quick Navigation by Use Case

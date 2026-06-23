@@ -1,6 +1,6 @@
 {
   "name": "nestjs-telegram",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Fully-typed NestJS module for Telegram: the Bot API (via Telegraf) and the MTProto user-account client (via GramJS). Send/receive as a bot, or sign in with your own account and control it from your app.",
   "license": "MIT",
   "main": "dist/index.js",

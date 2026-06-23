@@ -157,6 +157,75 @@ export interface GramSignInWithCodeInput {
   phoneCode: string;
 }
 
+/**
+ * A QR login token issued during
+ * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
+ *
+ * Telegram rotates the token roughly every 30 seconds until it is scanned, so a
+ * QR login surfaces a *sequence* of these rather than a single static value —
+ * always render the most recent `url`.
+ */
+export interface GramQrToken {
+  /**
+   * The login token, base64url-encoded. This is the same value embedded in
+   * {@link GramQrToken.url}; exposed separately for callers that build their own
+   * deep-link or QR payload.
+   */
+  token: string;
+  /**
+   * The `tg://login?token=…` deep link to render as a scannable QR code. When
+   * scanned by an already-authorized Telegram app, it authorizes this session.
+   */
+  url: string;
+  /** Unix timestamp (seconds) at which this token expires and a new one is issued. */
+  expires: number;
+}
+
+/**
+ * Callbacks driving
+ * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
+ */
+export interface GramQrSignInCallbacks {
+  /**
+   * Invoked with each freshly issued {@link GramQrToken} — once at the start and
+   * again whenever Telegram rotates the token before it expires. Render the
+   * latest `url` as a QR code for the user to scan.
+   */
+  onToken: (token: GramQrToken) => void;
+  /**
+   * Invoked when the scanned account has 2FA enabled: must resolve the account's
+   * two-step-verification password (the `hint`, if any, is Telegram's stored
+   * password hint). When omitted, a 2FA-protected account cannot complete QR
+   * login and the attempt rejects with a `PASSWORD_REQUIRED`
+   * {@link import('../common').TelegramAuthError}.
+   */
+  onPassword?: (hint?: string) => Promise<string>;
+}
+
+/**
+ * Input for
+ * {@link import('./gram-client.interface').IGramClient.updateTwoFactor}.
+ *
+ * The combination of fields selects the operation:
+ * - **enable**: `newPassword` set, `currentPassword` omitted.
+ * - **change**: both `currentPassword` and `newPassword` set.
+ * - **remove**: `currentPassword` set, `newPassword` omitted (or empty).
+ */
+export interface GramUpdateTwoFactorInput {
+  /**
+   * The current 2FA password. Required when changing or removing an existing
+   * password; omit it when enabling 2FA for the first time.
+   */
+  currentPassword?: string;
+  /**
+   * The new 2FA password. Omit (or pass an empty string) together with
+   * `currentPassword` to remove 2FA entirely.
+   */
+  newPassword?: string;
+  /** Hint Telegram shows at the 2FA prompt. Ignored when `newPassword` is unset. */
+  hint?: string;
+}
+
 /** Parameters for listing dialogs. */
 export interface GramGetDialogsParams {
   /** Maximum number of dialogs to return (default: GramJS default). */

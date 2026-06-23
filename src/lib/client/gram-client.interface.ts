@@ -33,6 +33,7 @@ import type {
   GramMessage,
   GramPeer,
   GramPinMessageParams,
+  GramQrSignInCallbacks,
   GramSearchMessagesParams,
   GramSendCodeResult,
   GramSendFileParams,
@@ -40,6 +41,7 @@ import type {
   GramSignInResult,
   GramSignInWithCodeInput,
   GramStreamMediaOptions,
+  GramUpdateTwoFactorInput,
   GramUser,
 } from './gram-client.types';
 
@@ -108,6 +110,39 @@ export interface IGramClient {
    * @throws {import('../common').TelegramAuthError} If the password is wrong.
    */
   signInWithPassword(password: string): Promise<GramUser>;
+
+  /**
+   * Signs in by QR code: scan the rendered token from an already-authorized
+   * Telegram app to authorize this session. Resolves once scanned (and, for a
+   * 2FA-protected account, once `callbacks.onPassword` supplies the password).
+   *
+   * @param callbacks - `onToken` receives each issued/rotated QR token to
+   *   render; `onPassword` resolves the 2FA password when required.
+   * @returns The authenticated account.
+   * @throws {import('../common').TelegramAuthError} If the login fails, or a 2FA
+   *   account is scanned without an `onPassword` callback (`PASSWORD_REQUIRED`).
+   */
+  signInWithQrCode(callbacks: GramQrSignInCallbacks): Promise<GramUser>;
+
+  /**
+   * Signs in as a bot using a BotFather token over the MTProto transport.
+   *
+   * @param botToken - The bot token from BotFather (`<id>:<secret>`).
+   * @returns The authenticated bot account.
+   * @throws {import('../common').TelegramAuthError} If the token is rejected.
+   */
+  signInAsBot(botToken: string): Promise<GramUser>;
+
+  /**
+   * Enables, changes, or removes the account's two-factor (2FA) password.
+   * Requires an already-authorized session.
+   *
+   * @param input - Current/new password and hint selecting the operation.
+   * @returns Resolves once the password settings are updated.
+   * @throws {import('../common').TelegramAuthError} If the current password is
+   *   wrong (`PASSWORD_INVALID`) or the update otherwise fails.
+   */
+  updateTwoFactor(input: GramUpdateTwoFactorInput): Promise<void>;
 
   /**
    * Logs out, invalidating the current session on Telegram's servers.

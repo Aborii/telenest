@@ -28,6 +28,9 @@ type MockClient = {
   disconnect: jest.Mock;
   checkAuthorization: jest.Mock;
   sendCode: jest.Mock;
+  signInUserWithQrCode: jest.Mock;
+  signInBot: jest.Mock;
+  updateTwoFaSettings: jest.Mock;
   invoke: jest.Mock;
   getMe: jest.Mock;
   getDialogs: jest.Mock;
@@ -55,6 +58,9 @@ function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
     disconnect: jest.fn().mockResolvedValue(undefined),
     checkAuthorization: jest.fn().mockResolvedValue(true),
     sendCode: jest.fn(),
+    signInUserWithQrCode: jest.fn(),
+    signInBot: jest.fn(),
+    updateTwoFaSettings: jest.fn(),
     invoke: jest.fn(),
     getMe: jest.fn(),
     getDialogs: jest.fn(),
@@ -412,6 +418,158 @@ describe('GramJsClientAdapter', () => {
 
       const error = await adapter
         .signInWithPassword('pw')
+        .catch((e: unknown) => e);
+      expect((error as TelegramAuthError).code).toBe('PASSWORD_INVALID');
+    });
+  });
+
+  describe('signInWithQrCode', () => {
+    it('emits a base64url token + tg://login url and maps the user', async () => {
+      // ── Drive GramJS' qrCode callback with raw token bytes, then resolve. ──
+      const rawToken = Buffer.from([0xfb, 0xff, 0xbf]); // bytes that yield '-' and '_'
+      const signInUserWithQrCode = jest
+        .fn()
+        .mockImplementation(async (_creds, params) => {
+          await params.qrCode({ token: rawToken, expires: 1234 });
+          return { id: bigInt('77'), self: true, firstName: 'Qr' };
+        });
+      const adapter = createAdapter(createMockClient({ signInUserWithQrCode }));
+
+      const tokens: Array<{ token: string; url: string; expires: number }> = [];
+      const user = await adapter.signInWithQrCode({
+        onToken: (t) => tokens.push(t),
+      });
+
+      const encoded = rawToken.toString('base64url');
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0]).toEqual({
+        token: encoded,
+        url: `tg://login?token=${encoded}`,
+        expires: 1234,
+      });
+      // ── base64url must not contain '+' or '/' (standard-base64 chars). ─────
+      expect(tokens[0]?.token).not.toMatch(/[+/]/);
+      expect(user.id).toBe('77');
+      expect(user.firstName).toBe('Qr');
+    });
+
+    it('forwards the onPassword callback to GramJS for 2FA accounts', async () => {
+      const onPassword = jest.fn().mockResolvedValue('hunter2');
+      const signInUserWithQrCode = jest
+        .fn()
+        .mockImplementation(async (_creds, params) => {
+          // ── GramJS calls `password(hint)` when the scanned account has 2FA. ─
+          const pw = await params.password('my-hint');
+          expect(pw).toBe('hunter2');
+          return { id: bigInt('5'), self: true };
+        });
+      const adapter = createAdapter(createMockClient({ signInUserWithQrCode }));
+
+      await adapter.signInWithQrCode({ onToken: jest.fn(), onPassword });
+      expect(onPassword).toHaveBeenCalledWith('my-hint');
+    });
+
+    it('maps a captured wrong-password error to PASSWORD_INVALID', async () => {
+      // ── GramJS surfaces real failures through `onError` (not a rejection);
+      //    we stop the loop and map the captured error, not "AUTH_USER_CANCEL". ─
+      const signInUserWithQrCode = jest
+        .fn()
+        .mockImplementation(async (_creds, params) => {
+          await params.onError(new Error('PASSWORD_HASH_INVALID'));
+          throw new Error('AUTH_USER_CANCEL');
+        });
+      const adapter = createAdapter(createMockClient({ signInUserWithQrCode }));
+
+      const error = await adapter
+        .signInWithQrCode({ onToken: jest.fn() })
+        .catch((e: unknown) => e);
+      expect((error as TelegramAuthError).code).toBe('PASSWORD_INVALID');
+    });
+
+    it('maps a 2FA account without onPassword to PASSWORD_REQUIRED', async () => {
+      const signInUserWithQrCode = jest
+        .fn()
+        .mockRejectedValue(new Error('Account has 2FA enabled.'));
+      const adapter = createAdapter(createMockClient({ signInUserWithQrCode }));
+
+      const error = await adapter
+        .signInWithQrCode({ onToken: jest.fn() })
+        .catch((e: unknown) => e);
+      expect((error as TelegramAuthError).code).toBe('PASSWORD_REQUIRED');
+    });
+
+    it('maps a direct rejection (no onError, not 2FA) via the error fallback', async () => {
+      // ── GramJS rejects without invoking onError: capturedError stays
+      //    undefined, so the `?? error` fallback maps the thrown error. ───────
+      const signInUserWithQrCode = jest
+        .fn()
+        .mockRejectedValue(new Error('TIMEOUT'));
+      const adapter = createAdapter(createMockClient({ signInUserWithQrCode }));
+
+      const error = await adapter
+        .signInWithQrCode({ onToken: jest.fn() })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect((error as TelegramAuthError).code).toBe('UNKNOWN');
+    });
+  });
+
+  describe('signInAsBot', () => {
+    it('passes the bot token and maps the returned bot user', async () => {
+      const signInBot = jest
+        .fn()
+        .mockResolvedValue({ id: bigInt('42'), bot: true, username: 'mybot' });
+      const adapter = createAdapter(createMockClient({ signInBot }));
+
+      const user = await adapter.signInAsBot('123:ABC');
+
+      expect(signInBot).toHaveBeenCalledWith(
+        { apiId: 1, apiHash: 'hash' },
+        { botAuthToken: '123:ABC' },
+      );
+      expect(user.id).toBe('42');
+      expect(user.isBot).toBe(true);
+      expect(user.username).toBe('mybot');
+    });
+
+    it('maps a rejected token to an auth error', async () => {
+      const signInBot = jest
+        .fn()
+        .mockRejectedValue(new Error('ACCESS_TOKEN_INVALID'));
+      const adapter = createAdapter(createMockClient({ signInBot }));
+
+      const error = await adapter.signInAsBot('bad').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect((error as TelegramAuthError).code).toBe('UNKNOWN');
+    });
+  });
+
+  describe('updateTwoFactor', () => {
+    it('forwards current/new password and hint to GramJS', async () => {
+      const updateTwoFaSettings = jest.fn().mockResolvedValue(undefined);
+      const adapter = createAdapter(createMockClient({ updateTwoFaSettings }));
+
+      await adapter.updateTwoFactor({
+        currentPassword: 'old',
+        newPassword: 'new',
+        hint: 'h',
+      });
+
+      expect(updateTwoFaSettings).toHaveBeenCalledWith({
+        currentPassword: 'old',
+        newPassword: 'new',
+        hint: 'h',
+      });
+    });
+
+    it('maps a wrong current password to PASSWORD_INVALID', async () => {
+      const updateTwoFaSettings = jest
+        .fn()
+        .mockRejectedValue(new Error('PASSWORD_HASH_INVALID'));
+      const adapter = createAdapter(createMockClient({ updateTwoFaSettings }));
+
+      const error = await adapter
+        .updateTwoFactor({ currentPassword: 'wrong', newPassword: 'x' })
         .catch((e: unknown) => e);
       expect((error as TelegramAuthError).code).toBe('PASSWORD_INVALID');
     });

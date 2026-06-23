@@ -1,15 +1,19 @@
 # User-Account Authentication (MTProto)
 
-This guide covers signing in as **your own Telegram account** (not a bot) through
-the MTProto client side of `nestjs-telegram`. It documents the
-`TelegramAuthService` login state machine, the `GramSignInResult` discriminated
-union, every `TelegramAuthErrorCode`, how to mint a reusable session string with
-`examples/login-cli.ts`, and how sessions are persisted and reused.
+This guide covers signing in through the MTProto client side of `nestjs-telegram`
+— as **your own Telegram account** (phone/code/2FA or QR code) or as a **bot over
+MTProto**. It documents the `TelegramAuthService` login state machine, the
+alternative QR-code and bot-token flows, two-factor (2FA) password management,
+the `GramSignInResult` discriminated union, every `TelegramAuthErrorCode`, how to
+mint a reusable session string with `examples/login-cli.ts`, and how sessions are
+persisted and reused.
 
-> **Bot vs. user account.** This guide is **only** about the user-account
-> (MTProto / GramJS) flow exposed by `TelegramClientModule`. The Bot API side
-> (`TelegramBotModule`, driven by a bot token from BotFather) needs no
-> phone/code login and is not covered here.
+> **Two kinds of bot.** A normal bot driven by the **Bot API** (`TelegramBotModule`
+> / Telegraf) is a different surface and is not covered here. This guide's
+> `signInAsBot` instead logs a bot in over the **MTProto** transport via
+> `TelegramClientModule`, giving it the user-client method set (higher limits and
+> features the Bot API lacks). Pick the Bot API for ordinary bots; pick MTProto
+> bot-login only when you specifically need the MTProto surface.
 
 ---
 
@@ -18,6 +22,9 @@ union, every `TelegramAuthErrorCode`, how to mint a reusable session string with
 - [Prerequisites](#prerequisites)
 - [The login state machine](#the-login-state-machine)
 - [`TelegramAuthService` reference](#telegramauthservice-reference)
+- [QR-code login](#qr-code-login)
+- [Bot-token login (MTProto)](#bot-token-login-mtproto)
+- [Two-factor (2FA) password management](#two-factor-2fa-password-management)
 - [`GramSignInResult` discriminated union](#gramsigninresult-discriminated-union)
 - [`TelegramAuthErrorCode` reference](#telegramautherrorcode-reference)
 - [Handling errors in practice](#handling-errors-in-practice)
@@ -131,6 +138,11 @@ concurrent logins for different numbers.
 | `sendCode` | `sendCode(phoneNumber: string, forceSMS?: boolean): Promise<GramSendCodeResult>` | Requests a login code for `phoneNumber` (international format, e.g. `+15551234567`). Pass `forceSMS = true` to force SMS delivery instead of the in-app code. Caches the returned `phoneCodeHash` internally for `signIn`. Throws `TelegramAuthError` (`PHONE_INVALID`) when the number is rejected. |
 | `signIn` | `signIn(phoneCode: string): Promise<GramSignInResult>` | Completes sign-in with the code the user received. Returns a [`GramSignInResult`](#gramsigninresult-discriminated-union): `authorized` (session persisted) or `password-required` (2FA enabled). Throws `TelegramAuthError` with `CODE_NOT_REQUESTED` if called before `sendCode`, or `CODE_INVALID` when the code is wrong. |
 | `checkPassword` | `checkPassword(password: string): Promise<GramUser>` | Completes a 2FA-protected sign-in with the two-step-verification password. Returns the authenticated `GramUser` and persists the session. Throws `TelegramAuthError` (`PASSWORD_INVALID`) when wrong. |
+| `signInWithQrCode` | `signInWithQrCode(options?: QrLoginOptions): QrLoginHandle` | Starts a QR-code login. Returns a `{ qr$, completed }` handle — subscribe to `qr$` to render each rotating QR token and await `completed` for the authenticated `GramUser` (session persisted). Pass `options.onPassword` for 2FA accounts. See [QR-code login](#qr-code-login). |
+| `signInAsBot` | `signInAsBot(botToken: string): Promise<GramUser>` | Signs in as a bot over MTProto using a BotFather token, then persists the session. Throws `TelegramAuthError` when the token is rejected. See [Bot-token login](#bot-token-login-mtproto). |
+| `setupTwoFactor` | `setupTwoFactor(input: { password: string; hint? }): Promise<void>` | Enables 2FA on an account that has none. Requires an authorized session. See [2FA management](#two-factor-2fa-password-management). |
+| `changeTwoFactor` | `changeTwoFactor(input: { currentPassword: string; newPassword: string; hint? }): Promise<void>` | Changes the existing 2FA password. Throws `PASSWORD_INVALID` when `currentPassword` is wrong. |
+| `disableTwoFactor` | `disableTwoFactor(currentPassword: string): Promise<void>` | Removes 2FA from the account. Throws `PASSWORD_INVALID` when the password is wrong. |
 | `logOut` | `logOut(): Promise<void>` | Logs out, invalidating the session locally and on Telegram's servers, clears the cached phone/hash, and clears the stored session via `SessionStore.clear()`. |
 | `isAuthorized` | `isAuthorized(): Promise<boolean>` | Whether the current session is already authorized. Connects first if needed. Use it to skip the login flow when an existing session is valid. |
 | `exportSession` | `exportSession(): string` | Serializes the current session to a portable string for manual persistence/inspection. Returns an **empty string** when unauthenticated. Never throws. |
@@ -159,6 +171,138 @@ export class LoginService {
   }
 }
 ```
+
+---
+
+## QR-code login
+
+QR login avoids SMS codes entirely: you render a short-lived token as a QR code,
+and an **already–signed-in** Telegram app authorizes the new session when it
+scans it (Telegram app → *Settings → Devices → Link Desktop Device*).
+
+Because Telegram **rotates the token roughly every 30 seconds** until it is
+scanned, `signInWithQrCode` does **not** return a single static token. It returns
+a `QrLoginHandle` immediately (synchronously):
+
+```ts
+interface QrLoginHandle {
+  qr$: Observable<GramQrToken>; // emits the first token, then each rotation
+  completed: Promise<GramUser>; // resolves once scanned; session persisted
+}
+
+interface GramQrToken {
+  token: string;   // base64url login token
+  url: string;     // tg://login?token=… — render THIS as the QR code
+  expires: number; // unix seconds; a new token is issued at/after this
+}
+```
+
+Subscribe to `qr$`, always rendering the **latest** emission's `url`, and await
+`completed` for the authenticated account:
+
+```ts
+const { qr$, completed } = auth.signInWithQrCode();
+
+const sub = qr$.subscribe((t) => renderQrCode(t.url)); // re-render on each token
+const me = await completed; // resolves once the code is scanned
+sub.unsubscribe();
+console.log(`Signed in via QR as ${me.firstName ?? me.id}`);
+```
+
+On success the session is persisted to the configured `SessionStore`, exactly
+like the phone/code flow. Always attach a handler to `completed` — an unhandled
+rejection surfaces as a Node warning.
+
+### QR login with 2FA
+
+If the scanned account has two-step verification, supply an `onPassword`
+callback; it is invoked with Telegram's stored hint (if any) and must resolve the
+password:
+
+```ts
+const { qr$, completed } = auth.signInWithQrCode({
+  onPassword: (hint) => promptForPassword(hint), // your async prompt
+});
+```
+
+Omit `onPassword` and a 2FA account rejects `completed` with a
+`PASSWORD_REQUIRED` `TelegramAuthError`.
+
+A runnable terminal example lives at
+[`examples/qr-login.example.ts`](../examples/qr-login.example.ts).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Your code
+    participant Auth as TelegramAuthService
+    participant TG as Telegram (MTProto)
+
+    App->>Auth: signInWithQrCode({ onPassword? })
+    Auth-->>App: { qr$, completed }
+    loop until scanned (~30s rotation)
+        TG-->>Auth: login token { token, expires }
+        Auth-->>App: qr$ emits { token, url, expires }
+        App-->>User: render url as QR
+    end
+    User->>TG: scan QR from an authorized app
+    opt 2FA enabled
+        Auth->>App: onPassword(hint)
+        App-->>Auth: password
+    end
+    TG-->>Auth: authorized (+ user)
+    Note over Auth: persists session, completes qr$
+    Auth-->>App: completed resolves with GramUser
+```
+
+---
+
+## Bot-token login (MTProto)
+
+`signInAsBot` logs a bot in over the **MTProto** transport (not the Bot API),
+giving it the same user-client method set as a signed-in account:
+
+```ts
+const bot = await auth.signInAsBot(process.env.BOT_TOKEN!); // '<id>:<secret>'
+console.log(`Signed in as @${bot.username}`);
+```
+
+The session is persisted on success, so subsequent starts reuse it just like a
+user session. A rejected token surfaces as a `TelegramAuthError`. Never log the
+token — treat it like any other secret.
+
+> **Which bot surface?** For an ordinary bot, prefer the Bot API
+> (`TelegramBotModule`). Reach for MTProto bot-login only when you specifically
+> need the MTProto surface (higher limits, methods the Bot API lacks).
+
+---
+
+## Two-factor (2FA) password management
+
+Once an account is authorized, you can manage its two-step-verification password.
+All three methods require an authorized session and surface failures as a
+`TelegramAuthError` (`PASSWORD_INVALID` when the current password is wrong).
+
+| Method | Use it to |
+| --- | --- |
+| `setupTwoFactor({ password, hint? })` | **Enable** 2FA on an account that has none. |
+| `changeTwoFactor({ currentPassword, newPassword, hint? })` | **Change** the existing 2FA password. |
+| `disableTwoFactor(currentPassword)` | **Remove** 2FA from the account. |
+
+```ts
+// Enable
+await auth.setupTwoFactor({ password: 'hunter2', hint: 'the usual' });
+
+// Change
+await auth.changeTwoFactor({ currentPassword: 'hunter2', newPassword: 'hunter3' });
+
+// Disable
+await auth.disableTwoFactor('hunter3');
+```
+
+> **This can be slow.** Telegram's SRP password math (large prime work) can take
+> several seconds — this is expected, not a hang.
 
 ---
 

@@ -52,6 +52,8 @@ import {
   type GramMessage,
   type GramPeer,
   type GramPinMessageParams,
+  type GramQrSignInCallbacks,
+  type GramQrToken,
   type GramSearchMessagesParams,
   type GramSendCodeResult,
   type GramSendFileParams,
@@ -59,6 +61,7 @@ import {
   type GramSignInResult,
   type GramSignInWithCodeInput,
   type GramStreamMediaOptions,
+  type GramUpdateTwoFactorInput,
   type GramUser,
 } from './gram-client.types';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
@@ -239,6 +242,73 @@ export class GramJsClientAdapter implements IGramClient {
         );
 
       return this.mapUser(result.user);
+    } catch (error) {
+      throw this.toAuthError(error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.signInWithQrCode} */
+  public async signInWithQrCode(
+    callbacks: GramQrSignInCallbacks,
+  ): Promise<GramUser> {
+    // ── GramJS' QR flow drives 2FA through a retrying password loop whose only
+    //    way to stop is `onError` returning `true`; left to loop, a wrong
+    //    password would re-prompt forever. We stop on the first error and
+    //    capture it so the *real* failure (not GramJS' generic "AUTH_USER_CANCEL"
+    //    cancellation) is what gets mapped below. ────────────────────────────
+    let capturedError: unknown;
+    try {
+      const user = await this.client.signInUserWithQrCode(this.credentials, {
+        qrCode: async (qr) => {
+          callbacks.onToken(this.mapQrToken(qr.token, qr.expires));
+        },
+        password: callbacks.onPassword,
+        // ── Returning `true` stops GramJS' retry loop; `async` satisfies the
+        //    callback's `Promise<boolean> | void` signature. ─────────────────
+        onError: async (error) => {
+          capturedError = error;
+          return true;
+        },
+      });
+      return this.mapUser(user);
+    } catch (error) {
+      // ── No `onPassword` on a 2FA account: GramJS throws this English message
+      //    directly (never via `onError`); surface it as PASSWORD_REQUIRED. ───
+      if (
+        capturedError === undefined &&
+        this.readErrorMessage(error) === 'Account has 2FA enabled.'
+      )
+        throw new TelegramAuthError(
+          'PASSWORD_REQUIRED',
+          'The scanned account has 2FA enabled; provide an onPassword callback.',
+          { cause: error },
+        );
+      throw this.toAuthError(capturedError ?? error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.signInAsBot} */
+  public async signInAsBot(botToken: string): Promise<GramUser> {
+    try {
+      const user = await this.client.signInBot(this.credentials, {
+        botAuthToken: botToken,
+      });
+      return this.mapUser(user);
+    } catch (error) {
+      throw this.toAuthError(error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.updateTwoFactor} */
+  public async updateTwoFactor(
+    input: GramUpdateTwoFactorInput,
+  ): Promise<void> {
+    try {
+      await this.client.updateTwoFaSettings({
+        currentPassword: input.currentPassword,
+        newPassword: input.newPassword,
+        hint: input.hint,
+      });
     } catch (error) {
       throw this.toAuthError(error);
     }
@@ -767,6 +837,20 @@ export class GramJsClientAdapter implements IGramClient {
       username: user.username,
       phone: user.phone,
     };
+  }
+
+  /**
+   * Maps a GramJS QR login token (`{ token, expires }`) into a {@link GramQrToken},
+   * base64url-encoding the raw bytes and building the `tg://login` deep link.
+   *
+   * @param token - The raw login-token bytes from `Api.auth.LoginToken`.
+   * @param expires - Unix timestamp (seconds) when the token expires.
+   * @returns The normalized QR token DTO.
+   * @throws Never.
+   */
+  private mapQrToken(token: Buffer, expires: number): GramQrToken {
+    const encoded = token.toString('base64url');
+    return { token: encoded, url: `tg://login?token=${encoded}`, expires };
   }
 
   /**

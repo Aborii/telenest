@@ -57,9 +57,11 @@ import {
  * `sendMessage` / `sendFile` / `editMessage` echo a representative message,
  * `download*` calls resolve representative buffers, `getMediaInfo` resolves a
  * representative video descriptor, `streamMedia` yields one chunk, `getFullChat`
- * resolves a representative group, and the void management calls (`join`/`leaveChannel`,
- * `deleteMessages`, `markAsRead`, `pinMessage`) resolve. Pass `overrides` to
- * change the behaviour of any method per test.
+ * resolves a representative group, the alternative sign-ins (`signInWithQrCode`,
+ * `signInAsBot`) resolve a representative account, and the void calls
+ * (`join`/`leaveChannel`, `deleteMessages`, `markAsRead`, `pinMessage`,
+ * `updateTwoFactor`) resolve. Pass `overrides` to change the behaviour of any
+ * method per test.
  *
  * Because the defaults make `isConnected()` return `true`, the user-account
  * services skip their lazy `connect()` call; override `isConnected` to return
@@ -94,6 +96,9 @@ export function createMockGramClient(
       user: aGramUser(),
     }),
     signInWithPassword: jest.fn().mockResolvedValue(aGramUser()),
+    signInWithQrCode: jest.fn().mockResolvedValue(aGramUser()),
+    signInAsBot: jest.fn().mockResolvedValue(aGramUser({ isBot: true })),
+    updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(aGramUser()),
     getDialogs: jest.fn().mockResolvedValue([]),

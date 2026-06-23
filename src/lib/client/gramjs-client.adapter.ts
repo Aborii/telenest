@@ -77,6 +77,25 @@ const STREAM_REQUEST_SIZE = 512 * 1024;
  */
 const MEDIA_OFFSET_ALIGN = 4096;
 
+/**
+ * Picks a per-request download size for a bounded read of `neededBytes`.
+ *
+ * Telegram only accepts a `getFile` limit that is a power-of-two divisor of
+ * 1 MiB (4096, 8192, …, 512 KiB) — not any 4096 multiple — so this rounds up to
+ * the next power of two at least {@link MEDIA_OFFSET_ALIGN}, capped at
+ * {@link STREAM_REQUEST_SIZE}. It keeps small ranges (e.g. a player's opening
+ * byte probe) from pulling a full 512 KiB chunk.
+ *
+ * @param neededBytes - Bytes the caller needs from the aligned offset onward.
+ * @returns A valid `getFile` request size in bytes.
+ * @throws Never.
+ */
+function streamRequestSize(neededBytes: number): number {
+  let size = MEDIA_OFFSET_ALIGN;
+  while (size < neededBytes && size < STREAM_REQUEST_SIZE) size *= 2;
+  return Math.min(size, STREAM_REQUEST_SIZE);
+}
+
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
   /** Application api_id. */
@@ -411,7 +430,8 @@ export class GramJsClientAdapter implements IGramClient {
       for await (const chunk of this.client.iterDownload({
         file: message.media,
         offset: bigInt(alignedOffset),
-        requestSize: STREAM_REQUEST_SIZE,
+        // ── Size the request to the range so small probes don't pull 512 KiB. ─
+        requestSize: streamRequestSize(needed),
       })) {
         buffers.push(chunk);
         collected += chunk.length;

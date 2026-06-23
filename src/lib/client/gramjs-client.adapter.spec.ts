@@ -1364,6 +1364,42 @@ describe('GramJsClientAdapter', () => {
         expect(result?.length).toBe(100);
       });
 
+      it('sizes the request to the range (small probe vs. large read)', async () => {
+        const small = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.alloc(4096))),
+        });
+        await createAdapter(small).downloadMediaRange('me', 1, {
+          offset: 0,
+          limit: 2,
+        });
+        expect(
+          (small.iterDownload.mock.calls[0]?.[0] as { requestSize: number })
+            .requestSize,
+        ).toBe(4096);
+
+        const large = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.alloc(600_000))),
+        });
+        await createAdapter(large).downloadMediaRange('me', 1, {
+          offset: 0,
+          limit: 600_000,
+        });
+        expect(
+          (large.iterDownload.mock.calls[0]?.[0] as { requestSize: number })
+            .requestSize,
+        ).toBe(512 * 1024);
+      });
+
       it('returns fewer bytes than requested at end-of-file', async () => {
         const mock = createMockClient({
           getMessages: jest

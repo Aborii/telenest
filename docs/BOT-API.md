@@ -285,6 +285,29 @@ server and route (the common case in NestJS).
 Related Bot API helpers on the service: `setWebhook`, `deleteWebhook` (revert to
 long-polling), and `getWebhookInfo` (inspect current status).
 
+### Webhook (built-in controller)
+
+If you'd rather not wire `webhookCallback` and `setWebhook` by hand, enable the
+**built-in webhook controller**: pass a `webhook` option and the module stands up
+the `POST {path}` route, verifies Telegram's secret token in constant time, and
+(optionally) registers the URL on bootstrap — no `main.ts` changes.
+
+```ts
+TelegramBotModule.forRoot({
+  token: process.env.BOT_TOKEN!,
+  launch: false, // webhook mode — don't also long-poll
+  webhook: {
+    path: '/telegram/webhook',
+    domain: 'https://bot.example.com',
+    secretToken: process.env.TELEGRAM_WEBHOOK_SECRET,
+    registerOnBootstrap: true,
+  },
+});
+```
+
+See **[WEBHOOK-CONTROLLER.md](./WEBHOOK-CONTROLLER.md)** for the full guide
+(options, request flow, multi-bot routing, and security notes).
+
 ---
 
 ## 5. Registering handlers

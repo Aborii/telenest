@@ -87,6 +87,15 @@ import {
 } from './telegram-bot.tokens';
 import { TelegramEnhancerResolver } from './updates/execution/telegram-enhancer.resolver';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
+import {
+  TELEGRAM_WEBHOOK_BOT,
+  TELEGRAM_WEBHOOK_OPTIONS,
+} from './webhook/telegram-webhook.constants';
+import { createTelegramWebhookController } from './webhook/telegram-webhook.controller';
+import { TelegramWebhookGuard } from './webhook/telegram-webhook.guard';
+import { assertValidWebhookOptions } from './webhook/telegram-webhook.helpers';
+import type { TelegramBotWebhookOptions } from './webhook/telegram-webhook.options';
+import { TelegramWebhookRegistrar } from './webhook/telegram-webhook.registrar';
 
 /**
  * Builds the three DI providers one (named) bot needs: its raw `Telegraf`
@@ -218,6 +227,50 @@ function withBotProviders(
 }
 
 /**
+ * Augments a dynamic module with the built-in webhook controller for one bot:
+ * a path-bound controller (`POST {path}`), the secret-token guard, the bootstrap
+ * registrar, and the two per-registration alias providers the latter two read
+ * (`TELEGRAM_WEBHOOK_OPTIONS` and `TELEGRAM_WEBHOOK_BOT`, the latter pointing at
+ * this bot's already-registered `Telegraf` instance).
+ *
+ * All four providers live in this single module instance, so for multiple named
+ * bots each gets its own controller, guard, and registrar resolving its own
+ * options and bot — the same isolation `withBotProviders` relies on.
+ *
+ * @param dynamicModule - The module already carrying this bot's core providers.
+ * @param name - The bot's name (`DEFAULT_BOT_NAME` for the default bot).
+ * @param webhook - The validated webhook options for this registration.
+ * @returns The dynamic module augmented with the webhook controller + providers.
+ * @throws {import('../common').TelegramConfigError} If the webhook options are
+ *   structurally invalid (empty `path`, or `registerOnBootstrap` without a valid
+ *   `domain`) — surfaced synchronously, at registration.
+ */
+function withWebhook(
+  dynamicModule: DynamicModule,
+  name: string,
+  webhook: TelegramBotWebhookOptions,
+): DynamicModule {
+  // ── Fail fast at registration rather than as a confusing runtime error. ─────
+  assertValidWebhookOptions(webhook);
+  return {
+    ...dynamicModule,
+    controllers: [
+      ...(dynamicModule.controllers ?? []),
+      createTelegramWebhookController(webhook.path),
+    ],
+    providers: [
+      ...(dynamicModule.providers ?? []),
+      { provide: TELEGRAM_WEBHOOK_OPTIONS, useValue: webhook },
+      // ── Stable alias so the controller/registrar inject one token whether
+      //    this is the default bot (TELEGRAM_BOT) or a named bot. ─────────────
+      { provide: TELEGRAM_WEBHOOK_BOT, useExisting: getBotInstanceToken(name) },
+      TelegramWebhookGuard,
+      TelegramWebhookRegistrar,
+    ],
+  };
+}
+
+/**
  * Bot API feature module. Extends the generated `ConfigurableModuleClass` to
  * inherit fully-typed `forRoot` / `forRootAsync`, then augments their output
  * with this library's per-bot providers (instance, facade, registrar).
@@ -240,10 +293,11 @@ export class TelegramBotModule extends ConfigurableModuleClass {
   public static forRoot(
     options: TelegramBotModuleForRootOptions,
   ): DynamicModule {
-    return withBotProviders(
-      super.forRoot(options),
-      options.name ?? DEFAULT_BOT_NAME,
-    );
+    const name = options.name ?? DEFAULT_BOT_NAME;
+    const dynamicModule = withBotProviders(super.forRoot(options), name);
+    return options.webhook
+      ? withWebhook(dynamicModule, name, options.webhook)
+      : dynamicModule;
   }
 
   /**
@@ -260,9 +314,10 @@ export class TelegramBotModule extends ConfigurableModuleClass {
   public static forRootAsync(
     options: TelegramBotModuleAsyncOptions,
   ): DynamicModule {
-    return withBotProviders(
-      super.forRootAsync(options),
-      options.name ?? DEFAULT_BOT_NAME,
-    );
+    const name = options.name ?? DEFAULT_BOT_NAME;
+    const dynamicModule = withBotProviders(super.forRootAsync(options), name);
+    return options.webhook
+      ? withWebhook(dynamicModule, name, options.webhook)
+      : dynamicModule;
   }
 }

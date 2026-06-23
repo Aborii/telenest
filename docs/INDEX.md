@@ -52,6 +52,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - `@TelegramUpdate({ bot })` handler scoping
   - Per-bot isolation & lifecycle
 
+- **[WEBHOOK-CONTROLLER.md](./WEBHOOK-CONTROLLER.md)**
+  - Built-in `POST {path}` webhook controller
+  - Constant-time secret-token verification
+  - Auto `setWebhook` on bootstrap (opt-in)
+  - One route per named bot
+
 - **[MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)**
   - Several named MTProto user accounts in one app
   - `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`
@@ -261,7 +267,8 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Reply keyboard      | [EXAMPLES.md](./EXAMPLES.md#custom-reply-keyboard)                                                                     |
 | Commands            | [EXAMPLES.md](./EXAMPLES.md#command-handler-with-parameters)                                                           |
 | Callback queries    | [EXAMPLES.md](./EXAMPLES.md#inline-keyboards--callback-handling)                                                       |
-| Webhook             | [EXAMPLES.md](./EXAMPLES.md#webhook-mode)                                                                              |
+| Webhook (built-in)  | [WEBHOOK-CONTROLLER.md](./WEBHOOK-CONTROLLER.md)                                                                       |
+| Webhook (manual)    | [EXAMPLES.md](./EXAMPLES.md#webhook-mode)                                                                              |
 | Mini App validation | [MINI-APP-INIT-DATA.md](./MINI-APP-INIT-DATA.md)                                                                       |
 
 ### MTProto Features

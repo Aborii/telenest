@@ -836,6 +836,35 @@ Completes 2FA login.
 
 **Throws:** `TelegramAuthError` with code `PASSWORD_INVALID` if wrong
 
+##### `signInWithQrCode(options?: { onPassword? }): QrLoginHandle`
+
+Starts a QR-code login. Returns `{ qr$, completed }` — subscribe to the `qr$`
+observable to render each rotating QR token's `url`, and await `completed` for
+the authenticated `GramUser` (session persisted). Pass `options.onPassword` to
+satisfy 2FA. See [AUTHENTICATION.md → QR-code login](./AUTHENTICATION.md#qr-code-login).
+
+##### `signInAsBot(botToken: string): Promise<GramUser>`
+
+Signs in as a bot over MTProto using a BotFather token, then persists the session.
+
+**Throws:** `TelegramAuthError` if the token is rejected
+
+##### `setupTwoFactor(input: { password: string; hint? }): Promise<void>`
+
+Enables 2FA on an account that has none (requires an authorized session).
+
+##### `changeTwoFactor(input: { currentPassword: string; newPassword: string; hint? }): Promise<void>`
+
+Changes the existing 2FA password.
+
+**Throws:** `TelegramAuthError` with code `PASSWORD_INVALID` if `currentPassword` is wrong
+
+##### `disableTwoFactor(currentPassword: string): Promise<void>`
+
+Removes 2FA from the account.
+
+**Throws:** `TelegramAuthError` with code `PASSWORD_INVALID` if wrong
+
 ##### `isAuthorized(): Promise<boolean>`
 
 Checks if currently signed in.

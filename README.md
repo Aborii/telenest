@@ -1,5 +1,9 @@
 # nestjs-telegram
 
+[![CI](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml/badge.svg)](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+
 A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two** different Telegram APIs behind one cohesive, strictly-typed package. Use the **Bot API** (powered by [Telegraf](https://telegraf.js.org)) to run a normal `@BotFather` bot, and/or use the **MTProto user-account client** (powered by [GramJS](https://gram.js.org)) to sign in as **your own Telegram account** and drive it from your app. Both sides share one error hierarchy, ship with pluggable session persistence, and are designed around testable seams so you can unit-test everything without ever touching the network.
 
 ---

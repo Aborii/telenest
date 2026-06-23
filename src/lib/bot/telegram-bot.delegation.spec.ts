@@ -10,6 +10,7 @@
  */
 
 import type { Telegraf } from 'telegraf';
+
 import { TelegramBotApiError } from '../common';
 import { TelegramBotService } from './telegram-bot.service';
 
@@ -42,10 +43,38 @@ const DELEGATIONS: ReadonlyArray<{ method: string; args: unknown[] }> = [
   { method: 'setWebhook', args: ['https://x/h'] },
   { method: 'deleteWebhook', args: [] },
   { method: 'getWebhookInfo', args: [] },
+  // ── Polls, stickers & reactions ──
+  { method: 'sendPoll', args: [1, 'Q?', ['a', 'b']] },
+  { method: 'stopPoll', args: [1, 99] },
+  { method: 'sendSticker', args: [1, 'sticker-id'] },
+  {
+    method: 'setMessageReaction',
+    args: [1, 99, [{ type: 'emoji', emoji: '👍' }]],
+  },
+  // ── Forum topics ──
+  { method: 'createForumTopic', args: [1, 'Topic'] },
+  { method: 'editForumTopic', args: [1, 5, { name: 'New' }] },
+  { method: 'closeForumTopic', args: [1, 5] },
+  { method: 'reopenForumTopic', args: [1, 5] },
+  { method: 'deleteForumTopic', args: [1, 5] },
+  // ── Payments ──
+  { method: 'sendInvoice', args: [1, { title: 'X' }] },
+  { method: 'createInvoiceLink', args: [{ title: 'X' }] },
+  { method: 'answerPreCheckoutQuery', args: ['pcq-id', true] },
+  // ── Bot profile & menu button ──
+  { method: 'setChatMenuButton', args: [{ chatId: 1 }] },
+  { method: 'getChatMenuButton', args: [{ chatId: 1 }] },
+  { method: 'setMyDescription', args: ['desc'] },
+  { method: 'getMyDescription', args: [] },
+  { method: 'setMyShortDescription', args: ['short'] },
+  { method: 'getMyShortDescription', args: [] },
 ];
 
 /** Builds a service whose mock `telegram` exposes `method` as a jest fn. */
-function serviceWith(method: string, impl: jest.Mock): {
+function serviceWith(
+  method: string,
+  impl: jest.Mock,
+): {
   service: TelegramBotService;
   fn: jest.Mock;
 } {

@@ -350,63 +350,70 @@ const store = new FileSessionStore('./.telegram.session');
 
 > Add the session file to `.gitignore` and keep it off shared volumes.
 
-### Writing a custom store (e.g. Redis)
+### `RedisSessionStore`
 
-Implement the three methods. The `SessionStore` interface is exported, so a typed
-implementation is straightforward:
+Stores the session under a single Redis key via an **injected** client, so the
+library takes no hard dependency on `redis`/`ioredis` — any client exposing
+`get`/`set`/`del` (or a test fake) works. Read/write/delete failures surface as
+`TelegramSessionError`.
 
 ```ts
-import type { Redis } from 'ioredis';
-import { TelegramSessionError, type SessionStore } from 'nestjs-telegram';
+import { createClient } from 'redis';
+import { RedisSessionStore } from 'nestjs-telegram';
 
-/**
- * Persists the MTProto string session in Redis under a single key.
- *
- * SECURITY: the value is a live credential. Use an access-controlled Redis
- * instance, enable encryption in transit/at rest, and consider a key TTL.
- */
-export class RedisSessionStore implements SessionStore {
-  constructor(
-    private readonly redis: Redis,
-    private readonly key = 'tg:session',
-  ) {}
-
-  async load(): Promise<string | undefined> {
-    try {
-      return (await this.redis.get(this.key)) ?? undefined;
-    } catch (error) {
-      throw new TelegramSessionError('Failed to read session from Redis.', error);
-    }
-  }
-
-  async save(session: string): Promise<void> {
-    try {
-      await this.redis.set(this.key, session);
-    } catch (error) {
-      throw new TelegramSessionError('Failed to write session to Redis.', error);
-    }
-  }
-
-  async clear(): Promise<void> {
-    try {
-      await this.redis.del(this.key);
-    } catch (error) {
-      throw new TelegramSessionError('Failed to delete session from Redis.', error);
-    }
-  }
-}
+const redis = createClient();
+await redis.connect();
+const store = new RedisSessionStore(redis, 'tg:session');
 ```
 
-Wrapping failures in `TelegramSessionError` keeps storage errors inside the library's single
-error hierarchy. Then pass it via options:
+### `KeyValueSessionStore`
+
+A generic adapter over any async `get`/`set`/`delete` backend — a database DAO,
+[Keyv](https://keyv.org), an HTTP KV — so you rarely need to hand-roll a store:
+
+```ts
+import Keyv from 'keyv';
+import { KeyValueSessionStore } from 'nestjs-telegram';
+
+const store = new KeyValueSessionStore(new Keyv('postgres://…'), 'tg:session');
+```
+
+### `EncryptedSessionStore`
+
+A decorator that **AES-256-GCM** encrypts the session before delegating to any
+inner store, and authenticates on decrypt — so a tampered payload or wrong key
+**fails closed** with `TelegramSessionError` rather than returning garbage. Use
+it to protect the credential at rest on top of Redis, a DB, or a file:
+
+```ts
+import { EncryptedSessionStore, RedisSessionStore } from 'nestjs-telegram';
+
+const store = new EncryptedSessionStore(
+  new RedisSessionStore(redis, 'tg:session'),
+  process.env.TG_SESSION_KEY!, // high-entropy secret; never hard-code
+);
+```
+
+See **[SESSION-STORES.md](./SESSION-STORES.md)** for the full reference,
+security notes, and the encryption format.
+
+### Writing a custom store
+
+The `SessionStore` interface is exported, so any custom backend is just the
+three methods — wrap storage failures in `TelegramSessionError` to keep them in
+the library's single error hierarchy. (For most async backends, prefer
+`KeyValueSessionStore` over writing one by hand.)
 
 ```ts
 TelegramClientModule.forRootAsync({
   inject: [ConfigService, RedisClient],
-  useFactory: (config: ConfigService, redis: Redis) => ({
+  useFactory: (config: ConfigService, redis: RedisClient) => ({
     apiId: Number(config.getOrThrow('TG_API_ID')),
     apiHash: config.getOrThrow('TG_API_HASH'),
-    sessionStore: new RedisSessionStore(redis),
+    sessionStore: new EncryptedSessionStore(
+      new RedisSessionStore(redis),
+      config.getOrThrow('TG_SESSION_KEY'),
+    ),
   }),
 });
 ```
@@ -426,6 +433,22 @@ returns library DTOs; the service transparently connects the client on first use
 | `getMessages` | `(peer: GramPeer, params?: GramGetMessagesParams) => Promise<GramMessage[]>` | Recent messages from a peer, newest first. |
 | `sendMessage` | `(peer: GramPeer, text: string \| GramSendMessageParams) => Promise<GramMessage>` | Sends a message; returns the sent message. |
 | `sendToSelf` | `(text: string) => Promise<GramMessage>` | Convenience for messaging your own *Saved Messages* (peer `'me'`). |
+| `sendFile` | `(peer: GramPeer, params: GramSendFileParams) => Promise<GramMessage>` | Sends a photo / video / document; returns the sent message. |
+| `downloadMedia` | `(peer: GramPeer, messageId: number) => Promise<Buffer \| undefined>` | Downloads a message's media, or `undefined` when it has none. |
+| `downloadProfilePhoto` | `(peer: GramPeer) => Promise<Buffer \| undefined>` | Downloads a peer's profile photo, or `undefined` when absent. |
+| `getMediaInfo` | `(peer: GramPeer, messageId: number) => Promise<GramMediaInfo \| undefined>` | Media metadata (kind/MIME/size/dimensions) without downloading the bytes. |
+| `downloadMediaRange` | `(peer: GramPeer, messageId: number, range: GramMediaRange) => Promise<Buffer \| undefined>` | A single byte range of a message's media (for HTTP `206`). |
+| `streamMedia` | `(peer: GramPeer, messageId: number, options?: GramStreamMediaOptions) => Promise<AsyncIterable<Buffer>>` | Lazy byte-chunk stream for progressive playback. |
+| `joinChannel` | `(peer: GramPeer) => Promise<void>` | Joins a public channel or group. |
+| `leaveChannel` | `(peer: GramPeer) => Promise<void>` | Leaves a channel or group. |
+| `getParticipants` | `(peer: GramPeer, params?: GramGetParticipantsParams) => Promise<GramUser[]>` | Lists a group/channel's participants. |
+| `searchMessages` | `(peer: GramPeer, query: string, params?: GramSearchMessagesParams) => Promise<GramMessage[]>` | Searches a peer's history for a text query. |
+| `getFullChat` | `(peer: GramPeer) => Promise<GramChatInfo>` | Extended info (description, member count) for a chat/channel/user. |
+| `editMessage` | `(peer: GramPeer, messageId: number, text: string) => Promise<GramMessage>` | Edits a message's text; returns the edited message. |
+| `deleteMessages` | `(peer: GramPeer, messageIds: number[], params?: GramDeleteMessagesParams) => Promise<void>` | Deletes messages (for everyone by default). |
+| `forwardMessages` | `(toPeer: GramPeer, fromPeer: GramPeer, messageIds: number[]) => Promise<GramMessage[]>` | Forwards messages between peers. |
+| `markAsRead` | `(peer: GramPeer) => Promise<void>` | Marks a peer's history as read. |
+| `pinMessage` | `(peer: GramPeer, messageId: number, params?: GramPinMessageParams) => Promise<void>` | Pins a message in a chat. |
 
 A `GramPeer` is `string | number`: the literal `'me'`, a public `@username`, or a numeric
 user/chat id.
@@ -494,6 +517,151 @@ await this.user.sendToSelf('Remember to renew the api credentials.');
 
 `GramGetDialogsParams` accepts `limit` and `archived`; `GramGetMessagesParams` accepts
 `limit`, `minId`, and `maxId` (for pagination).
+
+### Media, chats, and message operations
+
+Beyond text, `TelegramUserService` exposes the common MTProto operations real automations
+need. Every one returns library DTOs and goes through the `IGramClient` seam, so the GramJS
+isolation boundary holds and your code/tests never import `telegram`.
+
+```ts
+// ── Media ──────────────────────────────────────────────────────────────────
+// Send a document; pass a local path, a direct URL, or a Buffer (give a Buffer a
+// `.name` to control the filename). `asPhoto` chooses photo vs. document presentation.
+await this.user.sendFile('me', { file: './report.pdf', caption: 'done' });
+await this.user.sendFile('@me', { file: photoBuffer, asPhoto: true });
+
+// Download a message's media. `GramMessage.hasMedia` tells you when there's anything
+// to fetch; the bytes come back as a Buffer (or `undefined` when there is none).
+const [latest] = await this.user.getMessages('@channel', { limit: 1 });
+if (latest?.hasMedia) {
+  const bytes = await this.user.downloadMedia(latest.peerId, latest.id);
+}
+const avatar = await this.user.downloadProfilePhoto('@durov');
+
+// ── Chats & channels ────────────────────────────────────────────────────────
+await this.user.joinChannel('@some_public_channel');
+await this.user.leaveChannel('@some_public_channel');
+
+// Always pass a `limit` — with none, GramJS fetches *every* member, which is
+// slow and can trip FLOOD_WAIT (and looks like member harvesting) on big peers.
+const members = await this.user.getParticipants('@my_group', { limit: 100 });
+const hits = await this.user.searchMessages('@my_group', 'invoice', { limit: 20 });
+
+const info = await this.user.getFullChat('@my_group');
+// info: GramChatInfo — { id, type, title, about?, participantsCount?, username?, verified }
+
+// ── Message operations ──────────────────────────────────────────────────────
+const sent = await this.user.sendMessage('me', 'draft');
+await this.user.editMessage('me', sent.id, 'final');
+await this.user.pinMessage('me', sent.id, { notify: false });
+await this.user.markAsRead('@my_group');
+await this.user.forwardMessages('me', '@my_group', [sent.id]);
+await this.user.deleteMessages('me', [sent.id]); // revoke: true by default
+```
+
+`GramSendFileParams`:
+
+| Field | Type | Description |
+|---|---|---|
+| `file` | `string \| Buffer` | Local path, direct URL, or in-memory bytes. |
+| `caption` | `string` | Optional caption shown beneath the media. |
+| `asPhoto` | `boolean` | `true` → viewable photo/video; `false` → document; omitted → inferred from the extension. |
+| `parseMode` | `'html' \| 'md'` | Optional formatting mode applied to `caption`. |
+| `replyTo` | `number` | Id of the message to reply to. |
+| `silent` | `boolean` | Send without a notification sound. |
+
+`getParticipants` takes `GramGetParticipantsParams` (`limit`, `search`); `searchMessages` takes
+`GramSearchMessagesParams` (`limit`); `deleteMessages` takes `GramDeleteMessagesParams`
+(`revoke`, default `true` — delete for everyone); `pinMessage` takes `GramPinMessageParams`
+(`notify`, default `false`).
+
+> [!NOTE]
+> `downloadMedia` takes the message's `peerId` and `id` (rather than a raw GramJS message) so
+> the DTO boundary stays intact — the adapter re-fetches the message and downloads its media.
+
+### Streaming media (progressive video / HTTP Range)
+
+`downloadMedia` buffers the **whole** file — fine for photos and small documents, but not for a
+multi-hundred-MB video you want the user to start watching immediately. For that, three methods
+let you serve media incrementally so an HTML5 `<video>` (or any range-aware player) plays and
+seeks without a full download:
+
+- **`getMediaInfo(peer, id)`** → a `GramMediaInfo` (kind, MIME, size, duration, dimensions) —
+  everything you need for `Content-Type` / `Content-Length` / `Accept-Ranges`. `undefined` when
+  the message has no downloadable media.
+- **`downloadMediaRange(peer, id, { offset, limit })`** → exactly the requested bytes (shorter
+  at end-of-file). Use it to answer an HTTP `Range` request with `206 Partial Content`.
+- **`streamMedia(peer, id, { offset?, limit? })`** → a lazy `AsyncIterable<Buffer>` you pipe
+  straight to the response; nothing is buffered server-side.
+
+```ts
+import { Controller, Get, Headers, Param, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { TelegramUserService } from 'nestjs-telegram';
+
+@Controller()
+export class MediaController {
+  constructor(private readonly user: TelegramUserService) {}
+
+  /** Streams a chat's media to a browser, honouring HTTP Range requests. */
+  @Get('media/:peer/:id')
+  async stream(
+    @Param('peer') peer: string,
+    @Param('id') id: string,
+    @Headers('range') range: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const messageId = Number(id);
+    const info = await this.user.getMediaInfo(peer, messageId);
+    if (!info?.size) {
+      res.status(404).end();
+      return;
+    }
+
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Type', info.mimeType ?? 'application/octet-stream');
+
+    // ── No Range header → stream the whole file with a 200. ──────────────────
+    if (!range) {
+      res.setHeader('Content-Length', info.size);
+      for await (const chunk of await this.user.streamMedia(peer, messageId))
+        res.write(chunk);
+      res.end();
+      return;
+    }
+
+    // ── Range header → 206 Partial Content. `end` is inclusive (RFC 7233). ───
+    const [startRaw, endRaw] = range.replace('bytes=', '').split('-');
+    const start = Number(startRaw);
+    const end = endRaw ? Number(endRaw) : info.size - 1;
+    const limit = end - start + 1;
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
+    res.setHeader('Content-Length', limit);
+    for await (const chunk of await this.user.streamMedia(peer, messageId, {
+      offset: start,
+      limit,
+    }))
+      res.write(chunk);
+    res.end();
+  }
+}
+```
+
+Point a player at it and seeking just works:
+
+```html
+<video src="/media/@my_channel/1234" controls></video>
+```
+
+> [!NOTE]
+> Telegram requires download offsets to be 4096-aligned; the adapter aligns the offset down and
+> trims the surplus internally, so you pass plain byte offsets. Aggressive seeking issues many
+> range requests — heavy seeking can trip `FLOOD_WAIT` (surfaced as `TelegramClientError`).
+> Non-streamable containers (some MKV/AVI) won't play inline in browsers regardless — that's a
+> format concern, not a library limit.
 
 ### Receiving inbound messages
 
@@ -602,6 +770,43 @@ interface GramMessage {
   date: number;        // unix timestamp in seconds
   out: boolean;        // true when sent by the logged-in account
   senderId?: string;   // sender id as a decimal string, when known
+  hasMedia?: boolean;  // true when the message carries downloadable media
+}
+```
+
+`hasMedia` is always populated on messages produced by the adapter (it is optional only so a
+hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
+`downloadMedia(message.peerId, message.id)`.
+
+### `GramChatInfo`
+
+```ts
+interface GramChatInfo {
+  id: string;                // peer id as a decimal string
+  type: 'user' | 'group' | 'channel';
+  title: string;             // chat/channel title, or the user's full name
+  username?: string;         // without the leading '@'
+  about?: string;            // bio (user) or description (group/channel)
+  participantsCount?: number; // member count for groups/channels; undefined for users
+  verified: boolean;         // whether the peer has Telegram's verified badge
+}
+```
+
+### `GramMediaInfo`
+
+Returned by `getMediaInfo`; carries what an HTTP layer needs to serve the bytes plus light
+playback metadata. `size` is a `number` — media is far below `2^53` bytes (unlike entity ids).
+
+```ts
+interface GramMediaInfo {
+  kind: 'photo' | 'video' | 'audio' | 'voice' | 'document';
+  mimeType?: string;          // e.g. 'video/mp4'
+  size?: number;              // bytes
+  fileName?: string;
+  durationSeconds?: number;   // video / audio / voice
+  width?: number;             // video
+  height?: number;            // video
+  supportsStreaming?: boolean; // uploader flagged the video as streamable
 }
 ```
 
@@ -616,8 +821,12 @@ Related sign-in DTOs you may encounter: `GramSendCodeResult`
 Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
 operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
 `signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
-`sendMessage`, `exportSession`). The concrete `GramJsClientAdapter` — created by
-`createGramJsClient` — is the **only** implementation that touches the `telegram` package.
+`sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `getMediaInfo`,
+`downloadMediaRange`, `streamMedia`, `joinChannel`,
+`leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,
+`deleteMessages`, `forwardMessages`, `markAsRead`, `pinMessage`, `exportSession`,
+`onNewMessage`). The concrete `GramJsClientAdapter` — created by `createGramJsClient` — is the
+**only** implementation that touches the `telegram` package.
 
 This boundary makes the services unit-testable with a trivial fake and keeps GramJS out of
 consumer compilation units. There are two ways to substitute a fake:
@@ -628,6 +837,9 @@ consumer compilation units. There are two ways to substitute a fake:
 import type { IGramClient } from 'nestjs-telegram';
 import { TelegramUserService } from 'nestjs-telegram';
 
+// Abbreviated for illustration — a complete `IGramClient` also implements the
+// media / chat / message operations (`sendFile`, `downloadMedia`, `joinChannel`,
+// `getParticipants`, `getFullChat`, `editMessage`, …) and `onNewMessage`.
 const fake: IGramClient = {
   isConnected: () => true,
   connect: async () => {},
@@ -639,15 +851,21 @@ const fake: IGramClient = {
   sendMessage: async (_peer, params) => ({
     id: 1, peerId: '42', text: params.message, date: 0, out: true,
   }),
+  // …media / chat / message ops + onNewMessage omitted for brevity…
   sendCode: async () => ({ phoneCodeHash: 'h', isCodeViaApp: true }),
   signInWithCode: async () => ({ status: 'authorized', user: { id: '42', isSelf: true, isBot: false, isPremium: false } }),
   signInWithPassword: async () => ({ id: '42', isSelf: true, isBot: false, isPremium: false }),
   logOut: async () => {},
   exportSession: () => '',
-};
+} as IGramClient;
 
 const user = new TelegramUserService(fake);
 ```
+
+> [!TIP]
+> For a **complete**, ready-made fake, use `createMockGramClient()` from the
+> `nestjs-telegram/testing` subpath — every method is a pre-stubbed `jest.fn()`, so you only
+> override the calls your test cares about. See [§ Testing](./TESTING.md).
 
 **(b) Pass `clientFactory`** so the module builds your fake instead of a real GramJS client.
 `GramClientFactory` has the signature `(options, session) => IGramClient`. Combine it with

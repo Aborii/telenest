@@ -19,9 +19,16 @@
  * - createGramJsClient: Builds a connected-capable adapter from options.
  */
 
-import { Api, TelegramClient, errors, password, sessions } from 'telegram';
+import { Api, errors, password, sessions, TelegramClient } from 'telegram';
 import { NewMessage, type NewMessageEvent } from 'telegram/events';
 import type { Dialog } from 'telegram/tl/custom/dialog';
+
+// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
+//    so the import-equals form is required. GramJS' download offset is a
+//    big-integer `BigInteger`, not a native `bigint`. ────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above.
+import bigInt = require('big-integer');
+
 import {
   TelegramAuthError,
   TelegramClientError,
@@ -30,19 +37,67 @@ import {
 import type { IGramClient } from './gram-client.interface';
 import {
   GRAM_DIALOG_TYPES,
+  GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
+  type GramChatInfo,
+  type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogType,
   type GramGetDialogsParams,
   type GramGetMessagesParams,
+  type GramGetParticipantsParams,
+  type GramMediaInfo,
+  type GramMediaKind,
+  type GramMediaRange,
   type GramMessage,
   type GramPeer,
+  type GramPinMessageParams,
+  type GramQrSignInCallbacks,
+  type GramQrToken,
+  type GramSearchMessagesParams,
   type GramSendCodeResult,
+  type GramSendFileParams,
   type GramSendMessageParams,
   type GramSignInResult,
   type GramSignInWithCodeInput,
+  type GramStreamMediaOptions,
+  type GramUpdateTwoFactorInput,
   type GramUser,
 } from './gram-client.types';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
+
+/**
+ * Per-request download size for streaming, in bytes. Must be a multiple of
+ * 4096 and at most GramJS' 512 KiB cap; 512 KiB minimizes the number of MTProto
+ * round-trips per streamed range.
+ */
+const STREAM_REQUEST_SIZE = 512 * 1024;
+
+/**
+ * Telegram's `upload.getFile` offset must be a multiple of this. We align the
+ * requested offset down to it and slice the surplus off the first chunk, which
+ * is valid for both of GramJS' direct and generic download iterators.
+ */
+const MEDIA_OFFSET_ALIGN = 4096;
+
+/**
+ * Picks a per-request download size for a bounded read of `neededBytes`.
+ *
+ * Telegram only accepts a `getFile` limit that is a power-of-two divisor of
+ * 1 MiB (4096, 8192, …, 512 KiB) — not any 4096 multiple — so this rounds up to
+ * the next power of two at least {@link MEDIA_OFFSET_ALIGN}, capped at
+ * {@link STREAM_REQUEST_SIZE}. It keeps small ranges (e.g. a player's opening
+ * byte probe) from pulling a full 512 KiB chunk.
+ *
+ * @param neededBytes - Bytes the caller needs from the aligned offset onward.
+ * @returns A valid `getFile` request size in bytes.
+ * @throws Never.
+ */
+function streamRequestSize(neededBytes: number): number {
+  let size = MEDIA_OFFSET_ALIGN;
+  while (size < neededBytes && size < STREAM_REQUEST_SIZE) size *= 2;
+  return Math.min(size, STREAM_REQUEST_SIZE);
+}
 
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
@@ -192,6 +247,73 @@ export class GramJsClientAdapter implements IGramClient {
     }
   }
 
+  /** {@inheritDoc IGramClient.signInWithQrCode} */
+  public async signInWithQrCode(
+    callbacks: GramQrSignInCallbacks,
+  ): Promise<GramUser> {
+    // ── GramJS' QR flow drives 2FA through a retrying password loop whose only
+    //    way to stop is `onError` returning `true`; left to loop, a wrong
+    //    password would re-prompt forever. We stop on the first error and
+    //    capture it so the *real* failure (not GramJS' generic "AUTH_USER_CANCEL"
+    //    cancellation) is what gets mapped below. ────────────────────────────
+    let capturedError: unknown;
+    try {
+      const user = await this.client.signInUserWithQrCode(this.credentials, {
+        qrCode: async (qr) => {
+          callbacks.onToken(this.mapQrToken(qr.token, qr.expires));
+        },
+        password: callbacks.onPassword,
+        // ── Returning `true` stops GramJS' retry loop; `async` satisfies the
+        //    callback's `Promise<boolean> | void` signature. ─────────────────
+        onError: async (error) => {
+          capturedError = error;
+          return true;
+        },
+      });
+      return this.mapUser(user);
+    } catch (error) {
+      // ── No `onPassword` on a 2FA account: GramJS throws this English message
+      //    directly (never via `onError`); surface it as PASSWORD_REQUIRED. ───
+      if (
+        capturedError === undefined &&
+        this.readErrorMessage(error) === 'Account has 2FA enabled.'
+      )
+        throw new TelegramAuthError(
+          'PASSWORD_REQUIRED',
+          'The scanned account has 2FA enabled; provide an onPassword callback.',
+          { cause: error },
+        );
+      throw this.toAuthError(capturedError ?? error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.signInAsBot} */
+  public async signInAsBot(botToken: string): Promise<GramUser> {
+    try {
+      const user = await this.client.signInBot(this.credentials, {
+        botAuthToken: botToken,
+      });
+      return this.mapUser(user);
+    } catch (error) {
+      throw this.toAuthError(error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.updateTwoFactor} */
+  public async updateTwoFactor(
+    input: GramUpdateTwoFactorInput,
+  ): Promise<void> {
+    try {
+      await this.client.updateTwoFaSettings({
+        currentPassword: input.currentPassword,
+        newPassword: input.newPassword,
+        hint: input.hint,
+      });
+    } catch (error) {
+      throw this.toAuthError(error);
+    }
+  }
+
   /** {@inheritDoc IGramClient.logOut} */
   public async logOut(): Promise<void> {
     try {
@@ -276,6 +398,398 @@ export class GramJsClientAdapter implements IGramClient {
     }
   }
 
+  // ── Media ──────────────────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.sendFile} */
+  public async sendFile(
+    peer: GramPeer,
+    params: GramSendFileParams,
+  ): Promise<GramMessage> {
+    try {
+      const message = await this.client.sendFile(peer, {
+        file: params.file,
+        caption: params.caption,
+        // ── `asPhoto` inverts GramJS' `forceDocument`; leaving it undefined
+        //    keeps GramJS' extension-based inference. ──────────────────────────
+        forceDocument:
+          params.asPhoto === undefined ? undefined : !params.asPhoto,
+        parseMode: params.parseMode,
+        replyTo: params.replyTo,
+        silent: params.silent,
+      });
+      return this.mapMessage(message);
+    } catch (error) {
+      throw new TelegramClientError('Failed to send file.', {
+        operation: 'sendFile',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadMedia} */
+  public async downloadMedia(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Buffer | undefined> {
+    try {
+      const [message] = await this.client.getMessages(peer, {
+        ids: [messageId],
+      });
+      if (!message || !this.hasDownloadableMedia(message)) return undefined;
+      const data = await this.client.downloadMedia(message);
+      // ── Without an `outputFile`, GramJS resolves to the raw bytes; a string
+      //    would only appear if a file path were requested. ───────────────────
+      return Buffer.isBuffer(data) ? data : undefined;
+    } catch (error) {
+      throw new TelegramClientError('Failed to download media.', {
+        operation: 'downloadMedia',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadProfilePhoto} */
+  public async downloadProfilePhoto(
+    peer: GramPeer,
+  ): Promise<Buffer | undefined> {
+    try {
+      const data = await this.client.downloadProfilePhoto(peer);
+      return Buffer.isBuffer(data) ? data : undefined;
+    } catch (error) {
+      throw new TelegramClientError('Failed to download profile photo.', {
+        operation: 'downloadProfilePhoto',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getMediaInfo} */
+  public async getMediaInfo(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<GramMediaInfo | undefined> {
+    try {
+      const message = await this.fetchMediaMessage(peer, messageId);
+      if (!message) return undefined;
+      return this.mapMediaInfo(message.media);
+    } catch (error) {
+      throw new TelegramClientError('Failed to read media info.', {
+        operation: 'getMediaInfo',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.downloadMediaRange} */
+  public async downloadMediaRange(
+    peer: GramPeer,
+    messageId: number,
+    range: GramMediaRange,
+  ): Promise<Buffer | undefined> {
+    try {
+      const message = await this.fetchMediaMessage(peer, messageId);
+      if (!message) return undefined;
+
+      // ── Align down to a valid Telegram offset, then slice the surplus. ─────
+      const skip = range.offset % MEDIA_OFFSET_ALIGN;
+      const alignedOffset = range.offset - skip;
+      const needed = skip + range.limit;
+
+      const buffers: Buffer[] = [];
+      let collected = 0;
+      for await (const chunk of this.client.iterDownload({
+        file: message.media,
+        offset: bigInt(alignedOffset),
+        // ── Size the request to the range so small probes don't pull 512 KiB. ─
+        requestSize: streamRequestSize(needed),
+      })) {
+        buffers.push(chunk);
+        collected += chunk.length;
+        if (collected >= needed) break;
+      }
+
+      return Buffer.concat(buffers).subarray(skip, skip + range.limit);
+    } catch (error) {
+      throw new TelegramClientError('Failed to download media range.', {
+        operation: 'downloadMediaRange',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.streamMedia} */
+  public async streamMedia(
+    peer: GramPeer,
+    messageId: number,
+    options: GramStreamMediaOptions = {},
+  ): Promise<AsyncIterable<Buffer>> {
+    let message: Api.Message | undefined;
+    try {
+      message = await this.fetchMediaMessage(peer, messageId);
+    } catch (error) {
+      throw new TelegramClientError('Failed to stream media.', {
+        operation: 'streamMedia',
+        cause: error,
+      });
+    }
+    if (!message)
+      throw new TelegramClientError(
+        'Message has no downloadable media to stream.',
+        { operation: 'streamMedia' },
+      );
+
+    const media = message.media;
+    const client = this.client;
+    const offset = options.offset ?? 0;
+    const limit = options.limit;
+    const alignedOffset = offset - (offset % MEDIA_OFFSET_ALIGN);
+
+    // ── Lazy generator: GramJS yields aligned chunks; we trim the leading
+    //    surplus (offset % 4096) and stop once `limit` bytes are emitted. ─────
+    return (async function* streamChunks(): AsyncGenerator<Buffer> {
+      let skip = offset - alignedOffset;
+      let remaining = limit;
+      try {
+        for await (const raw of client.iterDownload({
+          file: media,
+          offset: bigInt(alignedOffset),
+          requestSize: STREAM_REQUEST_SIZE,
+        })) {
+          let chunk = raw;
+          if (skip > 0) {
+            if (chunk.length <= skip) {
+              skip -= chunk.length;
+              continue;
+            }
+            chunk = chunk.subarray(skip);
+            skip = 0;
+          }
+          if (remaining === undefined) {
+            yield chunk;
+            continue;
+          }
+          if (remaining <= 0) return;
+          if (chunk.length >= remaining) {
+            yield chunk.subarray(0, remaining);
+            return;
+          }
+          yield chunk;
+          remaining -= chunk.length;
+        }
+      } catch (error) {
+        throw new TelegramClientError('Failed to stream media.', {
+          operation: 'streamMedia',
+          cause: error,
+        });
+      }
+    })();
+  }
+
+  // ── Chats & channels ───────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.joinChannel} */
+  public async joinChannel(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.invoke(new Api.channels.JoinChannel({ channel: peer }));
+    } catch (error) {
+      throw new TelegramClientError('Failed to join channel.', {
+        operation: 'joinChannel',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.leaveChannel} */
+  public async leaveChannel(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.invoke(
+        new Api.channels.LeaveChannel({ channel: peer }),
+      );
+    } catch (error) {
+      throw new TelegramClientError('Failed to leave channel.', {
+        operation: 'leaveChannel',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getParticipants} */
+  public async getParticipants(
+    peer: GramPeer,
+    params: GramGetParticipantsParams = {},
+  ): Promise<GramUser[]> {
+    try {
+      const participants = await this.client.getParticipants(peer, {
+        limit: params.limit,
+        search: params.search,
+      });
+      return participants.map((user) => this.mapUser(user));
+    } catch (error) {
+      throw new TelegramClientError('Failed to list participants.', {
+        operation: 'getParticipants',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchMessages} */
+  public async searchMessages(
+    peer: GramPeer,
+    query: string,
+    params: GramSearchMessagesParams = {},
+  ): Promise<GramMessage[]> {
+    try {
+      const messages = await this.client.getMessages(peer, {
+        search: query,
+        limit: params.limit,
+      });
+      return messages.map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw new TelegramClientError('Failed to search messages.', {
+        operation: 'searchMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getFullChat} */
+  public async getFullChat(peer: GramPeer): Promise<GramChatInfo> {
+    try {
+      const entity = await this.client.getEntity(peer);
+
+      // ── User: bio lives on `users.GetFullUser().fullUser.about`. ───────────
+      if (entity instanceof Api.User) {
+        const full = await this.client.invoke(
+          new Api.users.GetFullUser({ id: entity }),
+        );
+        return this.mapChatInfo(entity, full.fullUser.about, undefined);
+      }
+
+      // ── Channel / supergroup: description + count on `ChannelFull`. ─────────
+      if (entity instanceof Api.Channel) {
+        const full = await this.client.invoke(
+          new Api.channels.GetFullChannel({ channel: entity }),
+        );
+        const fullChat = full.fullChat;
+        const count =
+          fullChat instanceof Api.ChannelFull
+            ? fullChat.participantsCount
+            : undefined;
+        return this.mapChatInfo(entity, fullChat.about, count);
+      }
+
+      // ── Basic group: description on `ChatFull`; count on the entity. ────────
+      if (entity instanceof Api.Chat) {
+        const full = await this.client.invoke(
+          new Api.messages.GetFullChat({ chatId: entity.id }),
+        );
+        return this.mapChatInfo(
+          entity,
+          full.fullChat.about,
+          entity.participantsCount,
+        );
+      }
+
+      // ── Empty / forbidden peers carry no full info to surface. ─────────────
+      throw new TelegramClientError(
+        'Peer has no accessible chat information.',
+        { operation: 'getFullChat' },
+      );
+    } catch (error) {
+      throw this.toClientError(error, 'Failed to fetch chat info.', 'getFullChat');
+    }
+  }
+
+  // ── Message operations ─────────────────────────────────────────────────────
+
+  /** {@inheritDoc IGramClient.editMessage} */
+  public async editMessage(
+    peer: GramPeer,
+    messageId: number,
+    text: string,
+  ): Promise<GramMessage> {
+    try {
+      const message = await this.client.editMessage(peer, {
+        message: messageId,
+        text,
+      });
+      return this.mapMessage(message);
+    } catch (error) {
+      throw new TelegramClientError('Failed to edit message.', {
+        operation: 'editMessage',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.deleteMessages} */
+  public async deleteMessages(
+    peer: GramPeer,
+    messageIds: number[],
+    params: GramDeleteMessagesParams = {},
+  ): Promise<void> {
+    try {
+      await this.client.deleteMessages(peer, messageIds, {
+        revoke: params.revoke ?? true,
+      });
+    } catch (error) {
+      throw new TelegramClientError('Failed to delete messages.', {
+        operation: 'deleteMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.forwardMessages} */
+  public async forwardMessages(
+    toPeer: GramPeer,
+    fromPeer: GramPeer,
+    messageIds: number[],
+  ): Promise<GramMessage[]> {
+    try {
+      const messages = await this.client.forwardMessages(toPeer, {
+        messages: messageIds,
+        fromPeer,
+      });
+      return messages.map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw new TelegramClientError('Failed to forward messages.', {
+        operation: 'forwardMessages',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.markAsRead} */
+  public async markAsRead(peer: GramPeer): Promise<void> {
+    try {
+      await this.client.markAsRead(peer);
+    } catch (error) {
+      throw new TelegramClientError('Failed to mark as read.', {
+        operation: 'markAsRead',
+        cause: error,
+      });
+    }
+  }
+
+  /** {@inheritDoc IGramClient.pinMessage} */
+  public async pinMessage(
+    peer: GramPeer,
+    messageId: number,
+    params: GramPinMessageParams = {},
+  ): Promise<void> {
+    try {
+      await this.client.pinMessage(peer, messageId, {
+        notify: params.notify ?? false,
+      });
+    } catch (error) {
+      throw new TelegramClientError('Failed to pin message.', {
+        operation: 'pinMessage',
+        cause: error,
+      });
+    }
+  }
+
   /** {@inheritDoc IGramClient.exportSession} */
   public exportSession(): string {
     // ── StringSession.save() returns the encoded string; the abstract base
@@ -326,6 +840,20 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /**
+   * Maps a GramJS QR login token (`{ token, expires }`) into a {@link GramQrToken},
+   * base64url-encoding the raw bytes and building the `tg://login` deep link.
+   *
+   * @param token - The raw login-token bytes from `Api.auth.LoginToken`.
+   * @param expires - Unix timestamp (seconds) when the token expires.
+   * @returns The normalized QR token DTO.
+   * @throws Never.
+   */
+  private mapQrToken(token: Buffer, expires: number): GramQrToken {
+    const encoded = token.toString('base64url');
+    return { token: encoded, url: `tg://login?token=${encoded}`, expires };
+  }
+
+  /**
    * Maps a GramJS {@link Dialog} into a {@link GramDialog}.
    *
    * @param dialog - The GramJS dialog to map.
@@ -364,6 +892,145 @@ export class GramJsClientAdapter implements IGramClient {
       date: message.date,
       out: Boolean(message.out),
       senderId: sender ? sender.toString() : undefined,
+      hasMedia: this.hasDownloadableMedia(message),
+    };
+  }
+
+  /**
+   * Reports whether a message carries downloadable media. An empty media
+   * placeholder ({@link Api.MessageMediaEmpty}) does not count.
+   *
+   * @param message - The message to inspect.
+   * @returns `true` when the message has non-empty media.
+   * @throws Never.
+   */
+  private hasDownloadableMedia(message: Api.Message): boolean {
+    return (
+      Boolean(message.media) &&
+      !(message.media instanceof Api.MessageMediaEmpty)
+    );
+  }
+
+  /**
+   * Fetches a single message by id and returns it only when it carries
+   * downloadable media. Used by the media-info / range / stream operations.
+   *
+   * @param peer - Peer the message belongs to.
+   * @param messageId - Id of the message to fetch.
+   * @returns The message when it has non-empty media, else `undefined`.
+   * @throws Propagates the GramJS error (callers wrap it).
+   */
+  private async fetchMediaMessage(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Api.Message | undefined> {
+    const [message] = await this.client.getMessages(peer, {
+      ids: [messageId],
+    });
+    if (!message || !this.hasDownloadableMedia(message)) return undefined;
+    return message;
+  }
+
+  /**
+   * Maps a message's media into a {@link GramMediaInfo}.
+   *
+   * @param media - The message media (already known to be non-empty).
+   * @returns The descriptor, or `undefined` for media with no file body
+   *   (e.g. a web-page preview or geo point).
+   * @throws Never.
+   */
+  private mapMediaInfo(
+    media: Api.TypeMessageMedia | undefined,
+  ): GramMediaInfo | undefined {
+    // ── Photos have no single byte size here; report the kind only. ─────────
+    if (media instanceof Api.MessageMediaPhoto)
+      return { kind: GRAM_MEDIA_KINDS.PHOTO, mimeType: 'image/jpeg' };
+
+    if (!(media instanceof Api.MessageMediaDocument)) return undefined;
+    const doc = media.document;
+    if (!(doc instanceof Api.Document)) return undefined;
+
+    const video = doc.attributes.find(
+      (a): a is Api.DocumentAttributeVideo =>
+        a instanceof Api.DocumentAttributeVideo,
+    );
+    const audio = doc.attributes.find(
+      (a): a is Api.DocumentAttributeAudio =>
+        a instanceof Api.DocumentAttributeAudio,
+    );
+    const named = doc.attributes.find(
+      (a): a is Api.DocumentAttributeFilename =>
+        a instanceof Api.DocumentAttributeFilename,
+    );
+
+    // ── A video attribute wins; otherwise an audio attribute distinguishes a
+    //    voice note from music; otherwise it is a plain document. ────────────
+    let kind: GramMediaKind = GRAM_MEDIA_KINDS.DOCUMENT;
+    if (video) kind = GRAM_MEDIA_KINDS.VIDEO;
+    else if (audio)
+      kind = audio.voice ? GRAM_MEDIA_KINDS.VOICE : GRAM_MEDIA_KINDS.AUDIO;
+
+    return {
+      kind,
+      mimeType: doc.mimeType,
+      size: doc.size.toJSNumber(),
+      fileName: named?.fileName,
+      durationSeconds: video?.duration ?? audio?.duration,
+      width: video?.w,
+      height: video?.h,
+      supportsStreaming: video?.supportsStreaming,
+    };
+  }
+
+  /**
+   * Maps a GramJS resolved entity into a {@link GramChatInfo}, merging in the
+   * description / participant count read from a matching "full" request.
+   *
+   * @param entity - The resolved `Api.User` / `Api.Chat` / `Api.Channel`.
+   * @param about - The bio/description from the full request, when present.
+   * @param participantsCount - Member count from the full request, when present.
+   * @returns The normalized chat-info DTO.
+   * @throws Never.
+   */
+  private mapChatInfo(
+    entity: Api.User | Api.Chat | Api.Channel,
+    about: string | undefined,
+    participantsCount: number | undefined,
+  ): GramChatInfo {
+    if (entity instanceof Api.User) {
+      const fullName = [entity.firstName, entity.lastName]
+        .filter((part): part is string => Boolean(part))
+        .join(' ');
+      return {
+        id: entity.id.toString(),
+        type: GRAM_DIALOG_TYPES.USER,
+        title: fullName,
+        username: entity.username,
+        about,
+        participantsCount: undefined,
+        verified: Boolean(entity.verified),
+      };
+    }
+
+    // ── A basic group (`Api.Chat`) is always a group; a `Api.Channel` is a
+    //    channel unless its `megagroup` flag marks it as a supergroup. ────────
+    const type: GramDialogType =
+      entity instanceof Api.Chat
+        ? GRAM_DIALOG_TYPES.GROUP
+        : entity.megagroup
+          ? GRAM_DIALOG_TYPES.GROUP
+          : GRAM_DIALOG_TYPES.CHANNEL;
+
+    return {
+      id: entity.id.toString(),
+      type,
+      title: entity.title,
+      // ── Basic groups have no username; only channels/supergroups do. ───────
+      username: entity instanceof Api.Channel ? entity.username : undefined,
+      about,
+      participantsCount,
+      verified:
+        entity instanceof Api.Channel ? Boolean(entity.verified) : false,
     };
   }
 
@@ -382,6 +1049,27 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   // ── Error mapping ──────────────────────────────────────────────────────────
+
+  /**
+   * Wraps a caught value in a {@link TelegramClientError}, passing an existing
+   * {@link TelegramClientError} through unchanged. Lets a method `throw` a
+   * precise client error from inside its own `try` block without it being
+   * double-wrapped by the surrounding `catch`.
+   *
+   * @param error - The caught value.
+   * @param message - Message for the wrapper when `error` is not already one.
+   * @param operation - The operation name recorded on the wrapper.
+   * @returns A {@link TelegramClientError}.
+   * @throws Never.
+   */
+  private toClientError(
+    error: unknown,
+    message: string,
+    operation: string,
+  ): TelegramClientError {
+    if (error instanceof TelegramClientError) return error;
+    return new TelegramClientError(message, { operation, cause: error });
+  }
 
   /**
    * Detects GramJS' `SESSION_PASSWORD_NEEDED` signal (2FA required).

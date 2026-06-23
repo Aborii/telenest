@@ -96,6 +96,15 @@ export interface GramMessage {
   out: boolean;
   /** Sender id as a decimal string, when known. */
   senderId?: string;
+  /**
+   * Whether the message carries downloadable media (photo, document, video,
+   * …). Always populated by the GramJS adapter; optional on the DTO because
+   * a hand-built {@link import('./gram-client.interface').IGramClient} fake may
+   * omit it. When `true`, the media can be fetched with
+   * {@link import('./gram-client.interface').IGramClient.downloadMedia} using
+   * this message's `peerId` and `id`. Service/empty media never counts.
+   */
+  hasMedia?: boolean;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */
@@ -148,6 +157,75 @@ export interface GramSignInWithCodeInput {
   phoneCode: string;
 }
 
+/**
+ * A QR login token issued during
+ * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
+ *
+ * Telegram rotates the token roughly every 30 seconds until it is scanned, so a
+ * QR login surfaces a *sequence* of these rather than a single static value —
+ * always render the most recent `url`.
+ */
+export interface GramQrToken {
+  /**
+   * The login token, base64url-encoded. This is the same value embedded in
+   * {@link GramQrToken.url}; exposed separately for callers that build their own
+   * deep-link or QR payload.
+   */
+  token: string;
+  /**
+   * The `tg://login?token=…` deep link to render as a scannable QR code. When
+   * scanned by an already-authorized Telegram app, it authorizes this session.
+   */
+  url: string;
+  /** Unix timestamp (seconds) at which this token expires and a new one is issued. */
+  expires: number;
+}
+
+/**
+ * Callbacks driving
+ * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
+ */
+export interface GramQrSignInCallbacks {
+  /**
+   * Invoked with each freshly issued {@link GramQrToken} — once at the start and
+   * again whenever Telegram rotates the token before it expires. Render the
+   * latest `url` as a QR code for the user to scan.
+   */
+  onToken: (token: GramQrToken) => void;
+  /**
+   * Invoked when the scanned account has 2FA enabled: must resolve the account's
+   * two-step-verification password (the `hint`, if any, is Telegram's stored
+   * password hint). When omitted, a 2FA-protected account cannot complete QR
+   * login and the attempt rejects with a `PASSWORD_REQUIRED`
+   * {@link import('../common').TelegramAuthError}.
+   */
+  onPassword?: (hint?: string) => Promise<string>;
+}
+
+/**
+ * Input for
+ * {@link import('./gram-client.interface').IGramClient.updateTwoFactor}.
+ *
+ * The combination of fields selects the operation:
+ * - **enable**: `newPassword` set, `currentPassword` omitted.
+ * - **change**: both `currentPassword` and `newPassword` set.
+ * - **remove**: `currentPassword` set, `newPassword` omitted (or empty).
+ */
+export interface GramUpdateTwoFactorInput {
+  /**
+   * The current 2FA password. Required when changing or removing an existing
+   * password; omit it when enabling 2FA for the first time.
+   */
+  currentPassword?: string;
+  /**
+   * The new 2FA password. Omit (or pass an empty string) together with
+   * `currentPassword` to remove 2FA entirely.
+   */
+  newPassword?: string;
+  /** Hint Telegram shows at the 2FA prompt. Ignored when `newPassword` is unset. */
+  hint?: string;
+}
+
 /** Parameters for listing dialogs. */
 export interface GramGetDialogsParams {
   /** Maximum number of dialogs to return (default: GramJS default). */
@@ -191,4 +269,162 @@ export interface GramSendMessageParams {
   replyTo?: number;
   /** Send without a notification sound. */
   silent?: boolean;
+}
+
+/**
+ * A file accepted by {@link import('./gram-client.interface').IGramClient.sendFile}:
+ * a local filesystem path, a public direct URL (Telegram fetches it), or an
+ * in-memory {@link Buffer}. To control the filename of a `Buffer` upload, attach
+ * a `name` property to it (`Object.assign(buf, { name: 'report.pdf' })`).
+ */
+export type GramInputFile = string | Buffer;
+
+/** Parameters for sending a file as the logged-in account. */
+export interface GramSendFileParams {
+  /** The file to send (local path, direct URL, or {@link Buffer}). */
+  file: GramInputFile;
+  /** Optional caption shown beneath the media. */
+  caption?: string;
+  /**
+   * How to present an image/video file. `true` sends it as a viewable photo/
+   * video; `false` forces it as a downloadable document; omitted lets Telegram
+   * infer from the file extension (images/videos become media, else document).
+   */
+  asPhoto?: boolean;
+  /** Optional formatting mode applied to `caption`. */
+  parseMode?: GramParseMode;
+  /** Id of the message to reply to. */
+  replyTo?: number;
+  /** Send without a notification sound. */
+  silent?: boolean;
+}
+
+/** Parameters for listing a chat's or channel's participants. */
+export interface GramGetParticipantsParams {
+  /**
+   * Maximum number of participants to return. **When omitted, every
+   * participant is fetched** (GramJS' default) — on a large group/channel this
+   * is slow and can trigger `FLOOD_WAIT`. Set a `limit` unless you truly need
+   * the full roster.
+   */
+  limit?: number;
+  /** Filter participants by a display-name / username query. */
+  search?: string;
+}
+
+/** Parameters for searching messages within a peer. */
+export interface GramSearchMessagesParams {
+  /** Maximum number of matching messages to return. */
+  limit?: number;
+}
+
+/** Parameters for deleting messages. */
+export interface GramDeleteMessagesParams {
+  /**
+   * Delete the messages for everyone in the chat (not just your own copy).
+   * Defaults to `true`.
+   */
+  revoke?: boolean;
+}
+
+/** Parameters for pinning a message. */
+export interface GramPinMessageParams {
+  /**
+   * Notify chat members about the pin. Defaults to `false` (silent pin), which
+   * mirrors GramJS' default rather than the official clients' behaviour.
+   */
+  notify?: boolean;
+}
+
+/**
+ * Extended ("full") information about a chat, channel, or user, returned by
+ * {@link import('./gram-client.interface').IGramClient.getFullChat}. Richer than
+ * a {@link GramDialog}: it carries the description/bio and (for groups and
+ * channels) the participant count.
+ */
+export interface GramChatInfo {
+  /** Peer id rendered as a decimal string. */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public @username (without the leading `@`), when set. */
+  username?: string;
+  /** Bio (user) or description (group/channel), when set. */
+  about?: string;
+  /** Member count for groups and channels; `undefined` for users. */
+  participantsCount?: number;
+  /** Whether the peer carries Telegram's verified badge. */
+  verified: boolean;
+}
+
+/**
+ * Closed set of media kinds reported by
+ * {@link import('./gram-client.interface').IGramClient.getMediaInfo}. Declared
+ * as an `as const` record (never an `enum`) so {@link GramMediaKind} derives
+ * from it.
+ */
+export const GRAM_MEDIA_KINDS = {
+  /** A photo. */
+  PHOTO: 'photo',
+  /** A video document. */
+  VIDEO: 'video',
+  /** A music / audio document. */
+  AUDIO: 'audio',
+  /** A voice note. */
+  VOICE: 'voice',
+  /** Any other document (file, gif, sticker, …). */
+  DOCUMENT: 'document',
+} as const;
+
+/** Union of the media kinds in {@link GRAM_MEDIA_KINDS}. */
+export type GramMediaKind =
+  (typeof GRAM_MEDIA_KINDS)[keyof typeof GRAM_MEDIA_KINDS];
+
+/**
+ * GramJS-free descriptor of a message's media, returned by
+ * {@link import('./gram-client.interface').IGramClient.getMediaInfo}. Carries
+ * exactly what an HTTP layer needs to serve the bytes (Content-Type,
+ * Content-Length, Accept-Ranges) plus light playback metadata.
+ */
+export interface GramMediaInfo {
+  /** Which kind of media this is. */
+  kind: GramMediaKind;
+  /** MIME type (e.g. `'video/mp4'`), when known. */
+  mimeType?: string;
+  /**
+   * Total size in bytes, when known. A `number` is safe: Telegram media is far
+   * below `2^53` bytes (unlike entity ids, which are returned as strings).
+   */
+  size?: number;
+  /** Original file name, when present. */
+  fileName?: string;
+  /** Duration in seconds for video / audio / voice, when known. */
+  durationSeconds?: number;
+  /** Pixel width for video, when known. */
+  width?: number;
+  /** Pixel height for video, when known. */
+  height?: number;
+  /**
+   * Whether the uploader flagged the video as streamable (clients can play it
+   * before the full download completes).
+   */
+  supportsStreaming?: boolean;
+}
+
+/** A byte range for {@link import('./gram-client.interface').IGramClient.downloadMediaRange}. */
+export interface GramMediaRange {
+  /** Zero-based byte offset to start at. */
+  offset: number;
+  /** Number of bytes to return (the response may be shorter at end-of-file). */
+  limit: number;
+}
+
+/** Options for {@link import('./gram-client.interface').IGramClient.streamMedia}. */
+export interface GramStreamMediaOptions {
+  /** Zero-based byte offset to start streaming from. Defaults to `0`. */
+  offset?: number;
+  /** Maximum number of bytes to stream. Defaults to "until end-of-file". */
+  limit?: number;
 }

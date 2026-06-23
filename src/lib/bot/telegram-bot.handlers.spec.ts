@@ -9,6 +9,7 @@
  */
 
 import type { Telegraf } from 'telegraf';
+
 import { TelegramBotService } from './telegram-bot.service';
 
 /** Builds a service over a mock bot exposing the registration methods. */

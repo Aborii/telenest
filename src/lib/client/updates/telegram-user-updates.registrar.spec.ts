@@ -13,6 +13,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+
 import type { IGramClient } from '../gram-client.interface';
 import type { GramMessage } from '../gram-client.types';
 import { TelegramClientModule } from '../telegram-client.module';
@@ -80,11 +81,30 @@ function createEmittableClient(): {
     sendCode: jest.fn(),
     signInWithCode: jest.fn(),
     signInWithPassword: jest.fn(),
+    signInWithQrCode: jest.fn(),
+    signInAsBot: jest.fn(),
+    updateTwoFactor: jest.fn(),
     logOut: jest.fn(),
     getMe: jest.fn(),
     getDialogs: jest.fn(),
     getMessages: jest.fn(),
     sendMessage,
+    sendFile: jest.fn(),
+    downloadMedia: jest.fn(),
+    downloadProfilePhoto: jest.fn(),
+    getMediaInfo: jest.fn(),
+    downloadMediaRange: jest.fn(),
+    streamMedia: jest.fn(),
+    joinChannel: jest.fn(),
+    leaveChannel: jest.fn(),
+    getParticipants: jest.fn(),
+    searchMessages: jest.fn(),
+    getFullChat: jest.fn(),
+    editMessage: jest.fn(),
+    deleteMessages: jest.fn(),
+    forwardMessages: jest.fn(),
+    markAsRead: jest.fn(),
+    pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue(''),
     onNewMessage: (h) => {
       handler = h;

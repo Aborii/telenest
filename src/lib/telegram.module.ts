@@ -34,6 +34,7 @@
  */
 
 import { Module, type DynamicModule } from '@nestjs/common';
+
 import { TelegramBotModule } from './bot/telegram-bot.module';
 import type { TelegramBotModuleOptions } from './bot/telegram-bot.options';
 import { TelegramClientModule } from './client/telegram-client.module';

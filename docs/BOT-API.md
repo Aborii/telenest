@@ -12,6 +12,9 @@ Everything described here is backed by these source files:
 - `src/lib/bot/telegram-bot.service.ts` — `TelegramBotService` (typed facade + lifecycle + handlers)
 - `src/lib/bot/telegram-bot.constants.ts` — the `TELEGRAM_BOT` injection token
 - `src/lib/bot/keyboard.builder.ts` — `InlineKeyboardBuilder`, `ReplyKeyboardBuilder`, `removeKeyboard`, `forceReply`
+- `src/lib/bot/callback-data.codec.ts` — `encodeCallbackData`, `decodeCallbackData`
+- `src/lib/bot/message-splitter.ts` — `splitMessageText`
+- `src/lib/bot/retry.ts` — `withRetry`, `extractRetryAfterSeconds`
 - `src/lib/common/telegram.errors.ts` — `TelegramBotApiError` and friends
 
 All symbols are re-exported from the package root, so every import below resolves from
@@ -37,7 +40,12 @@ All symbols are re-exported from the package root, so every import below resolve
    - [Inline keyboards](#inline-keyboards)
    - [Reply (custom) keyboards](#reply-custom-keyboards)
    - [Removing a keyboard / forcing a reply](#removing-a-keyboard--forcing-a-reply)
-9. [Error handling with `TelegramBotApiError`](#9-error-handling-with-telegrambotapierror)
+9. [Convenience helpers](#9-convenience-helpers)
+   - [`downloadFile` / `downloadFileStream`](#downloadfile--downloadfilestream)
+   - [Structured callback data (`encodeCallbackData` / `decodeCallbackData`)](#structured-callback-data-encodecallbackdata--decodecallbackdata)
+   - [`sendLongMessage` (auto-splitting)](#sendlongmessage-auto-splitting)
+   - [`withRetry` (429 back-off)](#withretry-429-back-off)
+10. [Error handling with `TelegramBotApiError`](#10-error-handling-with-telegrambotapierror)
 
 ---
 
@@ -277,6 +285,29 @@ server and route (the common case in NestJS).
 Related Bot API helpers on the service: `setWebhook`, `deleteWebhook` (revert to
 long-polling), and `getWebhookInfo` (inspect current status).
 
+### Webhook (built-in controller)
+
+If you'd rather not wire `webhookCallback` and `setWebhook` by hand, enable the
+**built-in webhook controller**: pass a `webhook` option and the module stands up
+the `POST {path}` route, verifies Telegram's secret token in constant time, and
+(optionally) registers the URL on bootstrap — no `main.ts` changes.
+
+```ts
+TelegramBotModule.forRoot({
+  token: process.env.BOT_TOKEN!,
+  launch: false, // webhook mode — don't also long-poll
+  webhook: {
+    path: '/telegram/webhook',
+    domain: 'https://bot.example.com',
+    secretToken: process.env.TELEGRAM_WEBHOOK_SECRET,
+    registerOnBootstrap: true,
+  },
+});
+```
+
+See **[WEBHOOK-CONTROLLER.md](./WEBHOOK-CONTROLLER.md)** for the full guide
+(options, request flow, multi-bot routing, and security notes).
+
 ---
 
 ## 5. Registering handlers
@@ -413,6 +444,10 @@ installed Telegraf version.
 |                     | `sendChatAction`          | Show a "typing"/"upload" indicator |
 |                     | `forwardMessage`          | Forward a message (with header) |
 |                     | `copyMessage`             | Copy a message (no "forwarded from") |
+| **Polls / stickers**| `sendPoll`                | Send a native poll or quiz |
+|                     | `stopPoll`                | Stop a poll and read its final results |
+|                     | `sendSticker`             | Send a sticker |
+|                     | `setMessageReaction`      | Set (or clear) emoji reactions on a message |
 | **Edit / delete**   | `editMessageText`         | Edit a message's text |
 |                     | `editMessageReplyMarkup`  | Edit a message's inline keyboard |
 |                     | `deleteMessage`           | Delete a message |
@@ -422,14 +457,30 @@ installed Telegraf version.
 |                     | `getChatMembersCount`     | Number of members in a chat |
 |                     | `banChatMember`           | Ban a user from a group/channel |
 |                     | `pinChatMessage`          | Pin a message |
+| **Forum topics**    | `createForumTopic`        | Create a topic in a forum supergroup |
+|                     | `editForumTopic`          | Edit a topic's name/icon |
+|                     | `closeForumTopic`         | Close an open topic |
+|                     | `reopenForumTopic`        | Reopen a closed topic |
+|                     | `deleteForumTopic`        | Delete a topic and its messages |
+| **Payments**        | `sendInvoice`             | Send an invoice to a chat |
+|                     | `createInvoiceLink`       | Create a shareable invoice link |
+|                     | `answerPreCheckoutQuery`  | Confirm/reject a pre-checkout query |
 | **Commands**        | `setMyCommands`           | Set the bot's command list (shown in the UI) |
 |                     | `getMyCommands`           | Read the current command list |
+| **Bot profile**     | `setChatMenuButton` / `getChatMenuButton` | Set / read the bot's menu button |
+|                     | `setMyDescription` / `getMyDescription` | Set / read the bot's description |
+|                     | `setMyShortDescription` / `getMyShortDescription` | Set / read the short description |
 | **Files**           | `getFile`                 | Resolve a `file_id` to a `File` object |
 |                     | `getFileLink`             | Resolve a `file_id` to a download `URL` |
+|                     | `downloadFile`            | Download a file's bytes into a `Buffer` (see [§9](#9-convenience-helpers)) |
+|                     | `downloadFileStream`      | Download a file as a streaming body |
 | **Webhook admin**   | `setWebhook`              | Register the webhook URL with Telegram |
 |                     | `deleteWebhook`           | Remove the webhook (revert to long-polling) |
 |                     | `getWebhookInfo`          | Inspect current webhook status |
 |                     | `webhookCallback`         | HTTP middleware that feeds webhook updates to the bot |
+| **Helpers**         | `sendLongMessage`         | Auto-split text over 4096 chars and send each part |
+|                     | `withRetry`               | Run a call, retrying on `429` per `retry_after` |
+|                     | `encodeCallbackData` / `decodeCallbackData` | 64-byte-safe structured callback data |
 | **Lifecycle**       | `launch` / `stop`         | Start / stop the bot manually (idempotent) |
 | **Raw accessors**   | `instance` / `telegram`   | Raw `Telegraf` / raw `Telegram` client |
 
@@ -562,7 +613,89 @@ await bot.sendMessage(chatId, 'Your name?', {
 
 ---
 
-## 9. Error handling with `TelegramBotApiError`
+## 9. Convenience helpers
+
+Beyond the thin Bot API delegates, the facade adds a handful of higher-level
+helpers that remove repetitive, error-prone boilerplate. The pure ones
+(`encodeCallbackData`/`decodeCallbackData`, `splitMessageText`, `withRetry`) are
+also exported as standalone functions from the package root, so you can use them
+without injecting the service.
+
+### `downloadFile` / `downloadFileStream`
+
+Resolving a `file_id` to its CDN URL and fetching the bytes is a two-step dance;
+these helpers do both. `downloadFile` buffers the whole file in memory; prefer
+`downloadFileStream` for large files. Both wrap failures (including a non-2xx
+HTTP response) in a `TelegramBotApiError`.
+
+```ts
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+// Buffered:
+const buf = await bot.downloadFile(ctx.message.document.file_id);
+
+// Streamed (no full-file buffering):
+const stream = await bot.downloadFileStream(fileId);
+await pipeline(Readable.fromWeb(stream), createWriteStream('out.bin'));
+```
+
+### Structured callback data (`encodeCallbackData` / `decodeCallbackData`)
+
+Telegram caps inline-button `callback_data` at **64 bytes**. Hand-building
+`action:id` strings is easy to overflow (and you only find out as an opaque
+`400` at send time). The codec JSON-encodes a typed payload, validates the byte
+budget up-front (throwing a `RangeError` if exceeded), and decodes it back.
+
+```ts
+type Cb = { a: 'page'; n: number };
+
+const data = bot.encodeCallbackData<Cb>({ a: 'page', n: 3 }); // ≤ 64 bytes, or throws
+const markup = new InlineKeyboardBuilder().callback('Next', data).build();
+
+// ...inside the matching `action` handler:
+bot.action(/.*/, async (ctx) => {
+  const { n } = bot.decodeCallbackData<Cb>(ctx.match.input);
+  // ...
+});
+```
+
+### `sendLongMessage` (auto-splitting)
+
+Sends text of any length as one or more messages, splitting on line boundaries so
+no part exceeds Telegram's 4096-character limit. Parts are sent sequentially to
+preserve order; the same `extra` is applied to each part. Empty text sends
+nothing.
+
+```ts
+const parts = await bot.sendLongMessage(chatId, veryLongReport);
+// parts.length === number of messages actually sent
+```
+
+### `withRetry` (429 back-off)
+
+Wraps any async Bot API call and retries it when Telegram returns
+`429 Too Many Requests`, waiting exactly the `retry_after` interval it reports.
+Errors **without** a `retry_after` propagate immediately — it never retries
+arbitrary failures.
+
+```ts
+await bot.withRetry(() => bot.sendMessage(chatId, text), {
+  retries: 5,          // max retries after the first attempt (default 2)
+  maxDelayMs: 10_000,  // cap any single back-off wait
+  onRetry: ({ attempt, delayMs }) =>
+    console.warn(`rate-limited; retry ${attempt} in ${delayMs}ms`),
+});
+```
+
+The `retry_after` value is also surfaced on the wrapped error as
+`TelegramBotApiError.retryAfterSeconds` (see [§10](#10-error-handling-with-telegrambotapierror)),
+so you can implement custom back-off too.
+
+---
+
+## 10. Error handling with `TelegramBotApiError`
 
 Every Bot API call made **through the `TelegramBotService` facade** that fails is wrapped
 in a `TelegramBotApiError`. It carries:
@@ -572,6 +705,7 @@ in a `TelegramBotApiError`. It carries:
 | `kind`       | `'bot-api'`           | Stable discriminator (from the shared `TelegramError` hierarchy) |
 | `statusCode` | `number \| undefined` | Telegram's numeric error code when known (`400`, `403`, `429`, …) |
 | `method`     | `string \| undefined` | The Bot API method that failed (e.g. `'sendMessage'`) |
+| `retryAfterSeconds` | `number \| undefined` | Seconds to wait before retrying, present only on a `429` (consumed by [`withRetry`](#withretry-429-back-off)) |
 | `message`    | `string`              | Human-readable description, prefixed with the failing method |
 | `cause`      | `unknown`             | The original underlying error (never lost) |
 

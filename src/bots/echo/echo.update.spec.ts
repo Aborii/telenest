@@ -8,6 +8,7 @@
  */
 
 import type { Context } from 'telegraf';
+
 import { ECHO_HELP_TEXT } from './echo.constants';
 import { EchoService } from './echo.service';
 import { EchoUpdate } from './echo.update';
@@ -20,9 +21,7 @@ function createCtx(options: {
 }): { ctx: Context; reply: jest.Mock } {
   const reply = jest.fn().mockResolvedValue(undefined);
   // A non-text message (no `text` field) drives the early-return path.
-  const message = options.noText
-    ? { photo: [] }
-    : { text: options.text ?? '' };
+  const message = options.noText ? { photo: [] } : { text: options.text ?? '' };
   const ctx = {
     reply,
     from: options.firstName ? { first_name: options.firstName } : undefined,

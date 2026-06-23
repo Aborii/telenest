@@ -8,11 +8,12 @@
  */
 
 import { Logger } from '@nestjs/common';
+
 import { TelegramAuthError } from '../common';
 import type { IGramClient } from './gram-client.interface';
-import type { GramUser } from './gram-client.types';
-import { TelegramAuthService } from './telegram-auth.service';
+import type { GramQrToken, GramUser } from './gram-client.types';
 import type { SessionStore } from './session/session-store.interface';
+import { TelegramAuthService } from './telegram-auth.service';
 
 /** A representative authenticated user DTO. */
 const FAKE_USER: GramUser = {
@@ -40,11 +41,30 @@ function createFakeClient(
       .fn()
       .mockResolvedValue({ status: 'authorized', user: FAKE_USER }),
     signInWithPassword: jest.fn().mockResolvedValue(FAKE_USER),
+    signInWithQrCode: jest.fn().mockResolvedValue(FAKE_USER),
+    signInAsBot: jest.fn().mockResolvedValue(FAKE_USER),
+    updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),
     getDialogs: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
+    sendFile: jest.fn(),
+    downloadMedia: jest.fn(),
+    downloadProfilePhoto: jest.fn(),
+    getMediaInfo: jest.fn(),
+    downloadMediaRange: jest.fn(),
+    streamMedia: jest.fn(),
+    joinChannel: jest.fn(),
+    leaveChannel: jest.fn(),
+    getParticipants: jest.fn(),
+    searchMessages: jest.fn(),
+    getFullChat: jest.fn(),
+    editMessage: jest.fn(),
+    deleteMessages: jest.fn(),
+    forwardMessages: jest.fn(),
+    markAsRead: jest.fn(),
+    pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue('SESSION-STRING'),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
@@ -153,7 +173,9 @@ describe('TelegramAuthService', () => {
   });
 
   it('connects lazily before operations when disconnected', async () => {
-    const client = createFakeClient({ isConnected: jest.fn().mockReturnValue(false) });
+    const client = createFakeClient({
+      isConnected: jest.fn().mockReturnValue(false),
+    });
     const service = new TelegramAuthService(client);
 
     await service.isAuthorized();
@@ -211,5 +233,150 @@ describe('TelegramAuthService', () => {
     expect(logged).not.toContain('1234');
 
     logSpy.mockRestore();
+  });
+
+  describe('signInWithQrCode', () => {
+    it('streams the QR token, resolves the user, and persists the session', async () => {
+      const token: GramQrToken = {
+        token: 'TOK',
+        url: 'tg://login?token=TOK',
+        expires: 99,
+      };
+      const client = createFakeClient({
+        signInWithQrCode: jest.fn().mockImplementation(async (cb) => {
+          cb.onToken(token);
+          return FAKE_USER;
+        }),
+      });
+      const store = createFakeStore();
+      const service = new TelegramAuthService(client, store);
+
+      const tokens: GramQrToken[] = [];
+      const { qr$, completed } = service.signInWithQrCode();
+      qr$.subscribe((t) => tokens.push(t));
+
+      const user = await completed;
+
+      expect(user).toEqual(FAKE_USER);
+      expect(tokens).toEqual([token]);
+      expect(store.save).toHaveBeenCalledWith('SESSION-STRING');
+    });
+
+    it('forwards the onPassword callback to the client', async () => {
+      const onPassword = jest.fn().mockResolvedValue('pw');
+      const client = createFakeClient();
+      const service = new TelegramAuthService(client);
+
+      await service.signInWithQrCode({ onPassword }).completed;
+
+      expect(client.signInWithQrCode).toHaveBeenCalledWith(
+        expect.objectContaining({ onPassword }),
+      );
+    });
+
+    it('completes the token stream and rejects completed on failure (no persist)', async () => {
+      const client = createFakeClient({
+        signInWithQrCode: jest
+          .fn()
+          .mockRejectedValue(new TelegramAuthError('PASSWORD_REQUIRED', 'x')),
+      });
+      const store = createFakeStore();
+      const service = new TelegramAuthService(client, store);
+
+      let streamCompleted = false;
+      const { qr$, completed } = service.signInWithQrCode();
+      qr$.subscribe({ complete: () => (streamCompleted = true) });
+
+      const error = await completed.catch((e: unknown) => e);
+
+      expect((error as TelegramAuthError).code).toBe('PASSWORD_REQUIRED');
+      expect(streamCompleted).toBe(true);
+      expect(store.save).not.toHaveBeenCalled();
+    });
+
+    it('connects lazily before the QR flow when disconnected', async () => {
+      const client = createFakeClient({
+        isConnected: jest.fn().mockReturnValue(false),
+      });
+      const service = new TelegramAuthService(client);
+
+      await service.signInWithQrCode().completed;
+
+      expect(client.connect).toHaveBeenCalled();
+    });
+  });
+
+  describe('signInAsBot', () => {
+    it('signs in, persists the session, and never logs the token', async () => {
+      const client = createFakeClient();
+      const store = createFakeStore();
+      const logSpy = jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation(() => undefined);
+      const service = new TelegramAuthService(client, store);
+
+      const user = await service.signInAsBot('123456:SECRET-TOKEN');
+
+      expect(client.signInAsBot).toHaveBeenCalledWith('123456:SECRET-TOKEN');
+      expect(user).toEqual(FAKE_USER);
+      expect(store.save).toHaveBeenCalledWith('SESSION-STRING');
+
+      const logged = logSpy.mock.calls.map((args) => String(args[0])).join('\n');
+      expect(logged).not.toContain('SECRET-TOKEN');
+
+      logSpy.mockRestore();
+    });
+  });
+
+  describe('two-factor management', () => {
+    it('setupTwoFactor enables a new password with the hint', async () => {
+      const client = createFakeClient();
+      const service = new TelegramAuthService(client);
+
+      await service.setupTwoFactor({ password: 'pw', hint: 'usual' });
+
+      expect(client.updateTwoFactor).toHaveBeenCalledWith({
+        newPassword: 'pw',
+        hint: 'usual',
+      });
+    });
+
+    it('changeTwoFactor passes current + new password', async () => {
+      const client = createFakeClient();
+      const service = new TelegramAuthService(client);
+
+      await service.changeTwoFactor({
+        currentPassword: 'old',
+        newPassword: 'new',
+      });
+
+      expect(client.updateTwoFactor).toHaveBeenCalledWith({
+        currentPassword: 'old',
+        newPassword: 'new',
+        hint: undefined,
+      });
+    });
+
+    it('disableTwoFactor removes the password (no newPassword)', async () => {
+      const client = createFakeClient();
+      const service = new TelegramAuthService(client);
+
+      await service.disableTwoFactor('old');
+
+      expect(client.updateTwoFactor).toHaveBeenCalledWith({
+        currentPassword: 'old',
+      });
+    });
+
+    it('connects lazily before a 2FA update when disconnected', async () => {
+      const client = createFakeClient({
+        isConnected: jest.fn().mockReturnValue(false),
+      });
+      const service = new TelegramAuthService(client);
+
+      await service.setupTwoFactor({ password: 'pw' });
+
+      expect(client.connect).toHaveBeenCalled();
+    });
   });
 });

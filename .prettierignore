@@ -1,0 +1,11 @@
+# Build output & generated artifacts — never formatted.
+dist
+coverage
+node_modules
+
+# Lockfile is owned by npm.
+package-lock.json
+
+# Markdown docs are hand-authored (tables, Mermaid diagrams); keep Prettier
+# away from them so it doesn't reflow prose or break diagram fences.
+*.md

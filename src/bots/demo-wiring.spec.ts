@@ -8,6 +8,7 @@
  */
 
 import { Test } from '@nestjs/testing';
+
 import { APP_BOOT_MESSAGE, BOT_NAMES } from '../app.constants';
 import { ECHO_GREETINGS, ECHO_HELP_TEXT } from './echo/echo.constants';
 import { EchoModule } from './echo/echo.module';

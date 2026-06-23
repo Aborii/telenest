@@ -9,10 +9,10 @@
 
 import {
   ForceReply,
-  InlineKeyboardBuilder,
-  ReplyKeyboardBuilder,
   forceReply,
+  InlineKeyboardBuilder,
   removeKeyboard,
+  ReplyKeyboardBuilder,
 } from './keyboard.builder';
 
 describe('InlineKeyboardBuilder', () => {
@@ -65,7 +65,9 @@ describe('InlineKeyboardBuilder', () => {
     builder.callback('B', 'b');
     const second = builder.build();
 
-    expect(first.inline_keyboard).toEqual([[{ text: 'A', callback_data: 'a' }]]);
+    expect(first.inline_keyboard).toEqual([
+      [{ text: 'A', callback_data: 'a' }],
+    ]);
     expect(second.inline_keyboard).toEqual([
       [{ text: 'A', callback_data: 'a' }],
       [{ text: 'B', callback_data: 'b' }],

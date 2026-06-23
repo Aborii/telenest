@@ -3,25 +3,23 @@
  *
  * PURPOSE
  * -------
- * Factory provider that constructs the singleton `Telegraf` instance from the
- * validated module options. Isolating construction here keeps the module file
- * declarative and gives tests a single seam to stub the bot.
+ * Pure factory that constructs a `Telegraf` instance from validated module
+ * options. Isolating construction here keeps the module file declarative, gives
+ * tests a single seam to stub the bot, and lets `TelegramBotModule` build one
+ * instance per registered (named) bot from the same code path.
  *
  * USAGE
  * -----
- * Internal to `TelegramBotModule`.
+ * Internal to `TelegramBotModule` (used by its per-bot instance providers).
  *
  * KEY EXPORTS
  * -----------
- * - createTelegrafInstance: Pure factory used by the DI provider.
- * - telegramBotProvider: The Nest provider wiring it to `TELEGRAM_BOT`.
+ * - createTelegrafInstance: Pure factory used by the per-bot DI providers.
  */
 
-import type { Provider } from '@nestjs/common';
 import { Telegraf } from 'telegraf';
+
 import { TelegramConfigError } from '../common';
-import { TELEGRAM_BOT } from './telegram-bot.constants';
-import { TELEGRAM_BOT_OPTIONS } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 
 /**
@@ -48,13 +46,3 @@ export function createTelegrafInstance(
 
   return new Telegraf(options.token, options.telegraf);
 }
-
-/**
- * Nest provider that exposes the `Telegraf` instance under {@link TELEGRAM_BOT}.
- */
-export const telegramBotProvider: Provider = {
-  provide: TELEGRAM_BOT,
-  useFactory: (options: TelegramBotModuleOptions): Telegraf =>
-    createTelegrafInstance(options),
-  inject: [TELEGRAM_BOT_OPTIONS],
-};

@@ -10,7 +10,14 @@
 
 import { Test } from '@nestjs/testing';
 import { Telegraf } from 'telegraf';
-import { TELEGRAM_BOT } from './telegram-bot.constants';
+
+import { NOOP_TELEGRAM_TRACER, type TelegramMetrics } from '../common';
+import {
+  TELEGRAM_BOT,
+  TELEGRAM_BOT_METRICS,
+  TELEGRAM_BOT_TRACER,
+} from './telegram-bot.constants';
+import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import { TelegramBotModule } from './telegram-bot.module';
 import { TelegramBotService } from './telegram-bot.service';
 
@@ -40,5 +47,48 @@ describe('TelegramBotModule', () => {
     expect(moduleRef.get(TelegramBotService)).toBeInstanceOf(
       TelegramBotService,
     );
+  });
+
+  describe('observability wiring', () => {
+    it('provides per-bot metrics, a no-op tracer, and a health indicator', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramBotModule.forRoot({ token: '123:abc', launch: false }),
+        ],
+      }).compile();
+
+      const metrics = moduleRef.get<TelegramMetrics>(TELEGRAM_BOT_METRICS);
+      expect(metrics.snapshot()).toEqual({
+        messagesSent: 0,
+        messagesReceived: 0,
+        apiErrors: 0,
+        floodWaits: 0,
+      });
+      expect(moduleRef.get(TELEGRAM_BOT_TRACER)).toBe(NOOP_TELEGRAM_TRACER);
+      expect(moduleRef.get(TelegramBotHealthIndicator)).toBeInstanceOf(
+        TelegramBotHealthIndicator,
+      );
+    });
+
+    it('records sends into the bot facade through DI', async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramBotModule.forRoot({ token: '123:abc', launch: false }),
+        ],
+      }).compile();
+
+      const service = moduleRef.get(TelegramBotService);
+      const metrics = moduleRef.get<TelegramMetrics>(TELEGRAM_BOT_METRICS);
+      // ── Spy on the real Telegraf method so no network is touched. ────────────
+      jest
+        .spyOn(service.instance.telegram, 'sendMessage')
+        .mockResolvedValue({ message_id: 1 } as Awaited<
+          ReturnType<Telegraf['telegram']['sendMessage']>
+        >);
+
+      await service.sendMessage(42, 'hi');
+
+      expect(metrics.snapshot().messagesSent).toBe(1);
+    });
   });
 });

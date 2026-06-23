@@ -31,13 +31,32 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { Telegraf, type Telegram } from 'telegraf';
-import { TelegramBotApiError } from '../common';
-import { TELEGRAM_BOT } from './telegram-bot.constants';
+
+import {
+  NOOP_TELEGRAM_METRICS,
+  NOOP_TELEGRAM_TRACER,
+  TELEGRAM_COUNTERS,
+  TelegramBotApiError,
+  type TelegramMetricsRecorder,
+  type TelegramTracer,
+} from '../common';
+import {
+  decodeCallbackData as decodeCallbackDataFn,
+  encodeCallbackData as encodeCallbackDataFn,
+} from './callback-data.codec';
+import { splitMessageText } from './message-splitter';
+import { withRetry as withRetryFn, type WithRetryOptions } from './retry';
+import {
+  TELEGRAM_BOT,
+  TELEGRAM_BOT_METRICS,
+  TELEGRAM_BOT_TRACER,
+} from './telegram-bot.constants';
 import { TELEGRAM_BOT_OPTIONS } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 
@@ -56,15 +75,31 @@ export class TelegramBotService
   /** Tracks whether {@link launch} has been invoked, so stop is idempotent. */
   private _launched = false;
 
+  /** Metrics sink for this bot's counters; the no-op recorder when none wired. */
+  private readonly _metrics: TelegramMetricsRecorder;
+
+  /** Tracer wrapping each Bot API call; the no-op tracer when none wired. */
+  private readonly _tracer: TelegramTracer;
+
   /**
    * @param bot - The raw `Telegraf` instance provided under `TELEGRAM_BOT`.
    * @param options - Validated module options controlling launch behaviour.
+   * @param metrics - Optional metrics sink. Provided by the module so counters
+   *   are recorded in production; omitted in direct unit construction, where it
+   *   falls back to a no-op recorder.
+   * @param tracer - Optional tracer wrapping each Bot API call. Defaults to a
+   *   no-op tracer; override the module's tracer provider to emit OTel spans.
    */
   public constructor(
     @Inject(TELEGRAM_BOT) private readonly bot: Telegraf,
     @Inject(TELEGRAM_BOT_OPTIONS)
     private readonly options: TelegramBotModuleOptions,
-  ) {}
+    @Optional() @Inject(TELEGRAM_BOT_METRICS) metrics?: TelegramMetricsRecorder,
+    @Optional() @Inject(TELEGRAM_BOT_TRACER) tracer?: TelegramTracer,
+  ) {
+    this._metrics = metrics ?? NOOP_TELEGRAM_METRICS;
+    this._tracer = tracer ?? NOOP_TELEGRAM_TRACER;
+  }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -125,7 +160,9 @@ export class TelegramBotService
     if (this._launched) return;
     this._launched = true;
 
-    const mode = this.options.launchOptions?.webhook ? 'webhook' : 'long-polling';
+    const mode = this.options.launchOptions?.webhook
+      ? 'webhook'
+      : 'long-polling';
     this._logger.log(`Launching Telegram bot in ${mode} mode.`);
 
     // ── Long-polling resolves only after the bot stops, so do not await it.
@@ -400,6 +437,62 @@ export class TelegramBotService
     return this.exec('copyMessage', () => this.telegram.copyMessage(...args));
   }
 
+  // ── Polls, stickers & reactions ─────────────────────────────────────────────
+
+  /**
+   * Sends a native poll (regular or quiz).
+   *
+   * @param args - Chat id, question, answer options, and optional `extra`.
+   * @returns The sent poll message.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public sendPoll(
+    ...args: Parameters<Telegram['sendPoll']>
+  ): Promise<Awaited<ReturnType<Telegram['sendPoll']>>> {
+    return this.exec('sendPoll', () => this.telegram.sendPoll(...args));
+  }
+
+  /**
+   * Stops an active poll and returns its final results.
+   *
+   * @param args - Chat id, message id, and optional `extra` (e.g. reply markup).
+   * @returns The stopped `Poll` with final tallies.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public stopPoll(
+    ...args: Parameters<Telegram['stopPoll']>
+  ): Promise<Awaited<ReturnType<Telegram['stopPoll']>>> {
+    return this.exec('stopPoll', () => this.telegram.stopPoll(...args));
+  }
+
+  /**
+   * Sends a sticker (static, animated, or video).
+   *
+   * @param args - Chat id, sticker source, and optional `extra`.
+   * @returns The sent sticker message.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public sendSticker(
+    ...args: Parameters<Telegram['sendSticker']>
+  ): Promise<Awaited<ReturnType<Telegram['sendSticker']>>> {
+    return this.exec('sendSticker', () => this.telegram.sendSticker(...args));
+  }
+
+  /**
+   * Sets (or clears) the bot's emoji reactions on a message.
+   *
+   * @param args - Chat id, message id, reaction list, and optional `is_big`.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public setMessageReaction(
+    ...args: Parameters<Telegram['setMessageReaction']>
+  ): Promise<Awaited<ReturnType<Telegram['setMessageReaction']>>> {
+    return this.exec('setMessageReaction', () =>
+      this.telegram.setMessageReaction(...args),
+    );
+  }
+
   // ── Editing & deletion ──────────────────────────────────────────────────────
 
   /**
@@ -535,6 +628,129 @@ export class TelegramBotService
     );
   }
 
+  // ── Forum topics ────────────────────────────────────────────────────────────
+
+  /**
+   * Creates a new topic in a forum supergroup.
+   *
+   * @param args - Chat id, topic name, and optional `extra` (icon, color).
+   * @returns The created `ForumTopic`.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public createForumTopic(
+    ...args: Parameters<Telegram['createForumTopic']>
+  ): Promise<Awaited<ReturnType<Telegram['createForumTopic']>>> {
+    return this.exec('createForumTopic', () =>
+      this.telegram.createForumTopic(...args),
+    );
+  }
+
+  /**
+   * Edits the name and/or icon of an existing forum topic.
+   *
+   * @param args - Chat id, topic thread id, and the `extra` to apply.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public editForumTopic(
+    ...args: Parameters<Telegram['editForumTopic']>
+  ): Promise<Awaited<ReturnType<Telegram['editForumTopic']>>> {
+    return this.exec('editForumTopic', () =>
+      this.telegram.editForumTopic(...args),
+    );
+  }
+
+  /**
+   * Closes an open forum topic (it can be reopened later).
+   *
+   * @param args - Chat id and the topic thread id.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public closeForumTopic(
+    ...args: Parameters<Telegram['closeForumTopic']>
+  ): Promise<Awaited<ReturnType<Telegram['closeForumTopic']>>> {
+    return this.exec('closeForumTopic', () =>
+      this.telegram.closeForumTopic(...args),
+    );
+  }
+
+  /**
+   * Reopens a previously closed forum topic.
+   *
+   * @param args - Chat id and the topic thread id.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public reopenForumTopic(
+    ...args: Parameters<Telegram['reopenForumTopic']>
+  ): Promise<Awaited<ReturnType<Telegram['reopenForumTopic']>>> {
+    return this.exec('reopenForumTopic', () =>
+      this.telegram.reopenForumTopic(...args),
+    );
+  }
+
+  /**
+   * Deletes a forum topic along with all of its messages.
+   *
+   * @param args - Chat id and the topic thread id.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public deleteForumTopic(
+    ...args: Parameters<Telegram['deleteForumTopic']>
+  ): Promise<Awaited<ReturnType<Telegram['deleteForumTopic']>>> {
+    return this.exec('deleteForumTopic', () =>
+      this.telegram.deleteForumTopic(...args),
+    );
+  }
+
+  // ── Payments ──────────────────────────────────────────────────────────────
+
+  /**
+   * Sends an invoice to a chat.
+   *
+   * @param args - Chat id, invoice parameters, and optional `extra`.
+   * @returns The sent invoice message.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public sendInvoice(
+    ...args: Parameters<Telegram['sendInvoice']>
+  ): Promise<Awaited<ReturnType<Telegram['sendInvoice']>>> {
+    return this.exec('sendInvoice', () => this.telegram.sendInvoice(...args));
+  }
+
+  /**
+   * Creates a shareable invoice link (not tied to a specific chat).
+   *
+   * @param args - The invoice link parameters.
+   * @returns The created invoice URL string.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public createInvoiceLink(
+    ...args: Parameters<Telegram['createInvoiceLink']>
+  ): Promise<Awaited<ReturnType<Telegram['createInvoiceLink']>>> {
+    return this.exec('createInvoiceLink', () =>
+      this.telegram.createInvoiceLink(...args),
+    );
+  }
+
+  /**
+   * Responds to a pre-checkout query (the final confirmation before payment).
+   * Must be answered within 10 seconds or the payment is cancelled.
+   *
+   * @param args - Pre-checkout query id, `ok` flag, and optional error message.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public answerPreCheckoutQuery(
+    ...args: Parameters<Telegram['answerPreCheckoutQuery']>
+  ): Promise<Awaited<ReturnType<Telegram['answerPreCheckoutQuery']>>> {
+    return this.exec('answerPreCheckoutQuery', () =>
+      this.telegram.answerPreCheckoutQuery(...args),
+    );
+  }
+
   // ── Commands ────────────────────────────────────────────────────────────────
 
   /**
@@ -564,6 +780,98 @@ export class TelegramBotService
   ): Promise<Awaited<ReturnType<Telegram['getMyCommands']>>> {
     return this.exec('getMyCommands', () =>
       this.telegram.getMyCommands(...args),
+    );
+  }
+
+  // ── Bot profile & menu button ───────────────────────────────────────────────
+
+  /**
+   * Sets the bot's menu button for a chat (or the default for all chats).
+   *
+   * @param args - Optional `{ chatId?, menuButton? }`; omit to reset the default.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public setChatMenuButton(
+    ...args: Parameters<Telegram['setChatMenuButton']>
+  ): Promise<Awaited<ReturnType<Telegram['setChatMenuButton']>>> {
+    return this.exec('setChatMenuButton', () =>
+      this.telegram.setChatMenuButton(...args),
+    );
+  }
+
+  /**
+   * Reads the bot's current menu button for a chat (or the default).
+   *
+   * @param args - Optional `{ chatId? }`; omit for the default menu button.
+   * @returns The current `MenuButton`.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public getChatMenuButton(
+    ...args: Parameters<Telegram['getChatMenuButton']>
+  ): Promise<Awaited<ReturnType<Telegram['getChatMenuButton']>>> {
+    return this.exec('getChatMenuButton', () =>
+      this.telegram.getChatMenuButton(...args),
+    );
+  }
+
+  /**
+   * Sets the bot's description (shown in the chat when it is empty).
+   *
+   * @param args - The description text and optional language code.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public setMyDescription(
+    ...args: Parameters<Telegram['setMyDescription']>
+  ): Promise<Awaited<ReturnType<Telegram['setMyDescription']>>> {
+    return this.exec('setMyDescription', () =>
+      this.telegram.setMyDescription(...args),
+    );
+  }
+
+  /**
+   * Reads the bot's current description.
+   *
+   * @param args - Optional language code.
+   * @returns The bot's `BotDescription`.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public getMyDescription(
+    ...args: Parameters<Telegram['getMyDescription']>
+  ): Promise<Awaited<ReturnType<Telegram['getMyDescription']>>> {
+    return this.exec('getMyDescription', () =>
+      this.telegram.getMyDescription(...args),
+    );
+  }
+
+  /**
+   * Sets the bot's short description (shown on the profile page and in shares).
+   *
+   * @param args - The short description text and optional language code.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public setMyShortDescription(
+    ...args: Parameters<Telegram['setMyShortDescription']>
+  ): Promise<Awaited<ReturnType<Telegram['setMyShortDescription']>>> {
+    return this.exec('setMyShortDescription', () =>
+      this.telegram.setMyShortDescription(...args),
+    );
+  }
+
+  /**
+   * Reads the bot's current short description.
+   *
+   * @param args - Optional language code.
+   * @returns The bot's `BotShortDescription`.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public getMyShortDescription(
+    ...args: Parameters<Telegram['getMyShortDescription']>
+  ): Promise<Awaited<ReturnType<Telegram['getMyShortDescription']>>> {
+    return this.exec('getMyShortDescription', () =>
+      this.telegram.getMyShortDescription(...args),
     );
   }
 
@@ -652,11 +960,164 @@ export class TelegramBotService
     return this.bot.webhookCallback(...args);
   }
 
+  // ── Convenience helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Downloads a file by its `file_id` and buffers it fully in memory.
+   *
+   * Resolves the `file_id` to its CDN URL via `getFileLink` and fetches the
+   * bytes. Prefer {@link downloadFileStream} for large files to avoid loading
+   * the whole payload into memory.
+   *
+   * @param fileId - The `file_id` (or a `File`) to download.
+   * @returns The file contents as a `Buffer`.
+   * @throws {TelegramBotApiError} If resolving the link or fetching the bytes
+   *   fails (including a non-2xx HTTP response).
+   *
+   * @example
+   * ```ts
+   * const buf = await bot.downloadFile(ctx.message.document.file_id);
+   * await fs.promises.writeFile('out.bin', buf);
+   * ```
+   */
+  public downloadFile(
+    fileId: Parameters<Telegram['getFileLink']>[0],
+  ): Promise<Buffer> {
+    return this.exec('downloadFile', async () => {
+      const link = await this.telegram.getFileLink(fileId);
+      const response = await fetch(link);
+      if (!response.ok)
+        throw new Error(
+          `file download failed: HTTP ${response.status} ${response.statusText}`,
+        );
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    });
+  }
+
+  /**
+   * Downloads a file by its `file_id` as a streaming body, so large files are
+   * not buffered entirely in memory.
+   *
+   * @param fileId - The `file_id` (or a `File`) to download.
+   * @returns A web `ReadableStream` of the file's bytes.
+   * @throws {TelegramBotApiError} If resolving the link or fetching the bytes
+   *   fails (including a non-2xx HTTP response or an empty body).
+   *
+   * @example
+   * ```ts
+   * const stream = await bot.downloadFileStream(fileId);
+   * await pipeline(Readable.fromWeb(stream), createWriteStream('out.bin'));
+   * ```
+   */
+  public downloadFileStream(
+    fileId: Parameters<Telegram['getFileLink']>[0],
+  ): Promise<ReadableStream<Uint8Array>> {
+    return this.exec('downloadFileStream', async () => {
+      const link = await this.telegram.getFileLink(fileId);
+      const response = await fetch(link);
+      if (!response.ok)
+        throw new Error(
+          `file download failed: HTTP ${response.status} ${response.statusText}`,
+        );
+      if (response.body === null)
+        throw new Error('file download failed: response body was empty.');
+      return response.body;
+    });
+  }
+
+  /**
+   * Sends `text` as one or more messages, automatically splitting it on line
+   * boundaries so no single message exceeds Telegram's 4096-character limit.
+   *
+   * Messages are sent sequentially to preserve their order. Empty/blank text
+   * sends nothing and returns an empty array. The same `extra` is applied to
+   * every chunk; note that a `reply_markup` will therefore appear on each part.
+   *
+   * @param chatId - Target chat id or `@username`.
+   * @param text - The full text to send (any length).
+   * @param extra - Optional send options forwarded to each `sendMessage` call.
+   * @returns The sent messages, in order (empty if `text` was empty).
+   * @throws {TelegramBotApiError} If any underlying `sendMessage` call fails.
+   *
+   * @example
+   * ```ts
+   * await bot.sendLongMessage(chatId, veryLongReport);
+   * ```
+   */
+  public async sendLongMessage(
+    chatId: Parameters<Telegram['sendMessage']>[0],
+    text: string,
+    extra?: Parameters<Telegram['sendMessage']>[2],
+  ): Promise<Awaited<ReturnType<Telegram['sendMessage']>>[]> {
+    const sent: Awaited<ReturnType<Telegram['sendMessage']>>[] = [];
+    // ── Sequential, not parallel: Telegram preserves order this way and we stay
+    //    within per-chat rate limits instead of bursting every chunk at once. ─
+    for (const chunk of splitMessageText(text)) {
+      sent.push(await this.sendMessage(chatId, chunk, extra));
+    }
+    return sent;
+  }
+
+  /**
+   * Runs `fn`, retrying it when Telegram responds with `429 Too Many Requests`
+   * by waiting for the `retry_after` interval it reports. Non-rate-limit errors
+   * propagate immediately. Thin instance wrapper around the standalone
+   * {@link withRetryFn} helper, for callers that already hold the service.
+   *
+   * @typeParam T - The resolved result type of `fn`.
+   * @param fn - The async operation to run (typically a Bot API call).
+   * @param options - Retry tuning; see {@link WithRetryOptions}.
+   * @returns The resolved value of `fn`.
+   * @throws The original error if it is not a rate-limit error, or the last
+   *   rate-limit error after retries are exhausted.
+   *
+   * @example
+   * ```ts
+   * await bot.withRetry(() => bot.sendMessage(id, text), { retries: 5 });
+   * ```
+   */
+  public withRetry<T>(
+    fn: () => Promise<T>,
+    options?: WithRetryOptions,
+  ): Promise<T> {
+    return withRetryFn(fn, options);
+  }
+
+  /**
+   * Encodes a structured payload into a 64-byte-safe `callback_data` string.
+   * Thin instance wrapper around the standalone {@link encodeCallbackDataFn}.
+   *
+   * @typeParam T - The (JSON-serializable) payload shape.
+   * @param payload - The value to encode.
+   * @returns The encoded string (≤ 64 bytes).
+   * @throws {RangeError} If the encoding exceeds 64 bytes.
+   * @throws {TypeError} If the payload is not JSON-serializable.
+   */
+  public encodeCallbackData<T>(payload: T): string {
+    return encodeCallbackDataFn(payload);
+  }
+
+  /**
+   * Decodes a `callback_data` string produced by {@link encodeCallbackData}.
+   * Thin instance wrapper around the standalone {@link decodeCallbackDataFn}.
+   *
+   * @typeParam T - The expected decoded payload shape (defaults to `unknown`).
+   * @param data - The encoded string (typically `ctx.match.input`).
+   * @returns The decoded payload, typed as `T`.
+   * @throws {TypeError} If `data` is not valid JSON.
+   */
+  public decodeCallbackData<T = unknown>(data: string): T {
+    return decodeCallbackDataFn<T>(data);
+  }
+
   // ── Internal error handling ─────────────────────────────────────────────────
 
   /**
-   * Executes a Bot API call, normalizing any thrown value into a
-   * {@link TelegramBotApiError}.
+   * Executes a Bot API call inside a tracing span, normalizing any thrown value
+   * into a {@link TelegramBotApiError} and recording metrics: a successful
+   * `send*` call (other than `sendChatAction`) bumps `messagesSent`; a failure
+   * bumps `apiErrors`, plus `floodWaits` when Telegram returned a `retry_after`.
    *
    * @typeParam T - The resolved result type of the call.
    * @param method - Name of the Bot API method, for diagnostics.
@@ -664,12 +1125,38 @@ export class TelegramBotService
    * @returns The result of `fn`.
    * @throws {TelegramBotApiError} Always, when `fn` rejects.
    */
-  private async exec<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      throw this.toBotApiError(method, error);
-    }
+  private exec<T>(method: string, fn: () => Promise<T>): Promise<T> {
+    return this._tracer.startActiveSpan(
+      `telegram.bot.${method}`,
+      async () => {
+        try {
+          const result = await fn();
+          if (TelegramBotService.isSendMethod(method))
+            this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_SENT);
+          return result;
+        } catch (error) {
+          const apiError = this.toBotApiError(method, error);
+          this._metrics.increment(TELEGRAM_COUNTERS.API_ERRORS);
+          if (apiError.retryAfterSeconds !== undefined)
+            this._metrics.increment(TELEGRAM_COUNTERS.FLOOD_WAITS);
+          throw apiError;
+        }
+      },
+      { 'telegram.bot.method': method },
+    );
+  }
+
+  /**
+   * Whether a Bot API method name counts as sending a message for metrics. Every
+   * `send*` method qualifies except `sendChatAction`, which only emits a
+   * typing/upload indicator rather than a real message.
+   *
+   * @param method - The Bot API method name.
+   * @returns `true` when a success should bump `messagesSent`.
+   * @throws Never.
+   */
+  private static isSendMethod(method: string): boolean {
+    return method.startsWith('send') && method !== 'sendChatAction';
   }
 
   /**
@@ -686,23 +1173,39 @@ export class TelegramBotService
 
     const description = error instanceof Error ? error.message : String(error);
     let statusCode: number | undefined;
+    let retryAfterSeconds: number | undefined;
 
     // ── Telegraf surfaces Telegram's status either as `.code` or nested under
-    //    `.response.error_code`; probe both without assuming `any`. ──────────
+    //    `.response.error_code`, and rate-limit back-off under
+    //    `.response.parameters.retry_after`; probe all without assuming `any`. ─
     if (typeof error === 'object' && error !== null) {
       const candidate = error as {
         code?: unknown;
-        response?: { error_code?: unknown };
+        response?: {
+          error_code?: unknown;
+          parameters?: { retry_after?: unknown };
+        };
+        parameters?: { retry_after?: unknown };
       };
       if (typeof candidate.code === 'number') statusCode = candidate.code;
       else if (typeof candidate.response?.error_code === 'number')
         statusCode = candidate.response.error_code;
+
+      const rawRetryAfter =
+        candidate.response?.parameters?.retry_after ??
+        candidate.parameters?.retry_after;
+      if (typeof rawRetryAfter === 'number' && Number.isFinite(rawRetryAfter))
+        retryAfterSeconds = rawRetryAfter;
     }
 
-    return new TelegramBotApiError(`Bot API "${method}" failed: ${description}`, {
-      statusCode,
-      method,
-      cause: error,
-    });
+    return new TelegramBotApiError(
+      `Bot API "${method}" failed: ${description}`,
+      {
+        statusCode,
+        method,
+        retryAfterSeconds,
+        cause: error,
+      },
+    );
   }
 }

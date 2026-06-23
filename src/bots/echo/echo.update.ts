@@ -12,8 +12,9 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { Ctx, Help, Hears, On, Start, Update } from 'nestjs-telegraf';
+import { Ctx, Hears, Help, On, Start, Update } from 'nestjs-telegraf';
 import { Context } from 'telegraf';
+
 import { ECHO_GREETINGS, ECHO_HELP_TEXT } from './echo.constants';
 import { EchoService } from './echo.service';
 

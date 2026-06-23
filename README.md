@@ -1,5 +1,9 @@
 # nestjs-telegram
 
+[![CI](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml/badge.svg)](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+
 A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two** different Telegram APIs behind one cohesive, strictly-typed package. Use the **Bot API** (powered by [Telegraf](https://telegraf.js.org)) to run a normal `@BotFather` bot, and/or use the **MTProto user-account client** (powered by [GramJS](https://gram.js.org)) to sign in as **your own Telegram account** and drive it from your app. Both sides share one error hierarchy, ship with pluggable session persistence, and are designed around testable seams so you can unit-test everything without ever touching the network.
 
 ---
@@ -21,15 +25,17 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - Automatic launch/stop wired into the Nest lifecycle (long-polling by default, webhook mode supported); set `launch: false` to take manual control.
 - Escape hatches: `TelegramBotService.instance` (raw `Telegraf`) and `TelegramBotService.telegram` (raw Telegraf `Telegram` client), plus the `TELEGRAM_BOT` injection token — nothing is hidden behind the facade.
 - Fluent keyboard builders: `InlineKeyboardBuilder`, `ReplyKeyboardBuilder`, plus the `removeKeyboard` and `forceReply` helpers.
+- **Multiple named bots** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its facade with `@InjectBot(name)`, and scope decorator handlers with `@TelegramUpdate({ bot: name })` — each bot fully isolated, no `nestjs-telegraf`. Omitting `name` keeps the single-bot API unchanged. See [MULTIPLE-BOTS.md](./docs/MULTIPLE-BOTS.md).
 
 ### User-account side (GramJS / MTProto — sign in as yourself)
 
 - `TelegramClientModule.forRoot` / `forRootAsync` — configured with the `apiId` / `apiHash` from [my.telegram.org](https://my.telegram.org).
 - `TelegramAuthService` — drives the login state machine: `sendCode` → `signIn` → (`checkPassword` for 2FA), plus `logOut`, `isAuthorized`, and `exportSession`.
-- `TelegramUserService` — act **as your own account**: `getMe`, `getDialogs`, `getMessages`, `sendMessage`, and the `sendToSelf` convenience for your "Saved Messages".
+- `TelegramUserService` — act **as your own account**: `getMe`, `getDialogs`, `getMessages`, `sendMessage`/`sendToSelf`, plus media (`sendFile`, `downloadMedia`, `downloadProfilePhoto`, `getMediaInfo`, and `downloadMediaRange`/`streamMedia` for progressive-video HTTP Range streaming), chat/channel management (`joinChannel`, `leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`), and message operations (`editMessage`, `deleteMessages`, `forwardMessages`, `markAsRead`, `pinMessage`).
 - Pluggable session persistence via the `SessionStore` interface, with `InMemorySessionStore` and `FileSessionStore` (writes `0o600`, owner-only) included — bring your own (Redis, a secrets manager, etc.) by implementing three methods (`load` / `save` / `clear`).
 - A clean test seam: services depend only on the `IGramClient` interface, and the GramJS package is touched in exactly one adapter file. Inject a fake via `clientFactory` and you never hit the network.
 - Library-owned DTOs (`GramUser`, `GramDialog`, `GramMessage`, `GramSendMessageParams`, …) so consumers never import GramJS just to model a user or a message.
+- **Multiple named user accounts** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its services with `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`, and scope inbound handlers with `@OnUserMessage(filter, { client: name })` — each account fully isolated, with its own session. Omitting `name` keeps the single-account API unchanged. See [MULTIPLE-ACCOUNTS.md](./docs/MULTIPLE-ACCOUNTS.md).
 
 ### Shared
 
@@ -70,16 +76,17 @@ npm i telegraf telegram
 The package exposes three independent entry points so a bot-only app never pulls
 in GramJS, and a user-account-only app never pulls in Telegraf:
 
-| Import | Pulls in | Use when |
-| --- | --- | --- |
-| `nestjs-telegram/bot` | `telegraf` only | You only run a bot |
-| `nestjs-telegram/client` | `telegram` (GramJS) only | You only control a user account |
-| `nestjs-telegram/common` | neither | Just the shared error/types layer |
-| `nestjs-telegram` (root) | both | You use both sides |
+| Import                    | Pulls in                 | Use when                          |
+| ------------------------- | ------------------------ | --------------------------------- |
+| `nestjs-telegram/bot`     | `telegraf` only          | You only run a bot                |
+| `nestjs-telegram/client`  | `telegram` (GramJS) only | You only control a user account   |
+| `nestjs-telegram/common`  | neither                  | Just the shared error/types layer |
+| `nestjs-telegram/testing` | neither (test-only)      | Mocking the library in your tests |
+| `nestjs-telegram` (root)  | both                     | You use both sides                |
 
 ```ts
-import { TelegramBotModule } from 'nestjs-telegram/bot';       // no GramJS loaded
-import { TelegramClientModule } from 'nestjs-telegram/client'; // no Telegraf loaded
+import { TelegramBotModule } from "nestjs-telegram/bot"; // no GramJS loaded
+import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf loaded
 ```
 
 > Importing from the root (`nestjs-telegram`) re-exports everything and therefore
@@ -89,14 +96,33 @@ import { TelegramClientModule } from 'nestjs-telegram/client'; // no Telegraf lo
 
 ## Two APIs at a glance
 
-| | **Bot API** (Telegraf) | **User account** (MTProto / GramJS) |
-| --- | --- | --- |
-| **Identity** | A bot created via `@BotFather` | Your own real Telegram account |
-| **Auth** | A single bot `token` | `apiId` + `apiHash` from my.telegram.org, then a phone/code/2FA login that yields a **string session** |
+|                    | **Bot API** (Telegraf)                                                                                                         | **User account** (MTProto / GramJS)                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Identity**       | A bot created via `@BotFather`                                                                                                 | Your own real Telegram account                                                                                                            |
+| **Auth**           | A single bot `token`                                                                                                           | `apiId` + `apiHash` from my.telegram.org, then a phone/code/2FA login that yields a **string session**                                    |
 | **What it can do** | Reply to users, run commands, push notifications, manage groups/channels where the bot is an admin, inline keyboards, webhooks | Read your dialog list, fetch message history, send messages **as you** (including to "Saved Messages"), reach any chat you're a member of |
-| **Module** | `TelegramBotModule` | `TelegramClientModule` |
-| **Main service** | `TelegramBotService` | `TelegramUserService` (+ `TelegramAuthService`) |
-| **When to use** | Building a bot users talk to; sending automated notifications from a server | Automating your own account; reading/aggregating your own chats; user-only actions a bot cannot perform |
+| **Module**         | `TelegramBotModule`                                                                                                            | `TelegramClientModule`                                                                                                                    |
+| **Main service**   | `TelegramBotService`                                                                                                           | `TelegramUserService` (+ `TelegramAuthService`)                                                                                           |
+| **When to use**    | Building a bot users talk to; sending automated notifications from a server                                                    | Automating your own account; reading/aggregating your own chats; user-only actions a bot cannot perform                                   |
+
+---
+
+## 📚 Documentation
+
+**[→ Complete Documentation Index](./docs/INDEX.md)**
+
+### Quick Links
+
+- **[Getting Started](./docs/GETTING-STARTED.md)** — Installation & first bot/client setup
+- **[API Reference](./docs/API-REFERENCE.md)** — Complete API documentation
+- **[Examples & Recipes](./docs/EXAMPLES.md)** — Practical copy-paste examples
+- **[Advanced Usage](./docs/ADVANCED-USAGE.md)** — Production patterns & best practices
+
+### By Topic
+
+- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Guards/Filters/Interceptors](./docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
+- **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md) | [Multiple Accounts](./docs/MULTIPLE-ACCOUNTS.md)
+- **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
 
 ```mermaid
 flowchart LR
@@ -117,9 +143,9 @@ flowchart LR
 Configure the bot module (async, pulling the token from `ConfigService`) and inject `TelegramBotService` anywhere.
 
 ```ts
-import { Module, Injectable } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
+import { Module, Injectable } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { TelegramBotModule, TelegramBotService } from "nestjs-telegram";
 
 @Module({
   imports: [
@@ -128,7 +154,7 @@ import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
       isGlobal: true,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        token: config.getOrThrow<string>('BOT_TOKEN'),
+        token: config.getOrThrow<string>("BOT_TOKEN"),
         // launch: false, // disable auto-launch to mount a webhook yourself
       }),
     }),
@@ -152,18 +178,18 @@ export class NotificationsService {
 Register handlers and attach an inline keyboard with the builders:
 
 ```ts
-import { InlineKeyboardBuilder } from 'nestjs-telegram';
+import { InlineKeyboardBuilder } from "nestjs-telegram";
 
 this.bot.start(async (ctx) => {
   const keyboard = new InlineKeyboardBuilder()
-    .url('Docs', 'https://core.telegram.org/bots/api')
-    .callback('Ping', 'ping')
+    .url("Docs", "https://core.telegram.org/bots/api")
+    .callback("Ping", "ping")
     .build();
-  await ctx.reply('Welcome!', { reply_markup: keyboard });
+  await ctx.reply("Welcome!", { reply_markup: keyboard });
 });
 
-this.bot.action('ping', async (ctx) => {
-  await ctx.answerCbQuery('pong');
+this.bot.action("ping", async (ctx) => {
+  await ctx.answerCbQuery("pong");
 });
 ```
 
@@ -199,13 +225,9 @@ Signed in successfully.
 Configure `TelegramClientModule` with your `apiId` / `apiHash`, resume from `TG_SESSION`, and persist future sessions with a `SessionStore`.
 
 ```ts
-import { Module, Injectable } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import {
-  TelegramClientModule,
-  TelegramUserService,
-  FileSessionStore,
-} from 'nestjs-telegram';
+import { Module, Injectable } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { TelegramClientModule, TelegramUserService, FileSessionStore } from "nestjs-telegram";
 
 @Module({
   imports: [
@@ -214,10 +236,10 @@ import {
       isGlobal: true,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        apiId: Number(config.getOrThrow<string>('TG_API_ID')),
-        apiHash: config.getOrThrow<string>('TG_API_HASH'),
-        session: config.get<string>('TG_SESSION'), // resume from the CLI output
-        sessionStore: new FileSessionStore('./.telegram.session'),
+        apiId: Number(config.getOrThrow<string>("TG_API_ID")),
+        apiHash: config.getOrThrow<string>("TG_API_HASH"),
+        session: config.get<string>("TG_SESSION"), // resume from the CLI output
+        sessionStore: new FileSessionStore("./.telegram.session"),
       }),
     }),
   ],
@@ -240,7 +262,7 @@ export class SelfNotesService {
 Need both sides at once? Use the umbrella module:
 
 ```ts
-import { TelegramModule } from 'nestjs-telegram';
+import { TelegramModule } from "nestjs-telegram";
 
 TelegramModule.forRoot({
   isGlobal: true,
@@ -256,21 +278,27 @@ TelegramModule.forRoot({
 
 ## Documentation
 
-| Guide | What it covers |
-| --- | --- |
-| [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md) | The umbrella `TelegramModule`, module composition, and global registration |
-| [docs/BOT-API.md](docs/BOT-API.md) | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle |
-| [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md) | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs |
-| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence |
-| [docs/TESTING.md](docs/TESTING.md) | Unit-testing both sides via the `IGramClient` / `clientFactory` seam |
+| Guide                                                          | What it covers                                                                                              |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
+| [docs/BOT-API.md](docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
+| [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
+| [docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md](docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | `@UseTelegramGuards`/`@UseTelegramInterceptors`/`@UseTelegramFilters`, built-in allowlist & rate-limit guards, default exception filter |
+| [docs/MULTIPLE-BOTS.md](docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
+| [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
+| [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
+| [docs/MULTIPLE-ACCOUNTS.md](docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
+| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
+| [docs/TESTING.md](docs/TESTING.md)                             | Unit-testing both sides — ready-made `nestjs-telegram/testing` mocks plus the `IGramClient` / `clientFactory` seam |
 
 ---
 
 ## Testing
 
-The library ships with **150 tests** and is built to keep network I/O out of your suite:
+The library ships with **290+ tests** and is built to keep network I/O out of your suite:
 
-- The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a hand-rolled fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
+- **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](docs/TESTING.md).
+- The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
 - Inside Nest, pass a `clientFactory` to `TelegramClientModule` (or override the `TELEGRAM_GRAM_CLIENT` token) to swap in a fake client without touching the network.
 - On the Bot side, `InMemorySessionStore` gives the client side a zero-I/O session backend, and every facade method funnels through a single error-normalizing path that wraps failures in `TelegramBotApiError`.
 
@@ -278,9 +306,9 @@ The library ships with **150 tests** and is built to keep network I/O out of you
 
 ## Security
 
-- **A session string is a credential equivalent to your password.** It encodes the auth keys that let anyone reconnect as your account *without* the phone code or 2FA. Never commit it, never log it, never paste it into a chat or an issue.
+- **A session string is a credential equivalent to your password.** It encodes the auth keys that let anyone reconnect as your account _without_ the phone code or 2FA. Never commit it, never log it, never paste it into a chat or an issue.
 - Keep session files (`FileSessionStore` writes them `0o600`, owner read/write only) out of version control and off shared volumes. Add `.telegram.session` and `TG_SESSION` to your `.gitignore` / secret store.
-- If a session leaks, revoke it immediately: call `TelegramAuthService.logOut()` (or terminate the session from Telegram's *Settings → Devices*), then run the login flow again to mint a fresh one.
+- If a session leaks, revoke it immediately: call `TelegramAuthService.logOut()` (or terminate the session from Telegram's _Settings → Devices_), then run the login flow again to mint a fresh one.
 - `apiId` / `apiHash` and the bot `token` are likewise secrets — load them from the environment or a secrets manager, not from source.
 
 ---

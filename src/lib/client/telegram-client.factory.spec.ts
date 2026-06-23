@@ -3,34 +3,26 @@
  *
  * PURPOSE
  * -------
- * Unit tests for the MTProto DI providers: session-source precedence, the
- * `clientFactory` test seam, eager-vs-lazy connect, and the non-fatal handling
- * of a connect failure during bootstrap.
+ * Unit tests for the MTProto client builder `createConnectedGramClient`:
+ * session-source precedence, the `clientFactory` test seam, eager-vs-lazy
+ * connect, and the non-fatal handling of a connect failure during bootstrap.
  */
 
-import type { FactoryProvider } from '@nestjs/common';
 import type { IGramClient } from './gram-client.interface';
-import {
-  gramClientProvider,
-  sessionStoreProvider,
-} from './telegram-client.factory';
-import type { TelegramClientModuleOptions } from './telegram-client.options';
 import type { SessionStore } from './session/session-store.interface';
+import { createConnectedGramClient } from './telegram-client.factory';
+import type { TelegramClientModuleOptions } from './telegram-client.options';
 
-/** Invokes the gram-client provider factory with explicit args. */
+/** Invokes the client builder with explicit args. */
 const buildClient = (
   options: TelegramClientModuleOptions,
   store?: SessionStore,
-): Promise<IGramClient> => {
-  const factory = (gramClientProvider as FactoryProvider).useFactory as (
-    o: TelegramClientModuleOptions,
-    s?: SessionStore,
-  ) => Promise<IGramClient>;
-  return factory(options, store);
-};
+): Promise<IGramClient> => createConnectedGramClient(options, store);
 
 /** Builds a fake client whose `connect` is observable. */
-function fakeClient(connect = jest.fn().mockResolvedValue(undefined)): IGramClient {
+function fakeClient(
+  connect = jest.fn().mockResolvedValue(undefined),
+): IGramClient {
   return {
     connect,
     disconnect: jest.fn(),
@@ -39,17 +31,36 @@ function fakeClient(connect = jest.fn().mockResolvedValue(undefined)): IGramClie
     sendCode: jest.fn(),
     signInWithCode: jest.fn(),
     signInWithPassword: jest.fn(),
+    signInWithQrCode: jest.fn(),
+    signInAsBot: jest.fn(),
+    updateTwoFactor: jest.fn(),
     logOut: jest.fn(),
     getMe: jest.fn(),
     getDialogs: jest.fn(),
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
+    sendFile: jest.fn(),
+    downloadMedia: jest.fn(),
+    downloadProfilePhoto: jest.fn(),
+    getMediaInfo: jest.fn(),
+    downloadMediaRange: jest.fn(),
+    streamMedia: jest.fn(),
+    joinChannel: jest.fn(),
+    leaveChannel: jest.fn(),
+    getParticipants: jest.fn(),
+    searchMessages: jest.fn(),
+    getFullChat: jest.fn(),
+    editMessage: jest.fn(),
+    deleteMessages: jest.fn(),
+    forwardMessages: jest.fn(),
+    markAsRead: jest.fn(),
+    pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue(''),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
   };
 }
 
-describe('gramClientProvider', () => {
+describe('createConnectedGramClient', () => {
   it('uses the clientFactory seam and connects eagerly by default', async () => {
     const connect = jest.fn().mockResolvedValue(undefined);
     const fake = fakeClient(connect);
@@ -86,7 +97,13 @@ describe('gramClientProvider', () => {
     };
 
     await buildClient(
-      { apiId: 1, apiHash: 'h', autoConnect: false, session: 'FROM-OPTIONS', clientFactory },
+      {
+        apiId: 1,
+        apiHash: 'h',
+        autoConnect: false,
+        session: 'FROM-OPTIONS',
+        clientFactory,
+      },
       store,
     );
     await buildClient(
@@ -102,22 +119,5 @@ describe('gramClientProvider', () => {
     await expect(
       buildClient({ apiId: 1, apiHash: 'h', clientFactory: () => fake }),
     ).resolves.toBe(fake);
-  });
-});
-
-describe('sessionStoreProvider', () => {
-  it('exposes the configured store', () => {
-    const store: SessionStore = { load: jest.fn(), save: jest.fn(), clear: jest.fn() };
-    const factory = (sessionStoreProvider as FactoryProvider).useFactory as (
-      o: TelegramClientModuleOptions,
-    ) => SessionStore | undefined;
-    expect(factory({ apiId: 1, apiHash: 'h', sessionStore: store })).toBe(store);
-  });
-
-  it('returns undefined when no store is configured', () => {
-    const factory = (sessionStoreProvider as FactoryProvider).useFactory as (
-      o: TelegramClientModuleOptions,
-    ) => SessionStore | undefined;
-    expect(factory({ apiId: 1, apiHash: 'h' })).toBeUndefined();
   });
 });

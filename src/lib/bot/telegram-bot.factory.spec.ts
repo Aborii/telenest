@@ -9,6 +9,7 @@
  */
 
 import { Telegraf } from 'telegraf';
+
 import { TelegramConfigError } from '../common';
 import { createTelegrafInstance } from './telegram-bot.factory';
 

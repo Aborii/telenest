@@ -22,15 +22,26 @@
  */
 
 import type {
+  GramChatInfo,
+  GramDeleteMessagesParams,
   GramDialog,
   GramGetDialogsParams,
   GramGetMessagesParams,
+  GramGetParticipantsParams,
+  GramMediaInfo,
+  GramMediaRange,
   GramMessage,
   GramPeer,
+  GramPinMessageParams,
+  GramQrSignInCallbacks,
+  GramSearchMessagesParams,
   GramSendCodeResult,
+  GramSendFileParams,
   GramSendMessageParams,
   GramSignInResult,
   GramSignInWithCodeInput,
+  GramStreamMediaOptions,
+  GramUpdateTwoFactorInput,
   GramUser,
 } from './gram-client.types';
 
@@ -77,7 +88,10 @@ export interface IGramClient {
    * @returns The `phoneCodeHash` needed to complete sign-in.
    * @throws {import('../common').TelegramAuthError} If the phone is rejected.
    */
-  sendCode(phoneNumber: string, forceSMS?: boolean): Promise<GramSendCodeResult>;
+  sendCode(
+    phoneNumber: string,
+    forceSMS?: boolean,
+  ): Promise<GramSendCodeResult>;
 
   /**
    * Completes sign-in with the code the user received.
@@ -96,6 +110,39 @@ export interface IGramClient {
    * @throws {import('../common').TelegramAuthError} If the password is wrong.
    */
   signInWithPassword(password: string): Promise<GramUser>;
+
+  /**
+   * Signs in by QR code: scan the rendered token from an already-authorized
+   * Telegram app to authorize this session. Resolves once scanned (and, for a
+   * 2FA-protected account, once `callbacks.onPassword` supplies the password).
+   *
+   * @param callbacks - `onToken` receives each issued/rotated QR token to
+   *   render; `onPassword` resolves the 2FA password when required.
+   * @returns The authenticated account.
+   * @throws {import('../common').TelegramAuthError} If the login fails, or a 2FA
+   *   account is scanned without an `onPassword` callback (`PASSWORD_REQUIRED`).
+   */
+  signInWithQrCode(callbacks: GramQrSignInCallbacks): Promise<GramUser>;
+
+  /**
+   * Signs in as a bot using a BotFather token over the MTProto transport.
+   *
+   * @param botToken - The bot token from BotFather (`<id>:<secret>`).
+   * @returns The authenticated bot account.
+   * @throws {import('../common').TelegramAuthError} If the token is rejected.
+   */
+  signInAsBot(botToken: string): Promise<GramUser>;
+
+  /**
+   * Enables, changes, or removes the account's two-factor (2FA) password.
+   * Requires an already-authorized session.
+   *
+   * @param input - Current/new password and hint selecting the operation.
+   * @returns Resolves once the password settings are updated.
+   * @throws {import('../common').TelegramAuthError} If the current password is
+   *   wrong (`PASSWORD_INVALID`) or the update otherwise fails.
+   */
+  updateTwoFactor(input: GramUpdateTwoFactorInput): Promise<void>;
 
   /**
    * Logs out, invalidating the current session on Telegram's servers.
@@ -145,6 +192,223 @@ export interface IGramClient {
     peer: GramPeer,
     params: GramSendMessageParams,
   ): Promise<GramMessage>;
+
+  // ── Media ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Sends a file (photo, video, document, …) as the logged-in account.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - The file plus optional caption / presentation options.
+   * @returns The sent message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  sendFile(peer: GramPeer, params: GramSendFileParams): Promise<GramMessage>;
+
+  /**
+   * Downloads the media attached to a message into a {@link Buffer}.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to download.
+   * @returns The media bytes, or `undefined` when the message has no
+   *   downloadable media (or no longer exists).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadMedia(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<Buffer | undefined>;
+
+  /**
+   * Downloads a peer's current profile photo into a {@link Buffer}.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The photo bytes, or `undefined` when the peer has no photo.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadProfilePhoto(peer: GramPeer): Promise<Buffer | undefined>;
+
+  /**
+   * Returns metadata about a message's media (kind, MIME, size, dimensions, …)
+   * without downloading the bytes — enough to populate an HTTP `Content-Type` /
+   * `Content-Length` / `Accept-Ranges` response.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to describe.
+   * @returns The media descriptor, or `undefined` when the message has no
+   *   downloadable media (or no longer exists).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getMediaInfo(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<GramMediaInfo | undefined>;
+
+  /**
+   * Downloads a single contiguous byte range of a message's media — the
+   * building block for serving HTTP `206 Partial Content` responses so a player
+   * can seek without fetching the whole file.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to read.
+   * @param range - Zero-based byte `offset` and byte `limit` to return.
+   * @returns The requested bytes (shorter than `limit` at end-of-file), or
+   *   `undefined` when the message has no downloadable media.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadMediaRange(
+    peer: GramPeer,
+    messageId: number,
+    range: GramMediaRange,
+  ): Promise<Buffer | undefined>;
+
+  /**
+   * Streams a message's media as a lazy sequence of byte chunks, optionally
+   * starting at an `offset` and bounded by a `limit` — pipe it straight to an
+   * HTTP response for progressive playback without buffering the whole file.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to stream.
+   * @param options - Optional byte `offset` / `limit`.
+   * @returns An async iterable of byte chunks.
+   * @throws {import('../common').TelegramClientError} If the message has no
+   *   downloadable media, or on transport failure.
+   */
+  streamMedia(
+    peer: GramPeer,
+    messageId: number,
+    options?: GramStreamMediaOptions,
+  ): Promise<AsyncIterable<Buffer>>;
+
+  // ── Chats & channels ───────────────────────────────────────────────────────
+
+  /**
+   * Joins a public channel or group.
+   *
+   * @param peer - The channel/group to join (@username or numeric id).
+   * @returns Resolves once joined.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  joinChannel(peer: GramPeer): Promise<void>;
+
+  /**
+   * Leaves a channel or group.
+   *
+   * @param peer - The channel/group to leave (@username or numeric id).
+   * @returns Resolves once left.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  leaveChannel(peer: GramPeer): Promise<void>;
+
+  /**
+   * Lists the participants of a group or channel.
+   *
+   * @param peer - The group/channel (@username or numeric id).
+   * @param params - Optional limit / name filter. With no `limit`, **every**
+   *   participant is fetched (GramJS' default), which is slow and can trigger
+   *   `FLOOD_WAIT` on large peers — pass a `limit` unless you need the full roster.
+   * @returns The matching participants as user DTOs.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getParticipants(
+    peer: GramPeer,
+    params?: GramGetParticipantsParams,
+  ): Promise<GramUser[]>;
+
+  /**
+   * Searches a peer's history for messages matching a text query.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param query - The text to search for.
+   * @param params - Optional limit.
+   * @returns The matching messages, newest first.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  searchMessages(
+    peer: GramPeer,
+    query: string,
+    params?: GramSearchMessagesParams,
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Fetches extended ("full") information about a chat, channel, or user.
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns The chat/channel/user info DTO.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getFullChat(peer: GramPeer): Promise<GramChatInfo>;
+
+  // ── Message operations ─────────────────────────────────────────────────────
+
+  /**
+   * Edits the text of a message previously sent in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to edit.
+   * @param text - The new message text.
+   * @returns The edited message.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  editMessage(
+    peer: GramPeer,
+    messageId: number,
+    text: string,
+  ): Promise<GramMessage>;
+
+  /**
+   * Deletes one or more messages from a chat.
+   *
+   * @param peer - Peer the messages belong to (`'me'`, @username, or numeric id).
+   * @param messageIds - Ids of the messages to delete.
+   * @param params - Optional `revoke` flag (delete for everyone; default `true`).
+   * @returns Resolves once deleted.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  deleteMessages(
+    peer: GramPeer,
+    messageIds: number[],
+    params?: GramDeleteMessagesParams,
+  ): Promise<void>;
+
+  /**
+   * Forwards messages from one peer to another.
+   *
+   * @param toPeer - Destination peer.
+   * @param fromPeer - Source peer the messages currently live in.
+   * @param messageIds - Ids of the messages to forward.
+   * @returns The forwarded messages as they now exist in `toPeer`.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  forwardMessages(
+    toPeer: GramPeer,
+    fromPeer: GramPeer,
+    messageIds: number[],
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Marks a peer's history as read (clears the unread badge).
+   *
+   * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @returns Resolves once acknowledged.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  markAsRead(peer: GramPeer): Promise<void>;
+
+  /**
+   * Pins a message in a chat.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message to pin.
+   * @param params - Optional `notify` flag.
+   * @returns Resolves once pinned.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  pinMessage(
+    peer: GramPeer,
+    messageId: number,
+    params?: GramPinMessageParams,
+  ): Promise<void>;
 
   /**
    * Serializes the current session to a portable string for persistence.

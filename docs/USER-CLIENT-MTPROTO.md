@@ -350,63 +350,70 @@ const store = new FileSessionStore('./.telegram.session');
 
 > Add the session file to `.gitignore` and keep it off shared volumes.
 
-### Writing a custom store (e.g. Redis)
+### `RedisSessionStore`
 
-Implement the three methods. The `SessionStore` interface is exported, so a typed
-implementation is straightforward:
+Stores the session under a single Redis key via an **injected** client, so the
+library takes no hard dependency on `redis`/`ioredis` — any client exposing
+`get`/`set`/`del` (or a test fake) works. Read/write/delete failures surface as
+`TelegramSessionError`.
 
 ```ts
-import type { Redis } from 'ioredis';
-import { TelegramSessionError, type SessionStore } from 'nestjs-telegram';
+import { createClient } from 'redis';
+import { RedisSessionStore } from 'nestjs-telegram';
 
-/**
- * Persists the MTProto string session in Redis under a single key.
- *
- * SECURITY: the value is a live credential. Use an access-controlled Redis
- * instance, enable encryption in transit/at rest, and consider a key TTL.
- */
-export class RedisSessionStore implements SessionStore {
-  constructor(
-    private readonly redis: Redis,
-    private readonly key = 'tg:session',
-  ) {}
-
-  async load(): Promise<string | undefined> {
-    try {
-      return (await this.redis.get(this.key)) ?? undefined;
-    } catch (error) {
-      throw new TelegramSessionError('Failed to read session from Redis.', error);
-    }
-  }
-
-  async save(session: string): Promise<void> {
-    try {
-      await this.redis.set(this.key, session);
-    } catch (error) {
-      throw new TelegramSessionError('Failed to write session to Redis.', error);
-    }
-  }
-
-  async clear(): Promise<void> {
-    try {
-      await this.redis.del(this.key);
-    } catch (error) {
-      throw new TelegramSessionError('Failed to delete session from Redis.', error);
-    }
-  }
-}
+const redis = createClient();
+await redis.connect();
+const store = new RedisSessionStore(redis, 'tg:session');
 ```
 
-Wrapping failures in `TelegramSessionError` keeps storage errors inside the library's single
-error hierarchy. Then pass it via options:
+### `KeyValueSessionStore`
+
+A generic adapter over any async `get`/`set`/`delete` backend — a database DAO,
+[Keyv](https://keyv.org), an HTTP KV — so you rarely need to hand-roll a store:
+
+```ts
+import Keyv from 'keyv';
+import { KeyValueSessionStore } from 'nestjs-telegram';
+
+const store = new KeyValueSessionStore(new Keyv('postgres://…'), 'tg:session');
+```
+
+### `EncryptedSessionStore`
+
+A decorator that **AES-256-GCM** encrypts the session before delegating to any
+inner store, and authenticates on decrypt — so a tampered payload or wrong key
+**fails closed** with `TelegramSessionError` rather than returning garbage. Use
+it to protect the credential at rest on top of Redis, a DB, or a file:
+
+```ts
+import { EncryptedSessionStore, RedisSessionStore } from 'nestjs-telegram';
+
+const store = new EncryptedSessionStore(
+  new RedisSessionStore(redis, 'tg:session'),
+  process.env.TG_SESSION_KEY!, // high-entropy secret; never hard-code
+);
+```
+
+See **[SESSION-STORES.md](./SESSION-STORES.md)** for the full reference,
+security notes, and the encryption format.
+
+### Writing a custom store
+
+The `SessionStore` interface is exported, so any custom backend is just the
+three methods — wrap storage failures in `TelegramSessionError` to keep them in
+the library's single error hierarchy. (For most async backends, prefer
+`KeyValueSessionStore` over writing one by hand.)
 
 ```ts
 TelegramClientModule.forRootAsync({
   inject: [ConfigService, RedisClient],
-  useFactory: (config: ConfigService, redis: Redis) => ({
+  useFactory: (config: ConfigService, redis: RedisClient) => ({
     apiId: Number(config.getOrThrow('TG_API_ID')),
     apiHash: config.getOrThrow('TG_API_HASH'),
-    sessionStore: new RedisSessionStore(redis),
+    sessionStore: new EncryptedSessionStore(
+      new RedisSessionStore(redis),
+      config.getOrThrow('TG_SESSION_KEY'),
+    ),
   }),
 });
 ```

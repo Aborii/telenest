@@ -64,6 +64,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - 2FA handling
   - Session persistence
 
+- **[SESSION-STORES.md](./SESSION-STORES.md)**
+  - `SessionStore` contract and built-in stores
+  - `RedisSessionStore` / `KeyValueSessionStore`
+  - `EncryptedSessionStore` (AES-256-GCM at rest)
+  - Composing stores & security notes
+
 ### Reference Documentation
 
 - **[API-REFERENCE.md](./API-REFERENCE.md)** 📖

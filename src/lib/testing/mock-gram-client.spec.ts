@@ -14,7 +14,12 @@ import { Test } from '@nestjs/testing';
 import type { IGramClient } from '../client/gram-client.interface';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
 import { TelegramUserService } from '../client/telegram-user.service';
-import { aGramChatInfo, aGramMessage, aGramUser } from './dto-builders';
+import {
+  aGramChatInfo,
+  aGramMediaInfo,
+  aGramMessage,
+  aGramUser,
+} from './dto-builders';
 import {
   createMockGramClient,
   provideMockGramClient,
@@ -37,6 +42,9 @@ const CLIENT_METHODS: ReadonlyArray<keyof IGramClient> = [
   'sendFile',
   'downloadMedia',
   'downloadProfilePhoto',
+  'getMediaInfo',
+  'downloadMediaRange',
+  'streamMedia',
   'joinChannel',
   'leaveChannel',
   'getParticipants',
@@ -99,6 +107,21 @@ describe('createMockGramClient', () => {
     await expect(client.forwardMessages('me', '@x', [1])).resolves.toEqual([]);
     await expect(client.markAsRead('me')).resolves.toBeUndefined();
     await expect(client.pinMessage('me', 1)).resolves.toBeUndefined();
+  });
+
+  it('defaults the media-streaming operations to representative values', async () => {
+    const client = createMockGramClient();
+
+    await expect(client.getMediaInfo('me', 1)).resolves.toEqual(
+      aGramMediaInfo(),
+    );
+    await expect(
+      client.downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
+    ).resolves.toEqual(Buffer.from('TEST_RANGE'));
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of await client.streamMedia('me', 1)) chunks.push(chunk);
+    expect(Buffer.concat(chunks)).toEqual(Buffer.from('TEST_MEDIA'));
   });
 
   it('defaults the auth flow to a completed sign-in', async () => {

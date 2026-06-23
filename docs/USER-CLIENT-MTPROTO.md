@@ -429,6 +429,9 @@ returns library DTOs; the service transparently connects the client on first use
 | `sendFile` | `(peer: GramPeer, params: GramSendFileParams) => Promise<GramMessage>` | Sends a photo / video / document; returns the sent message. |
 | `downloadMedia` | `(peer: GramPeer, messageId: number) => Promise<Buffer \| undefined>` | Downloads a message's media, or `undefined` when it has none. |
 | `downloadProfilePhoto` | `(peer: GramPeer) => Promise<Buffer \| undefined>` | Downloads a peer's profile photo, or `undefined` when absent. |
+| `getMediaInfo` | `(peer: GramPeer, messageId: number) => Promise<GramMediaInfo \| undefined>` | Media metadata (kind/MIME/size/dimensions) without downloading the bytes. |
+| `downloadMediaRange` | `(peer: GramPeer, messageId: number, range: GramMediaRange) => Promise<Buffer \| undefined>` | A single byte range of a message's media (for HTTP `206`). |
+| `streamMedia` | `(peer: GramPeer, messageId: number, options?: GramStreamMediaOptions) => Promise<AsyncIterable<Buffer>>` | Lazy byte-chunk stream for progressive playback. |
 | `joinChannel` | `(peer: GramPeer) => Promise<void>` | Joins a public channel or group. |
 | `leaveChannel` | `(peer: GramPeer) => Promise<void>` | Leaves a channel or group. |
 | `getParticipants` | `(peer: GramPeer, params?: GramGetParticipantsParams) => Promise<GramUser[]>` | Lists a group/channel's participants. |
@@ -570,6 +573,89 @@ await this.user.deleteMessages('me', [sent.id]); // revoke: true by default
 > `downloadMedia` takes the message's `peerId` and `id` (rather than a raw GramJS message) so
 > the DTO boundary stays intact — the adapter re-fetches the message and downloads its media.
 
+### Streaming media (progressive video / HTTP Range)
+
+`downloadMedia` buffers the **whole** file — fine for photos and small documents, but not for a
+multi-hundred-MB video you want the user to start watching immediately. For that, three methods
+let you serve media incrementally so an HTML5 `<video>` (or any range-aware player) plays and
+seeks without a full download:
+
+- **`getMediaInfo(peer, id)`** → a `GramMediaInfo` (kind, MIME, size, duration, dimensions) —
+  everything you need for `Content-Type` / `Content-Length` / `Accept-Ranges`. `undefined` when
+  the message has no downloadable media.
+- **`downloadMediaRange(peer, id, { offset, limit })`** → exactly the requested bytes (shorter
+  at end-of-file). Use it to answer an HTTP `Range` request with `206 Partial Content`.
+- **`streamMedia(peer, id, { offset?, limit? })`** → a lazy `AsyncIterable<Buffer>` you pipe
+  straight to the response; nothing is buffered server-side.
+
+```ts
+import { Controller, Get, Headers, Param, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { TelegramUserService } from 'nestjs-telegram';
+
+@Controller()
+export class MediaController {
+  constructor(private readonly user: TelegramUserService) {}
+
+  /** Streams a chat's media to a browser, honouring HTTP Range requests. */
+  @Get('media/:peer/:id')
+  async stream(
+    @Param('peer') peer: string,
+    @Param('id') id: string,
+    @Headers('range') range: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const messageId = Number(id);
+    const info = await this.user.getMediaInfo(peer, messageId);
+    if (!info?.size) {
+      res.status(404).end();
+      return;
+    }
+
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Type', info.mimeType ?? 'application/octet-stream');
+
+    // ── No Range header → stream the whole file with a 200. ──────────────────
+    if (!range) {
+      res.setHeader('Content-Length', info.size);
+      for await (const chunk of await this.user.streamMedia(peer, messageId))
+        res.write(chunk);
+      res.end();
+      return;
+    }
+
+    // ── Range header → 206 Partial Content. `end` is inclusive (RFC 7233). ───
+    const [startRaw, endRaw] = range.replace('bytes=', '').split('-');
+    const start = Number(startRaw);
+    const end = endRaw ? Number(endRaw) : info.size - 1;
+    const limit = end - start + 1;
+
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
+    res.setHeader('Content-Length', limit);
+    for await (const chunk of await this.user.streamMedia(peer, messageId, {
+      offset: start,
+      limit,
+    }))
+      res.write(chunk);
+    res.end();
+  }
+}
+```
+
+Point a player at it and seeking just works:
+
+```html
+<video src="/media/@my_channel/1234" controls></video>
+```
+
+> [!NOTE]
+> Telegram requires download offsets to be 4096-aligned; the adapter aligns the offset down and
+> trims the surplus internally, so you pass plain byte offsets. Aggressive seeking issues many
+> range requests — heavy seeking can trip `FLOOD_WAIT` (surfaced as `TelegramClientError`).
+> Non-streamable containers (some MKV/AVI) won't play inline in browsers regardless — that's a
+> format concern, not a library limit.
+
 ### Receiving inbound messages
 
 The user account can **react** to incoming messages, not just send them. There are two ways
@@ -699,6 +785,24 @@ interface GramChatInfo {
 }
 ```
 
+### `GramMediaInfo`
+
+Returned by `getMediaInfo`; carries what an HTTP layer needs to serve the bytes plus light
+playback metadata. `size` is a `number` — media is far below `2^53` bytes (unlike entity ids).
+
+```ts
+interface GramMediaInfo {
+  kind: 'photo' | 'video' | 'audio' | 'voice' | 'document';
+  mimeType?: string;          // e.g. 'video/mp4'
+  size?: number;              // bytes
+  fileName?: string;
+  durationSeconds?: number;   // video / audio / voice
+  width?: number;             // video
+  height?: number;            // video
+  supportsStreaming?: boolean; // uploader flagged the video as streamable
+}
+```
+
 Related sign-in DTOs you may encounter: `GramSendCodeResult`
 (`{ phoneCodeHash, isCodeViaApp }`) and the discriminated `GramSignInResult`
 (`{ status: 'authorized', user } | { status: 'password-required' }`).
@@ -710,7 +814,8 @@ Related sign-in DTOs you may encounter: `GramSendCodeResult`
 Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
 operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
 `signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
-`sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `joinChannel`,
+`sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `getMediaInfo`,
+`downloadMediaRange`, `streamMedia`, `joinChannel`,
 `leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,
 `deleteMessages`, `forwardMessages`, `markAsRead`, `pinMessage`, `exportSession`,
 `onNewMessage`). The concrete `GramJsClientAdapter` — created by `createGramJsClient` — is the

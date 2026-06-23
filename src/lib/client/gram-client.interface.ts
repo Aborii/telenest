@@ -28,6 +28,8 @@ import type {
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
+  GramMediaInfo,
+  GramMediaRange,
   GramMessage,
   GramPeer,
   GramPinMessageParams,
@@ -37,6 +39,7 @@ import type {
   GramSendMessageParams,
   GramSignInResult,
   GramSignInWithCodeInput,
+  GramStreamMediaOptions,
   GramUser,
 } from './gram-client.types';
 
@@ -189,6 +192,58 @@ export interface IGramClient {
    * @throws {import('../common').TelegramClientError} On failure.
    */
   downloadProfilePhoto(peer: GramPeer): Promise<Buffer | undefined>;
+
+  /**
+   * Returns metadata about a message's media (kind, MIME, size, dimensions, …)
+   * without downloading the bytes — enough to populate an HTTP `Content-Type` /
+   * `Content-Length` / `Accept-Ranges` response.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to describe.
+   * @returns The media descriptor, or `undefined` when the message has no
+   *   downloadable media (or no longer exists).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getMediaInfo(
+    peer: GramPeer,
+    messageId: number,
+  ): Promise<GramMediaInfo | undefined>;
+
+  /**
+   * Downloads a single contiguous byte range of a message's media — the
+   * building block for serving HTTP `206 Partial Content` responses so a player
+   * can seek without fetching the whole file.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to read.
+   * @param range - Zero-based byte `offset` and byte `limit` to return.
+   * @returns The requested bytes (shorter than `limit` at end-of-file), or
+   *   `undefined` when the message has no downloadable media.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  downloadMediaRange(
+    peer: GramPeer,
+    messageId: number,
+    range: GramMediaRange,
+  ): Promise<Buffer | undefined>;
+
+  /**
+   * Streams a message's media as a lazy sequence of byte chunks, optionally
+   * starting at an `offset` and bounded by a `limit` — pipe it straight to an
+   * HTTP response for progressive playback without buffering the whole file.
+   *
+   * @param peer - Peer the message belongs to (`'me'`, @username, or numeric id).
+   * @param messageId - Id of the message whose media to stream.
+   * @param options - Optional byte `offset` / `limit`.
+   * @returns An async iterable of byte chunks.
+   * @throws {import('../common').TelegramClientError} If the message has no
+   *   downloadable media, or on transport failure.
+   */
+  streamMedia(
+    peer: GramPeer,
+    messageId: number,
+    options?: GramStreamMediaOptions,
+  ): Promise<AsyncIterable<Buffer>>;
 
   // ── Chats & channels ───────────────────────────────────────────────────────
 

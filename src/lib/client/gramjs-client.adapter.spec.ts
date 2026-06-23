@@ -43,6 +43,7 @@ type MockClient = {
   forwardMessages: jest.Mock;
   markAsRead: jest.Mock;
   pinMessage: jest.Mock;
+  iterDownload: jest.Mock;
   addEventHandler: jest.Mock;
   removeEventHandler: jest.Mock;
 };
@@ -69,10 +70,33 @@ function createMockClient(overrides: Partial<MockClient> = {}): MockClient {
     forwardMessages: jest.fn(),
     markAsRead: jest.fn(),
     pinMessage: jest.fn(),
+    iterDownload: jest.fn(),
     addEventHandler: jest.fn(),
     removeEventHandler: jest.fn(),
     ...overrides,
   };
+}
+
+/** A lazy async-iterable over fixed chunks, modelling `client.iterDownload`. */
+function asyncChunks(...chunks: Buffer[]): AsyncIterable<Buffer> {
+  return (async function* () {
+    for (const chunk of chunks) yield chunk;
+  })();
+}
+
+/** A `MessageMediaDocument` fixture carrying the fields the adapter reads. */
+function documentMedia(
+  doc: Partial<Api.Document> = {},
+  attributes: Api.TypeDocumentAttribute[] = [],
+): Api.TypeMessageMedia {
+  return asEntity(Api.MessageMediaDocument, {
+    document: asEntity(Api.Document, {
+      size: bigInt(1_048_576),
+      mimeType: 'video/mp4',
+      attributes,
+      ...doc,
+    }),
+  });
 }
 
 /** Wraps a mock client in a freshly-constructed adapter. */
@@ -1187,5 +1211,347 @@ describe('GramJsClientAdapter', () => {
         );
       },
     );
+  });
+
+  describe('media streaming', () => {
+    describe('getMediaInfo', () => {
+      it('maps a video document', async () => {
+        const media = documentMedia({}, [
+          asEntity(Api.DocumentAttributeVideo, {
+            duration: 12,
+            w: 1280,
+            h: 720,
+            supportsStreaming: true,
+          }),
+          asEntity(Api.DocumentAttributeFilename, { fileName: 'clip.mp4' }),
+        ]);
+        const mock = createMockClient({
+          getMessages: jest.fn().mockResolvedValue([aRawMessage({ media })]),
+        });
+
+        await expect(createAdapter(mock).getMediaInfo('me', 1)).resolves.toEqual(
+          {
+            kind: 'video',
+            mimeType: 'video/mp4',
+            size: 1_048_576,
+            fileName: 'clip.mp4',
+            durationSeconds: 12,
+            width: 1280,
+            height: 720,
+            supportsStreaming: true,
+          },
+        );
+      });
+
+      it('classifies a voice note vs. music by the audio attribute', async () => {
+        const voice = documentMedia({ mimeType: 'audio/ogg' }, [
+          asEntity(Api.DocumentAttributeAudio, { voice: true, duration: 5 }),
+        ]);
+        const music = documentMedia({ mimeType: 'audio/mpeg' }, [
+          asEntity(Api.DocumentAttributeAudio, { duration: 200 }),
+        ]);
+
+        const voiceInfo = await createAdapter(
+          createMockClient({
+            getMessages: jest.fn().mockResolvedValue([aRawMessage({ media: voice })]),
+          }),
+        ).getMediaInfo('me', 1);
+        const musicInfo = await createAdapter(
+          createMockClient({
+            getMessages: jest.fn().mockResolvedValue([aRawMessage({ media: music })]),
+          }),
+        ).getMediaInfo('me', 1);
+
+        expect(voiceInfo?.kind).toBe('voice');
+        expect(voiceInfo?.durationSeconds).toBe(5);
+        expect(musicInfo?.kind).toBe('audio');
+      });
+
+      it('falls back to "document" with no media attributes', async () => {
+        const media = documentMedia({ mimeType: 'application/pdf' }, [
+          asEntity(Api.DocumentAttributeFilename, { fileName: 'report.pdf' }),
+        ]);
+        const mock = createMockClient({
+          getMessages: jest.fn().mockResolvedValue([aRawMessage({ media })]),
+        });
+        const info = await createAdapter(mock).getMediaInfo('me', 1);
+        expect(info?.kind).toBe('document');
+        expect(info?.fileName).toBe('report.pdf');
+      });
+
+      it('reports a photo by kind only', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([
+              aRawMessage({ media: asEntity(Api.MessageMediaPhoto, {}) }),
+            ]),
+        });
+        await expect(createAdapter(mock).getMediaInfo('me', 1)).resolves.toEqual({
+          kind: 'photo',
+          mimeType: 'image/jpeg',
+        });
+      });
+
+      it('returns undefined when the message has no media', async () => {
+        const mock = createMockClient({
+          getMessages: jest.fn().mockResolvedValue([aRawMessage()]),
+        });
+        await expect(
+          createAdapter(mock).getMediaInfo('me', 1),
+        ).resolves.toBeUndefined();
+      });
+
+      it('returns undefined for a document with no body', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([
+              aRawMessage({ media: asEntity(Api.MessageMediaDocument, {}) }),
+            ]),
+        });
+        await expect(
+          createAdapter(mock).getMediaInfo('me', 1),
+        ).resolves.toBeUndefined();
+      });
+
+      it('wraps failures in TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest.fn().mockRejectedValue(new Error('rpc')),
+        });
+        await expect(
+          createAdapter(mock).getMediaInfo('me', 1),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
+    });
+
+    describe('downloadMediaRange', () => {
+      it('returns exactly the requested bytes (offset 0)', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.from('0123456789'))),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, { offset: 2, limit: 3 }),
+        ).resolves.toEqual(Buffer.from('234'));
+      });
+
+      it('aligns the offset down to 4096 and slices the surplus', async () => {
+        const chunk = Buffer.alloc(2000, 7);
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest.fn().mockImplementation(() => asyncChunks(chunk)),
+        });
+
+        const result = await createAdapter(mock).downloadMediaRange('me', 1, {
+          offset: 5000,
+          limit: 100,
+        });
+
+        // 5000 → aligned 4096; iterDownload must be asked for the aligned offset.
+        const arg = mock.iterDownload.mock.calls[0]?.[0] as {
+          offset: { toJSNumber(): number };
+        };
+        expect(arg.offset.toJSNumber()).toBe(4096);
+        // skip = 5000 - 4096 = 904
+        expect(result).toEqual(chunk.subarray(904, 1004));
+        expect(result?.length).toBe(100);
+      });
+
+      it('sizes the request to the range (small probe vs. large read)', async () => {
+        const small = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.alloc(4096))),
+        });
+        await createAdapter(small).downloadMediaRange('me', 1, {
+          offset: 0,
+          limit: 2,
+        });
+        expect(
+          (small.iterDownload.mock.calls[0]?.[0] as { requestSize: number })
+            .requestSize,
+        ).toBe(4096);
+
+        const large = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.alloc(600_000))),
+        });
+        await createAdapter(large).downloadMediaRange('me', 1, {
+          offset: 0,
+          limit: 600_000,
+        });
+        expect(
+          (large.iterDownload.mock.calls[0]?.[0] as { requestSize: number })
+            .requestSize,
+        ).toBe(512 * 1024);
+      });
+
+      it('returns fewer bytes than requested at end-of-file', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.from('ab'))),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 10 }),
+        ).resolves.toEqual(Buffer.from('ab'));
+      });
+
+      it('returns undefined when the message has no media', async () => {
+        const mock = createMockClient({
+          getMessages: jest.fn().mockResolvedValue([aRawMessage()]),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
+        ).resolves.toBeUndefined();
+      });
+
+      it('wraps transport failures in TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest.fn().mockImplementation(() =>
+            (async function* () {
+              throw new Error('rpc');
+            })(),
+          ),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
+    });
+
+    describe('streamMedia', () => {
+      it('yields the media chunks in order', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() =>
+              asyncChunks(Buffer.from('hello'), Buffer.from('world')),
+            ),
+        });
+        const chunks: Buffer[] = [];
+        for await (const chunk of await createAdapter(mock).streamMedia('me', 1))
+          chunks.push(chunk);
+        expect(Buffer.concat(chunks)).toEqual(Buffer.from('helloworld'));
+      });
+
+      it('trims the leading surplus and honours the byte limit', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() => asyncChunks(Buffer.from('helloworld'))),
+        });
+        const chunks: Buffer[] = [];
+        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
+          offset: 2,
+          limit: 4,
+        }))
+          chunks.push(chunk);
+        expect(Buffer.concat(chunks)).toEqual(Buffer.from('llow'));
+      });
+
+      it('applies the byte limit across multiple chunks', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() =>
+              asyncChunks(Buffer.from('ab'), Buffer.from('cdef')),
+            ),
+        });
+        const chunks: Buffer[] = [];
+        // limit 5 over 'ab' + 'cdef': first whole chunk, then 3 of the next.
+        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
+          limit: 5,
+        }))
+          chunks.push(chunk);
+        expect(Buffer.concat(chunks)).toEqual(Buffer.from('abcde'));
+      });
+
+      it('skips across chunk boundaries', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest
+            .fn()
+            .mockImplementation(() =>
+              asyncChunks(Buffer.from('a'), Buffer.from('bcdef')),
+            ),
+        });
+        const chunks: Buffer[] = [];
+        // offset 2 (skip 2): drop 'a', then drop one more from 'bcdef' → 'cdef'.
+        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
+          offset: 2,
+        }))
+          chunks.push(chunk);
+        expect(Buffer.concat(chunks)).toEqual(Buffer.from('cdef'));
+      });
+
+      it('throws when the message has no media', async () => {
+        const mock = createMockClient({
+          getMessages: jest.fn().mockResolvedValue([aRawMessage()]),
+        });
+        await expect(
+          createAdapter(mock).streamMedia('me', 1),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
+
+      it('wraps a message-fetch failure in TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest.fn().mockRejectedValue(new Error('rpc')),
+        });
+        await expect(
+          createAdapter(mock).streamMedia('me', 1),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
+
+      it('wraps a transport failure that surfaces mid-stream', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+          iterDownload: jest.fn().mockImplementation(() =>
+            (async function* () {
+              throw new Error('boom');
+            })(),
+          ),
+        });
+        const stream = await createAdapter(mock).streamMedia('me', 1);
+        const drain = async (): Promise<void> => {
+          const out: Buffer[] = [];
+          for await (const chunk of stream) out.push(chunk);
+        };
+        await expect(drain()).rejects.toBeInstanceOf(TelegramClientError);
+      });
+    });
   });
 });

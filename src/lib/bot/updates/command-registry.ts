@@ -82,11 +82,12 @@ export interface CommandRegistrationGroup {
  * Extracts the plain string command names from a `@Command` trigger. A trigger
  * may be a single value or an array, and may contain `RegExp`/predicate entries
  * (valid for *handling* a command but meaningless as a *menu* entry); only
- * strings are returned. A leading slash, if present, is stripped so `'/ping'`
- * and `'ping'` normalise to the same menu name.
+ * strings are returned. A leading slash and a trailing `@botusername` (which
+ * Telegram matches in group chats, e.g. `/ping@MyBot`) are both stripped, so
+ * `'/ping'`, `'ping'`, and `'ping@MyBot'` all normalise to the menu name `ping`.
  *
  * @param trigger - The `@Command` trigger (string, RegExp, predicate, or array).
- * @returns The string command names found, with any leading slash removed.
+ * @returns The string command names found, normalised to bare menu names.
  * @throws Never.
  */
 export function extractCommandNames(trigger: unknown): string[] {
@@ -95,7 +96,13 @@ export function extractCommandNames(trigger: unknown): string[] {
   for (const candidate of candidates) {
     if (typeof candidate !== 'string') continue;
     // ── Normalise a stray leading slash so '/ping' === 'ping'. ────────────────
-    names.push(candidate.startsWith('/') ? candidate.slice(1) : candidate);
+    const withoutSlash = candidate.startsWith('/')
+      ? candidate.slice(1)
+      : candidate;
+    // ── Drop a trailing @botusername; Telegram matches '/ping@MyBot' as 'ping',
+    //    and the bare name is what a menu entry must be. ───────────────────────
+    const name = withoutSlash.split('@')[0] ?? '';
+    if (name.length > 0) names.push(name);
   }
   return names;
 }

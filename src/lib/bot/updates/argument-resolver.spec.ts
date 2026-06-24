@@ -18,6 +18,7 @@ function fakeContext(partial: {
   text?: string;
   from?: { id: number };
   callbackQuery?: { data: string } | { game_short_name: string };
+  inlineQuery?: { query: string; offset: string };
 }): Context {
   return partial as unknown as Context;
 }
@@ -53,6 +54,21 @@ describe('resolveHandlerArguments', () => {
 
     expect(resolveHandlerArguments(withData, params)).toEqual(['go']);
     expect(resolveHandlerArguments(withoutData, params)).toEqual([undefined]);
+  });
+
+  it('injects inline query text and offset, undefined off inline updates', () => {
+    const inline = fakeContext({ inlineQuery: { query: 'wx', offset: '10' } });
+    const notInline = fakeContext({ text: 'hi' });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.INLINE_QUERY_TEXT },
+      { index: 1, kind: PARAM_KINDS.INLINE_QUERY_OFFSET },
+    ];
+
+    expect(resolveHandlerArguments(inline, params)).toEqual(['wx', '10']);
+    expect(resolveHandlerArguments(notInline, params)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   it('yields undefined for absent text/sender', () => {

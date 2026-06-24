@@ -40,6 +40,11 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Parameter injection
   - Best practices
 
+- **[BOT-INLINE-MODE.md](./BOT-INLINE-MODE.md)**
+  - Inline mode (`@botname query`)
+  - `@InlineQuery` / `@ChosenInlineResult`
+  - `InlineQueryResultBuilder` + `answerInlineQuery`
+
 - **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
   - Guards, interceptors, exception filters
   - `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`
@@ -365,6 +370,7 @@ nestjs-telegram/
     │   ├── BOT-API.md            ← Complete Bot API guide
     │   ├── USER-CLIENT-MTPROTO.md ← MTProto client guide
     │   ├── BOT-UPDATE-DECORATORS.md ← Decorator handlers
+    │   ├── BOT-INLINE-MODE.md    ← Inline mode (@botname query)
     │   ├── MULTIPLE-BOTS.md      ← Several named bots in one app
     │   ├── MULTIPLE-ACCOUNTS.md  ← Several named user accounts in one app
     │   ├── AUTHENTICATION.md     ← Auth deep-dive
@@ -383,6 +389,7 @@ nestjs-telegram/
     │
     └── examples/
         ├── decorator-bot.example.ts
+        ├── inline-mode.example.ts
         ├── example-app.module.ts
         └── login-cli.ts
 ```

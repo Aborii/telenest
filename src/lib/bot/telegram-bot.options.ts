@@ -36,6 +36,22 @@ export interface TelegramBotCommandsOptions {
 }
 
 /**
+ * Settings controlling the `@Scene` / `@WizardScene` subsystem for this bot.
+ * Scenes work out of the box with no configuration; this only exists to opt out
+ * of the auto-registered session middleware.
+ */
+export interface TelegramBotScenesOptions {
+  /**
+   * Whether to auto-register Telegraf's in-memory `session()` middleware (which
+   * scenes require for `ctx.session`/`ctx.scene` state) ahead of the scene
+   * `Stage`. Defaults to `true`. Set to `false` when you register your own
+   * session middleware (e.g. `@telegraf/session` for persistence) via `@Use()`
+   * so the scene state is not reset on every update by a second session layer.
+   */
+  session?: boolean;
+}
+
+/**
  * Synchronous configuration for `TelegramBotModule`.
  *
  * The async counterparts (`useFactory` / `useClass` / `useExisting`) are
@@ -78,4 +94,11 @@ export interface TelegramBotModuleOptions {
    * menu untouched.
    */
   commands?: TelegramBotCommandsOptions;
+
+  /**
+   * Scene & wizard subsystem settings. Optional — `@Scene`/`@WizardScene`
+   * providers are discovered and registered automatically; this only controls
+   * the auto-registered session middleware (`scenes: { session: false }`).
+   */
+  scenes?: TelegramBotScenesOptions;
 }

@@ -77,11 +77,13 @@ import {
 } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 import { TelegramBotService } from './telegram-bot.service';
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import {
   getBotHealthToken,
   getBotInstanceToken,
   getBotMetricsToken,
   getBotRegistrarToken,
+  getBotScenesRegistrarToken,
   getBotToken,
   getBotTracerToken,
 } from './telegram-bot.tokens';
@@ -156,9 +158,9 @@ function createBotProviders(name: string): Provider[] {
     },
     // ── Resolves a handler's guard/interceptor/filter refs (DI + @Catch). ─────
     TelegramEnhancerResolver,
-    // ── Discovery-based handler registrar, scoped to this bot by name. ────────
+    // ── Discovery-based scene/wizard registrar, scoped to this bot by name. ───
     {
-      provide: getBotRegistrarToken(name),
+      provide: getBotScenesRegistrarToken(name),
       useFactory: (
         discovery: DiscoveryService,
         scanner: MetadataScanner,
@@ -166,8 +168,8 @@ function createBotProviders(name: string): Provider[] {
         enhancers: TelegramEnhancerResolver,
         bot: Telegraf,
         options: TelegramBotModuleOptions,
-      ): TelegramBotUpdatesRegistrar =>
-        new TelegramBotUpdatesRegistrar(
+      ): TelegramBotScenesRegistrar =>
+        new TelegramBotScenesRegistrar(
           name,
           discovery,
           scanner,
@@ -183,6 +185,40 @@ function createBotProviders(name: string): Provider[] {
         TelegramEnhancerResolver,
         instanceToken,
         TELEGRAM_BOT_OPTIONS,
+      ],
+    },
+    // ── Discovery-based handler registrar, scoped to this bot by name. It owns
+    //    bootstrap ordering: it registers scenes (session + Stage) between the
+    //    @Use() global middleware and the terminal handlers. ───────────────────
+    {
+      provide: getBotRegistrarToken(name),
+      useFactory: (
+        discovery: DiscoveryService,
+        scanner: MetadataScanner,
+        reflector: Reflector,
+        enhancers: TelegramEnhancerResolver,
+        bot: Telegraf,
+        options: TelegramBotModuleOptions,
+        scenes: TelegramBotScenesRegistrar,
+      ): TelegramBotUpdatesRegistrar =>
+        new TelegramBotUpdatesRegistrar(
+          name,
+          discovery,
+          scanner,
+          reflector,
+          enhancers,
+          bot,
+          options,
+          scenes,
+        ),
+      inject: [
+        DiscoveryService,
+        MetadataScanner,
+        Reflector,
+        TelegramEnhancerResolver,
+        instanceToken,
+        TELEGRAM_BOT_OPTIONS,
+        getBotScenesRegistrarToken(name),
       ],
     },
   ];

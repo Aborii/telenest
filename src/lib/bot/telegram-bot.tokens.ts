@@ -45,6 +45,7 @@ import {
   TELEGRAM_BOT_METRICS,
   TELEGRAM_BOT_TRACER,
 } from './telegram-bot.constants';
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import { TelegramBotService } from './telegram-bot.service';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';
@@ -57,6 +58,10 @@ const NAMED_BOT_SERVICE_PREFIX = 'NESTJS_TELEGRAM_BOT_SERVICE:';
 
 /** Token prefix for a named bot's update registrar. */
 const NAMED_BOT_REGISTRAR_PREFIX = 'NESTJS_TELEGRAM_BOT_REGISTRAR:';
+
+/** Token prefix for a named bot's scenes registrar. */
+const NAMED_BOT_SCENES_REGISTRAR_PREFIX =
+  'NESTJS_TELEGRAM_BOT_SCENES_REGISTRAR:';
 
 /** Token prefix for a named bot's metrics surface. */
 const NAMED_BOT_METRICS_PREFIX = 'NESTJS_TELEGRAM_BOT_METRICS:';
@@ -132,6 +137,23 @@ export function getBotRegistrarToken(name?: string): InjectionToken {
   return isDefaultBot(name)
     ? TelegramBotUpdatesRegistrar
     : `${NAMED_BOT_REGISTRAR_PREFIX}${name}`;
+}
+
+/**
+ * Resolves the DI token for a bot's scenes registrar (builds + registers its
+ * `@Scene`/`@WizardScene` providers). Internal wiring — the update registrar
+ * injects it to register scenes at the right point in bootstrap; consumers never
+ * inject it directly.
+ *
+ * @param name - The bot name; omit (or pass the default name) for the default bot.
+ * @returns The `TelegramBotScenesRegistrar` class for the default bot, else a
+ *   name-derived string token.
+ * @throws Never.
+ */
+export function getBotScenesRegistrarToken(name?: string): InjectionToken {
+  return isDefaultBot(name)
+    ? TelegramBotScenesRegistrar
+    : `${NAMED_BOT_SCENES_REGISTRAR_PREFIX}${name}`;
 }
 
 /**

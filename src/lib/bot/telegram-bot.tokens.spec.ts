@@ -16,6 +16,7 @@ import {
   TELEGRAM_BOT_METRICS,
   TELEGRAM_BOT_TRACER,
 } from './telegram-bot.constants';
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import { TelegramBotService } from './telegram-bot.service';
 import {
@@ -23,6 +24,7 @@ import {
   getBotInstanceToken,
   getBotMetricsToken,
   getBotRegistrarToken,
+  getBotScenesRegistrarToken,
   getBotToken,
   getBotTracerToken,
   InjectBot,
@@ -68,6 +70,21 @@ describe('per-bot token helpers', () => {
     it('returns a distinct string token for a named bot', () => {
       expect(getBotRegistrarToken('notify')).toBe(
         'NESTJS_TELEGRAM_BOT_REGISTRAR:notify',
+      );
+    });
+  });
+
+  describe('getBotScenesRegistrarToken', () => {
+    it('returns the scenes registrar class for the default bot', () => {
+      expect(getBotScenesRegistrarToken()).toBe(TelegramBotScenesRegistrar);
+      expect(getBotScenesRegistrarToken(DEFAULT_BOT_NAME)).toBe(
+        TelegramBotScenesRegistrar,
+      );
+    });
+
+    it('returns a distinct string token for a named bot', () => {
+      expect(getBotScenesRegistrarToken('notify')).toBe(
+        'NESTJS_TELEGRAM_BOT_SCENES_REGISTRAR:notify',
       );
     });
   });

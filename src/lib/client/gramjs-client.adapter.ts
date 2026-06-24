@@ -389,8 +389,10 @@ export class GramJsClientAdapter implements IGramClient {
         replyTo: params.replyTo,
         silent: params.silent,
       });
-      return this.mapMessage(message);
+      return this.mapMessage(this.requireMessage(message, 'sendMessage'));
     } catch (error) {
+      // ── Surface the precise "no message" error instead of re-wrapping it. ────
+      if (error instanceof TelegramClientError) throw error;
       throw new TelegramClientError('Failed to send message.', {
         operation: 'sendMessage',
         cause: error,
@@ -417,8 +419,10 @@ export class GramJsClientAdapter implements IGramClient {
         replyTo: params.replyTo,
         silent: params.silent,
       });
-      return this.mapMessage(message);
+      return this.mapMessage(this.requireMessage(message, 'sendFile'));
     } catch (error) {
+      // ── Surface the precise "no message" error instead of re-wrapping it. ────
+      if (error instanceof TelegramClientError) throw error;
       throw new TelegramClientError('Failed to send file.', {
         operation: 'sendFile',
         cause: error,
@@ -713,8 +717,10 @@ export class GramJsClientAdapter implements IGramClient {
         message: messageId,
         text,
       });
-      return this.mapMessage(message);
+      return this.mapMessage(this.requireMessage(message, 'editMessage'));
     } catch (error) {
+      // ── Surface the precise "no message" error instead of re-wrapping it. ────
+      if (error instanceof TelegramClientError) throw error;
       throw new TelegramClientError('Failed to edit message.', {
         operation: 'editMessage',
         cause: error,
@@ -751,7 +757,11 @@ export class GramJsClientAdapter implements IGramClient {
         messages: messageIds,
         fromPeer,
       });
-      return messages.map((message) => this.mapMessage(message));
+      // ── GramJS types this as Api.Message[], but entries are undefined when one
+      //    couldn't be forwarded; drop those rather than mapping a TypeError. ───
+      return messages
+        .filter((message): message is Api.Message => Boolean(message))
+        .map((message) => this.mapMessage(message));
     } catch (error) {
       throw new TelegramClientError('Failed to forward messages.', {
         operation: 'forwardMessages',
@@ -874,6 +884,30 @@ export class GramJsClientAdapter implements IGramClient {
       unreadCount: dialog.unreadCount,
       pinned: dialog.pinned,
     };
+  }
+
+  /**
+   * Ensures a GramJS call that should return a message actually did. GramJS types
+   * `sendMessage`/`editMessage`/… as `Promise<Api.Message>`, but at runtime the
+   * underlying `_getResponseMessage` returns `undefined` when the RPC result is
+   * not an update shape it recognises. Mapping that would throw an opaque
+   * `TypeError`; this converts the absence into a precise {@link TelegramClientError}.
+   *
+   * @param message - The (possibly-undefined) message GramJS returned.
+   * @param operation - The operation name, used in the error.
+   * @returns The message, guaranteed non-nullish.
+   * @throws {TelegramClientError} When `message` is nullish.
+   */
+  private requireMessage(
+    message: Api.Message | undefined,
+    operation: string,
+  ): Api.Message {
+    if (!message)
+      throw new TelegramClientError(
+        `Telegram returned no message for ${operation}.`,
+        { operation },
+      );
+    return message;
   }
 
   /**

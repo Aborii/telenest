@@ -85,7 +85,7 @@
     "test:cov": "jest --coverage",
     "git:release": "node scripts/release.mts",
     "prepare": "npm run build",
-    "prepublishOnly": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && npm run build"
+    "prepublishOnly": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

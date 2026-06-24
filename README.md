@@ -25,7 +25,7 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - Automatic launch/stop wired into the Nest lifecycle (long-polling by default, webhook mode supported); set `launch: false` to take manual control.
 - Escape hatches: `TelegramBotService.instance` (raw `Telegraf`) and `TelegramBotService.telegram` (raw Telegraf `Telegram` client), plus the `TELEGRAM_BOT` injection token — nothing is hidden behind the facade.
 - Fluent keyboard builders: `InlineKeyboardBuilder`, `ReplyKeyboardBuilder`, plus the `removeKeyboard` and `forceReply` helpers.
-- **Multiple named bots** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its facade with `@InjectBot(name)`, and scope decorator handlers with `@TelegramUpdate({ bot: name })` — each bot fully isolated, no `nestjs-telegraf`. Omitting `name` keeps the single-bot API unchanged. See [MULTIPLE-BOTS.md](./docs/MULTIPLE-BOTS.md).
+- **Multiple named bots** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its facade with `@InjectBot(name)`, and scope decorator handlers with `@TelegramUpdate({ bot: name })` — each bot fully isolated, no `nestjs-telegraf`. Omitting `name` keeps the single-bot API unchanged. See [MULTIPLE-BOTS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-BOTS.md).
 
 ### User-account side (GramJS / MTProto — sign in as yourself)
 
@@ -35,7 +35,7 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - Pluggable session persistence via the `SessionStore` interface, with `InMemorySessionStore` and `FileSessionStore` (writes `0o600`, owner-only) included — bring your own (Redis, a secrets manager, etc.) by implementing three methods (`load` / `save` / `clear`).
 - A clean test seam: services depend only on the `IGramClient` interface, and the GramJS package is touched in exactly one adapter file. Inject a fake via `clientFactory` and you never hit the network.
 - Library-owned DTOs (`GramUser`, `GramDialog`, `GramMessage`, `GramSendMessageParams`, …) so consumers never import GramJS just to model a user or a message.
-- **Multiple named user accounts** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its services with `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`, and scope inbound handlers with `@OnUserMessage(filter, { client: name })` — each account fully isolated, with its own session. Omitting `name` keeps the single-account API unchanged. See [MULTIPLE-ACCOUNTS.md](./docs/MULTIPLE-ACCOUNTS.md).
+- **Multiple named user accounts** in one app: register each with `forRoot({ name })` / `forRootAsync({ name })`, inject its services with `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`, and scope inbound handlers with `@OnUserMessage(filter, { client: name })` — each account fully isolated, with its own session. Omitting `name` keeps the single-account API unchanged. See [MULTIPLE-ACCOUNTS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-ACCOUNTS.md).
 
 ### Shared
 
@@ -109,20 +109,20 @@ import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf lo
 
 ## 📚 Documentation
 
-**[→ Complete Documentation Index](./docs/INDEX.md)**
+**[→ Complete Documentation Index](https://github.com/Aborii/nestjs-telegram/blob/main/docs/INDEX.md)**
 
 ### Quick Links
 
-- **[Getting Started](./docs/GETTING-STARTED.md)** — Installation & first bot/client setup
-- **[API Reference](./docs/API-REFERENCE.md)** — Complete API documentation
-- **[Examples & Recipes](./docs/EXAMPLES.md)** — Practical copy-paste examples
-- **[Advanced Usage](./docs/ADVANCED-USAGE.md)** — Production patterns & best practices
+- **[Getting Started](https://github.com/Aborii/nestjs-telegram/blob/main/docs/GETTING-STARTED.md)** — Installation & first bot/client setup
+- **[API Reference](https://github.com/Aborii/nestjs-telegram/blob/main/docs/API-REFERENCE.md)** — Complete API documentation
+- **[Examples & Recipes](https://github.com/Aborii/nestjs-telegram/blob/main/docs/EXAMPLES.md)** — Practical copy-paste examples
+- **[Advanced Usage](https://github.com/Aborii/nestjs-telegram/blob/main/docs/ADVANCED-USAGE.md)** — Production patterns & best practices
 
 ### By Topic
 
-- **Bot API**: [BOT-API.md](./docs/BOT-API.md) | [Update Decorators](./docs/BOT-UPDATE-DECORATORS.md) | [Guards/Filters/Interceptors](./docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | [Multiple Bots](./docs/MULTIPLE-BOTS.md) | [Mini Apps](./docs/MINI-APP-INIT-DATA.md)
-- **MTProto Client**: [User Client Guide](./docs/USER-CLIENT-MTPROTO.md) | [Authentication](./docs/AUTHENTICATION.md) | [Multiple Accounts](./docs/MULTIPLE-ACCOUNTS.md)
-- **General**: [Testing](./docs/TESTING.md) | [Architecture](./docs/TELEGRAM-MODULE.md)
+- **Bot API**: [BOT-API.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-API.md) | [Update Decorators](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-UPDATE-DECORATORS.md) | [Guards/Filters/Interceptors](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | [Multiple Bots](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-BOTS.md) | [Mini Apps](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MINI-APP-INIT-DATA.md)
+- **MTProto Client**: [User Client Guide](https://github.com/Aborii/nestjs-telegram/blob/main/docs/USER-CLIENT-MTPROTO.md) | [Authentication](https://github.com/Aborii/nestjs-telegram/blob/main/docs/AUTHENTICATION.md) | [Multiple Accounts](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-ACCOUNTS.md)
+- **General**: [Testing](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md) | [Architecture](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TELEGRAM-MODULE.md)
 
 ```mermaid
 flowchart LR
@@ -280,16 +280,16 @@ TelegramModule.forRoot({
 
 | Guide                                                          | What it covers                                                                                              |
 | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [docs/TELEGRAM-MODULE.md](docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
-| [docs/BOT-API.md](docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
-| [docs/BOT-UPDATE-DECORATORS.md](docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
-| [docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md](docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | `@UseTelegramGuards`/`@UseTelegramInterceptors`/`@UseTelegramFilters`, built-in allowlist & rate-limit guards, default exception filter |
-| [docs/MULTIPLE-BOTS.md](docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
-| [docs/MINI-APP-INIT-DATA.md](docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
-| [docs/USER-CLIENT-MTPROTO.md](docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
-| [docs/MULTIPLE-ACCOUNTS.md](docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
-| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
-| [docs/TESTING.md](docs/TESTING.md)                             | Unit-testing both sides — ready-made `nestjs-telegram/testing` mocks plus the `IGramClient` / `clientFactory` seam |
+| [docs/TELEGRAM-MODULE.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TELEGRAM-MODULE.md)             | The umbrella `TelegramModule`, module composition, and global registration                                  |
+| [docs/BOT-API.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-API.md)                             | `TelegramBotModule`, `TelegramBotService`, keyboards, and the launch/webhook lifecycle                      |
+| [docs/BOT-UPDATE-DECORATORS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-UPDATE-DECORATORS.md) | `@TelegramUpdate` handler classes — `@Command`/`@Hears`/`@Action`/`@On` + `@Ctx`/`@Sender` param decorators |
+| [docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-GUARDS-FILTERS-INTERCEPTORS.md) | `@UseTelegramGuards`/`@UseTelegramInterceptors`/`@UseTelegramFilters`, built-in allowlist & rate-limit guards, default exception filter |
+| [docs/MULTIPLE-BOTS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-BOTS.md)                 | Multiple named bots in one app — `forRoot({ name })`, `@InjectBot(name)`, `@TelegramUpdate({ bot })` scoping  |
+| [docs/MINI-APP-INIT-DATA.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MINI-APP-INIT-DATA.md)       | `validateWebAppInitData()` — verify & parse Telegram Mini App `initData` server-side                        |
+| [docs/USER-CLIENT-MTPROTO.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
+| [docs/MULTIPLE-ACCOUNTS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
+| [docs/AUTHENTICATION.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
+| [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md)                             | Unit-testing both sides — ready-made `nestjs-telegram/testing` mocks plus the `IGramClient` / `clientFactory` seam |
 
 ---
 
@@ -297,7 +297,7 @@ TelegramModule.forRoot({
 
 The library ships with **290+ tests** and is built to keep network I/O out of your suite:
 
-- **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](docs/TESTING.md).
+- **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md).
 - The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
 - Inside Nest, pass a `clientFactory` to `TelegramClientModule` (or override the `TELEGRAM_GRAM_CLIENT` token) to swap in a fake client without touching the network.
 - On the Bot side, `InMemorySessionStore` gives the client side a zero-I/O session backend, and every facade method funnels through a single error-normalizing path that wraps failures in `TelegramBotApiError`.
@@ -315,4 +315,4 @@ The library ships with **290+ tests** and is built to keep network I/O out of yo
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/Aborii/nestjs-telegram/blob/main/LICENSE)

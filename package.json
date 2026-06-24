@@ -3,6 +3,18 @@
   "version": "1.2.0",
   "description": "Fully-typed NestJS module for Telegram: the Bot API (via Telegraf) and the MTProto user-account client (via GramJS). Send/receive as a bot, or sign in with your own account and control it from your app.",
   "license": "MIT",
+  "author": "Abdullah Almofleh <118676821+Aborii@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aborii/nestjs-telegram.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aborii/nestjs-telegram/issues"
+  },
+  "homepage": "https://github.com/Aborii/nestjs-telegram#readme",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -46,7 +58,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "nestjs",
@@ -71,7 +84,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "git:release": "node scripts/release.mts",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepublishOnly": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

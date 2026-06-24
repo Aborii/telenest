@@ -89,6 +89,12 @@ export function encodeCallbackData<T>(payload: T): string {
  * the codec cannot know the runtime shape, so the generic documents the
  * caller's expectation — validate the result if it crosses a trust boundary.
  *
+ * **Security: callback_data is NOT authenticated.** It is a plain JSON string
+ * with no signature; while a user can only press buttons your bot sent, treat
+ * the decoded value as untrusted input. Never embed an authorization fact in it
+ * (e.g. a raw `userId`/`isAdmin`) and trust it on the way back — re-derive the
+ * acting user from `ctx.from` and re-check permissions server-side.
+ *
  * @typeParam T - The expected decoded payload shape (defaults to `unknown`).
  * @param data - The encoded string (typically `ctx.match.input`).
  * @returns The decoded payload, typed as `T`.

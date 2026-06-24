@@ -43,6 +43,14 @@ import {
 /** The fixed HMAC key Telegram uses to derive the per-bot secret key. */
 const SECRET_KEY_SALT = 'WebAppData';
 
+/**
+ * Default freshness window (24h) applied when the caller does not set
+ * {@link ValidateWebAppInitDataOptions.maxAgeSeconds}. A valid `initData` is
+ * otherwise replayable forever (a leaked URL / proxy log stays valid), so the
+ * library fails closed by default. Pass `maxAgeSeconds: 0` to disable the check.
+ */
+const DEFAULT_MAX_AGE_SECONDS = 86_400;
+
 /** Fields excluded from the data-check-string (Telegram signs everything else). */
 const EXCLUDED_FIELDS: ReadonlySet<string> = new Set(['hash', 'signature']);
 
@@ -51,9 +59,11 @@ const EXCLUDED_FIELDS: ReadonlySet<string> = new Set(['hash', 'signature']);
  *
  * @param initData - The raw `initData` query string sent by the Mini App.
  * @param botToken - The bot token whose Mini App produced the data.
- * @param options - Optional freshness check (see {@link ValidateWebAppInitDataOptions}).
- * @returns The parsed, typed data when the signature is valid and (if requested)
- *   fresh; `null` when the signature does not match or the data is expired.
+ * @param options - Freshness window (see {@link ValidateWebAppInitDataOptions});
+ *   `maxAgeSeconds` defaults to 24h, pass `0` to disable the check.
+ * @returns The parsed, typed data when the signature is valid and the data is
+ *   within the freshness window; `null` when the signature does not match or the
+ *   data is expired.
  * @throws {TelegramConfigError} When `botToken` is empty, or `initData` is
  *   structurally malformed (missing `hash`, bad `auth_date`, or unparseable
  *   `user`/`receiver`/`chat` JSON).
@@ -101,11 +111,14 @@ export function validateWebAppInitData(
 
   const data = buildInitData(params, hash);
 
-  // ── Optional freshness check against auth_date. ───────────────────────────
-  if (options.maxAgeSeconds !== undefined) {
+  // ── Freshness check against auth_date. Defaults to 24h to prevent replay of a
+  //    captured-but-valid initData; pass maxAgeSeconds: 0 (or negative) to opt
+  //    out of the check entirely. ────────────────────────────────────────────
+  const maxAge = options.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS;
+  if (maxAge > 0) {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const authSeconds = Math.floor(data.authDate.getTime() / 1000);
-    if (nowSeconds - authSeconds > options.maxAgeSeconds) return null;
+    if (nowSeconds - authSeconds > maxAge) return null;
   }
 
   return data;

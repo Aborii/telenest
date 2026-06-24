@@ -490,6 +490,10 @@ export class GramJsClientAdapter implements IGramClient {
     messageId: number,
     range: GramMediaRange,
   ): Promise<Buffer | undefined> {
+    // ── Validate up front: a negative offset corrupts the alignment math (and
+    //    these power HTTP Range serving, where a malformed header can reach us). ─
+    this.assertNonNegativeInt(range.offset, 'offset', 'downloadMediaRange');
+    this.assertNonNegativeInt(range.limit, 'limit', 'downloadMediaRange');
     try {
       const message = await this.fetchMediaMessage(peer, messageId);
       if (!message) return undefined;
@@ -546,6 +550,10 @@ export class GramJsClientAdapter implements IGramClient {
     const client = this.client;
     const offset = options.offset ?? 0;
     const limit = options.limit;
+    // ── Reject a negative offset/limit before the aligned-slice math runs. ─────
+    this.assertNonNegativeInt(offset, 'offset', 'streamMedia');
+    if (limit !== undefined)
+      this.assertNonNegativeInt(limit, 'limit', 'streamMedia');
     const alignedOffset = offset - (offset % MEDIA_OFFSET_ALIGN);
 
     // ── Lazy generator: GramJS yields aligned chunks; we trim the leading
@@ -908,6 +916,29 @@ export class GramJsClientAdapter implements IGramClient {
         { operation },
       );
     return message;
+  }
+
+  /**
+   * Asserts a media offset/limit is a non-negative integer. A negative value
+   * breaks the offset-alignment math (producing wrong slices), and these inputs
+   * power HTTP Range serving where a malformed `Range` header could reach them.
+   *
+   * @param value - The candidate offset or limit.
+   * @param name - The field name (`offset`/`limit`), for the error message.
+   * @param operation - The calling operation, for the error.
+   * @returns Nothing.
+   * @throws {TelegramClientError} When `value` is not a non-negative integer.
+   */
+  private assertNonNegativeInt(
+    value: number,
+    name: string,
+    operation: string,
+  ): void {
+    if (!Number.isInteger(value) || value < 0)
+      throw new TelegramClientError(
+        `${operation}: "${name}" must be a non-negative integer (got ${value}).`,
+        { operation },
+      );
   }
 
   /**

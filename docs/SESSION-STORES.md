@@ -82,13 +82,19 @@ const store = new InMemorySessionStore(process.env.TG_SESSION);
 
 ### `FileSessionStore`
 
-Durable, file-backed. Writes the session atomically (temp file + rename) with
+Durable, file-backed. Writes the session atomically — to a per-call **unique**
+temp file (PID + random suffix) created with the exclusive-create flag (`wx`, so
+a planted symlink isn't followed), then `rename`d over the destination — with
 `0o600` permissions on POSIX systems.
 
 ```ts
 import { FileSessionStore } from 'nestjs-telegram';
 const store = new FileSessionStore('./.telegram.session');
 ```
+
+> **Windows note:** `chmod`/`0o600` is a POSIX concept and is a no-op on Windows.
+> There the session file inherits the directory's ACLs, so keep it in an
+> owner-only directory (or use [`EncryptedSessionStore`](#encryptedsessionstore)).
 
 ### `RedisSessionStore`
 

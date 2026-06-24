@@ -311,6 +311,7 @@ The library uses subpath exports to load only what you need:
 | `nestjs-telegram/bot`    | Bot API only        | Bot-only app (no GramJS)        |
 | `nestjs-telegram/client` | MTProto only        | User account only (no Telegraf) |
 | `nestjs-telegram/common` | Shared types/errors | Type imports only               |
+| `nestjs-telegram/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
 
 **Example:**
 

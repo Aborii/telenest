@@ -20,20 +20,20 @@ The library lives under `src/lib`; the public entry point is `src/index.ts`. The
 (decorator-style, using `nestjs-telegraf`) kept as an example and excluded from the
 published build. `examples/` holds a login CLI and a reference app module.
 
-### Scope & non-goals — no paid / premium Telegram features
+### Scope & non-goals
 
-This library targets the **free** Telegram API surface only. Do **not** build,
-plan, or file issues for features that require payment or a paid Telegram tier:
+- **Telegram Payments / invoices are in scope.** The library wraps the Bot API
+  payment surface — `sendInvoice`, `createInvoiceLink`, `answerPreCheckoutQuery`,
+  and (as they are built out) successful-payment handling, Telegram Stars, and
+  paid media. These do not require the *bot operator* to hold a paid tier; the
+  bot collects payments from users. Roadmap/expansion is tracked in #62.
+- **Premium-subscription-gated capabilities remain out of scope** where they
+  simply cannot function without the *end user* (or bot) holding a paid Telegram
+  Premium subscription — e.g. premium-only stickers/emoji or premium-raised
+  limits. Don't build features whose only purpose is to require Premium to work.
 
-- **Telegram Payments / invoices** (`sendInvoice`, pre-checkout, successful-payment
-  flows, Telegram Stars, paid media) — out of scope.
-- **Telegram Premium-gated capabilities** (premium-only stickers/emoji, raised
-  limits, premium-only Bot API features, business accounts that require a paid
-  plan) — out of scope.
-- Anything else that bills the user or depends on a premium subscription to work.
-
-If a roadmap item or request touches paid/premium functionality, drop that part and
-note why — the library deliberately supports only the free, no-cost feature set.
+If a request touches a Premium-gated capability that can't work for a free user,
+drop that part and note why.
 
 ### Layout
 
@@ -42,12 +42,19 @@ src/
   index.ts                      # public package barrel -> ./lib
   lib/
     common/                     # error hierarchy + shared scalar types
+      observability/            # health, metrics, OpenTelemetry tracer bridge
     bot/                        # TelegramBotModule, TelegramBotService, keyboards
+      updates/                  # @TelegramUpdate decorators, registrar, guards/filters, execution
+      web-app/                  # validateWebAppInitData (Mini App init-data)
+      webhook/                  # webhook controller, guard, registrar, secret-token
+      (callback-data.codec, message-splitter, retry, health, metrics-middleware)
     client/                     # TelegramClientModule, auth/user services, GramJS adapter
-      session/                  # SessionStore + in-memory/file implementations
+      updates/                  # @OnUserMessage inbound dispatch
+      session/                  # SessionStore + 5 stores (memory/file/key-value/redis/encrypted)
+    testing/                    # nestjs-telegram/testing — mocks + DTO builders
     telegram.module.ts          # umbrella TelegramModule.forRoot
   bots/ , common/config/        # demo app (example only)
-examples/                       # login CLI + reference wiring
+examples/                       # login CLI (+ QR), decorator/enhancer examples, reference wiring
 docs/                           # feature documentation (see rules below)
 ```
 
@@ -69,8 +76,8 @@ its own. This is a hard architectural rule, not a preference:
   couples them.
 - **`telegraf` and `telegram` are optional peer dependencies** and neither side may
   take a hard runtime dependency on the other's SDK. Subpath exports
-  (`nestjs-telegram/bot`, `/client`, `/common`) keep each side importable on its
-  own.
+  (`nestjs-telegram/bot`, `/client`, `/common`, `/testing`) keep each side
+  importable on its own.
 
 The boundary is enforced automatically by `src/lib/import-boundaries.spec.ts`. To
 check by hand, both of these must return nothing:

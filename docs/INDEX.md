@@ -40,6 +40,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Parameter injection
   - Best practices
 
+- **[BOT-SCENES-WIZARDS.md](./BOT-SCENES-WIZARDS.md)**
+  - Multi-step flows with `@Scene` / `@WizardScene`
+  - `@SceneEnter`, `@SceneLeave`, `@WizardStep`
+  - Auto session + `Stage`, bootstrap ordering
+  - Reusing param decorators & enhancers in scenes
+
 - **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
   - Guards, interceptors, exception filters
   - `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`

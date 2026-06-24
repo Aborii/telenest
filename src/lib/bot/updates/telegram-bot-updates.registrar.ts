@@ -40,19 +40,17 @@ import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
 
 import { TelegramConfigError } from '../../common';
+import { TelegramBotScenesRegistrar } from '../scenes/telegram-bot-scenes.registrar';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import type { TelegramBotModuleOptions } from '../telegram-bot.options';
-import { resolveHandlerArguments } from './argument-resolver';
 import {
   buildCommandGroups,
   extractCommandNames,
   type CommandRegistrationGroup,
   type DeclaredCommand,
 } from './command-registry';
-import type { ResolvedEnhancers } from './execution/enhancer.types';
-import { RUN_OUTCOMES, runWithEnhancers } from './execution/handler-execution';
+import { dispatchToHandler } from './execution/handler-dispatch';
 import { TelegramEnhancerResolver } from './execution/telegram-enhancer.resolver';
-import { TelegramExecutionContext } from './execution/telegram-execution-context';
 import {
   BOT_UPDATE_KINDS,
   IS_TELEGRAM_UPDATE_METADATA,
@@ -113,6 +111,9 @@ export class TelegramBotUpdatesRegistrar
    * @param enhancers - Resolves a handler's guard/interceptor/filter refs.
    * @param bot - The `Telegraf` instance this registrar's handlers are bound onto.
    * @param options - Module options for this bot; read for `commands.autoRegister`.
+   * @param scenes - The scenes registrar for this bot; invoked during
+   *   `onModuleInit` to register `@Scene`/`@WizardScene` providers (session +
+   *   `Stage` middleware) between the `@Use()` middleware and terminal handlers.
    */
   public constructor(
     private readonly _botName: string,
@@ -122,6 +123,7 @@ export class TelegramBotUpdatesRegistrar
     private readonly enhancers: TelegramEnhancerResolver,
     private readonly bot: Telegraf,
     private readonly options: TelegramBotModuleOptions,
+    private readonly scenes: TelegramBotScenesRegistrar,
   ) {
     // ── For the default bot keep the bare class name; annotate named bots so
     //    their binding logs are attributable in a multi-bot application. ──────
@@ -202,11 +204,16 @@ export class TelegramBotUpdatesRegistrar
       }
     }
 
-    // ── Two stable passes: global @Use() middleware first, terminal handlers
-    //    second; discovery order is preserved within each group. ─────────────
+    // ── Three ordered registration phases on the shared Telegraf instance:
+    //    (1) global @Use() middleware, (2) the scene session + Stage middleware,
+    //    (3) terminal handlers. Telegraf runs middleware in registration order,
+    //    so @Use() still sees every update, the scene Stage intercepts active
+    //    scenes ahead of the terminal handlers, and a terminal match (which does
+    //    not call next) cannot short-circuit either of the earlier phases. ─────
     const isUse = (entry: PendingBinding): boolean =>
       entry.binding.kind === BOT_UPDATE_KINDS.USE;
     for (const entry of collected) if (isUse(entry)) this.bind(entry);
+    this.scenes.register();
     for (const entry of collected) if (!isUse(entry)) this.bind(entry);
 
     // ── Derive (and validate) the command menu now, before launch, so any
@@ -319,7 +326,11 @@ export class TelegramBotUpdatesRegistrar
     // ── Resolve enhancers once per binding (metadata is fixed at bootstrap). ──
     const enhancers = this.enhancers.resolve(metatype, handler);
     const run = (ctx: Context): Promise<void> =>
-      this.dispatch(instance, metatype, handler, params, ctx, label, enhancers);
+      dispatchToHandler(
+        { instance, metatype, handler, params, enhancers, label },
+        ctx,
+        this._logger,
+      );
 
     switch (binding.kind) {
       case BOT_UPDATE_KINDS.START:
@@ -356,85 +367,5 @@ export class TelegramBotUpdatesRegistrar
     this._logger.log(
       `Registered @TelegramUpdate handler: ${label} (${binding.kind}) → bot "${this._botName}"`,
     );
-  }
-
-  /**
-   * Dispatches one update to a handler. Handlers without any enhancers take the
-   * fast path ({@link TelegramBotUpdatesRegistrar.invoke}); otherwise the call is
-   * run through the guard/interceptor/filter pipeline.
-   *
-   * @param instance - The provider instance (bound as `this`).
-   * @param metatype - The provider class (for the execution context).
-   * @param handler - The decorated method.
-   * @param params - The method's parameter descriptors.
-   * @param ctx - The Telegraf context for the current update.
-   * @param label - Identifier for diagnostics.
-   * @param enhancers - The handler's resolved guards/interceptors/filters.
-   * @returns Resolves once the handler (and any enhancers) settle.
-   * @throws Never (errors are routed to filters, else logged).
-   */
-  private async dispatch(
-    instance: object,
-    metatype: Type,
-    handler: TelegramUpdateHandler,
-    params: readonly ParamMetadata[],
-    ctx: Context,
-    label: string,
-    enhancers: ResolvedEnhancers,
-  ): Promise<void> {
-    // ── Fast path: nothing to wrap, behave exactly like the plain invoke. ─────
-    if (
-      enhancers.guards.length === 0 &&
-      enhancers.interceptors.length === 0 &&
-      enhancers.filters.length === 0
-    )
-      return this.invoke(instance, handler, params, ctx, label);
-
-    const context = new TelegramExecutionContext(ctx, metatype, handler);
-    try {
-      const outcome = await runWithEnhancers({
-        context,
-        enhancers,
-        handler: () =>
-          handler.apply(instance, resolveHandlerArguments(ctx, params)),
-      });
-      if (outcome === RUN_OUTCOMES.DENIED)
-        this._logger.debug(
-          `@TelegramUpdate handler ${label} was blocked by a guard`,
-        );
-    } catch (error) {
-      // ── No filter handled it: preserve the isolate-and-log guarantee. ───────
-      const reason = error instanceof Error ? error.message : String(error);
-      this._logger.error(`@TelegramUpdate handler ${label} threw: ${reason}`);
-    }
-  }
-
-  /**
-   * Invokes a handler with resolved arguments, isolating errors so one failing
-   * handler never breaks the update pipeline for the others. Used for handlers
-   * with no enhancers configured.
-   *
-   * @param instance - The provider instance (bound as `this`).
-   * @param handler - The decorated method.
-   * @param params - The method's parameter descriptors.
-   * @param ctx - The Telegraf context for the current update.
-   * @param label - Identifier for diagnostics.
-   * @returns Resolves once the handler settles.
-   * @throws Never (handler errors are logged, not rethrown).
-   */
-  private async invoke(
-    instance: object,
-    handler: TelegramUpdateHandler,
-    params: readonly ParamMetadata[],
-    ctx: Context,
-    label: string,
-  ): Promise<void> {
-    const args = resolveHandlerArguments(ctx, params);
-    try {
-      await handler.apply(instance, args);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this._logger.error(`@TelegramUpdate handler ${label} threw: ${reason}`);
-    }
   }
 }

@@ -14,6 +14,7 @@
 
 export * from './enhancer.decorators';
 export * from './enhancer.types';
+export * from './handler-dispatch';
 export * from './handler-execution';
 export * from './telegram-enhancer.resolver';
 export * from './telegram-execution-context';

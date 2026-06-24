@@ -14,6 +14,7 @@ export * from './callback-data.codec';
 export * from './keyboard.builder';
 export * from './message-splitter';
 export * from './retry';
+export * from './scenes';
 export * from './telegram-bot.constants';
 export { createTelegrafInstance } from './telegram-bot.factory';
 export * from './telegram-bot.health';

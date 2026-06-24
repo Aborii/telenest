@@ -48,6 +48,16 @@ describe('extractCommandNames', () => {
     expect(extractCommandNames(predicate)).toEqual([]);
     expect(extractCommandNames(['ping', /x/, predicate])).toEqual(['ping']);
   });
+
+  it('strips a trailing @botusername so /ping@MyBot === ping', () => {
+    expect(extractCommandNames('ping@MyBot')).toEqual(['ping']);
+    expect(extractCommandNames('/ping@MyBot')).toEqual(['ping']);
+    expect(extractCommandNames(['help@Bot', 'stop'])).toEqual(['help', 'stop']);
+  });
+
+  it('omits a trigger that is only an @botusername', () => {
+    expect(extractCommandNames('@MyBot')).toEqual([]);
+  });
 });
 
 describe('buildCommandGroups', () => {

@@ -57,11 +57,25 @@ export interface TelegramBotWebhookOptions {
   /**
    * Secret token verified against Telegram's `X-Telegram-Bot-Api-Secret-Token`
    * request header on every delivery (1–256 chars of `A-Z a-z 0-9 _ -`). When
-   * set, requests with a missing or wrong token are rejected with `403`. When
-   * omitted the route is **unauthenticated** — a warning is logged on bootstrap,
-   * because anyone who learns the path could then post spoofed updates.
+   * set, requests with a missing or wrong token are rejected with `403`.
+   *
+   * A secret is **required by default** — omitting it throws at registration so an
+   * unauthenticated webhook is never stood up by accident. Use
+   * {@link import('./secret-token').generateWebhookSecret} to mint one, or set
+   * {@link TelegramBotWebhookOptions.allowInsecure} to `true` to deliberately run
+   * the route without authentication.
    */
   secretToken?: string;
+
+  /**
+   * Opt in to running the webhook route **without** a secret token. Required when
+   * {@link TelegramBotWebhookOptions.secretToken} is omitted, otherwise
+   * registration throws. When `true`, the route accepts any request that reaches
+   * it — only do this if the endpoint is protected another way (e.g. a private
+   * network, an upstream proxy that authenticates Telegram, or IP allow-listing).
+   * Defaults to `false`.
+   */
+  allowInsecure?: boolean;
 
   /**
    * When `true`, the module calls `setWebhook(domain + path, { secret_token })`

@@ -34,25 +34,49 @@ describe('joinWebhookUrl', () => {
 });
 
 describe('assertValidWebhookOptions', () => {
-  it('accepts a minimal config with just a path', () => {
-    expect(() => assertValidWebhookOptions({ path: '/hook' })).not.toThrow();
+  it('accepts a config with a secretToken', () => {
+    expect(() =>
+      assertValidWebhookOptions({ path: '/hook', secretToken: 's3cr3t_token' }),
+    ).not.toThrow();
+  });
+
+  it('rejects a config with no secretToken and no allowInsecure (fail closed)', () => {
+    expect(() => assertValidWebhookOptions({ path: '/hook' })).toThrow(
+      /requires a "secretToken"/,
+    );
+  });
+
+  it('accepts an unauthenticated route only with explicit allowInsecure', () => {
+    expect(() =>
+      assertValidWebhookOptions({ path: '/hook', allowInsecure: true }),
+    ).not.toThrow();
+  });
+
+  it('rejects a secretToken outside Telegram\'s allowed charset', () => {
+    expect(() =>
+      assertValidWebhookOptions({ path: '/hook', secretToken: 'bad token!' }),
+    ).toThrow(/secretToken/);
   });
 
   it('rejects an empty path', () => {
-    expect(() => assertValidWebhookOptions({ path: '' })).toThrow(
-      TelegramConfigError,
-    );
+    expect(() =>
+      assertValidWebhookOptions({ path: '', secretToken: 's3cr3t' }),
+    ).toThrow(TelegramConfigError);
   });
 
   it('rejects a blank (whitespace-only) path', () => {
-    expect(() => assertValidWebhookOptions({ path: '   ' })).toThrow(
-      TelegramConfigError,
-    );
+    expect(() =>
+      assertValidWebhookOptions({ path: '   ', secretToken: 's3cr3t' }),
+    ).toThrow(TelegramConfigError);
   });
 
   it('requires a domain when registerOnBootstrap is true', () => {
     expect(() =>
-      assertValidWebhookOptions({ path: '/hook', registerOnBootstrap: true }),
+      assertValidWebhookOptions({
+        path: '/hook',
+        secretToken: 's3cr3t',
+        registerOnBootstrap: true,
+      }),
     ).toThrow(/requires a "domain"/);
   });
 
@@ -60,6 +84,7 @@ describe('assertValidWebhookOptions', () => {
     expect(() =>
       assertValidWebhookOptions({
         path: '/hook',
+        secretToken: 's3cr3t',
         domain: 'not a url',
         registerOnBootstrap: true,
       }),
@@ -70,6 +95,7 @@ describe('assertValidWebhookOptions', () => {
     expect(() =>
       assertValidWebhookOptions({
         path: '/hook',
+        secretToken: 's3cr3t',
         domain: 'ftp://x.com',
         registerOnBootstrap: true,
       }),
@@ -80,6 +106,7 @@ describe('assertValidWebhookOptions', () => {
     expect(() =>
       assertValidWebhookOptions({
         path: '/hook',
+        secretToken: 's3cr3t',
         domain: 'https://x.com',
         registerOnBootstrap: true,
       }),
@@ -88,7 +115,11 @@ describe('assertValidWebhookOptions', () => {
 
   it('does not require a domain when registerOnBootstrap is false', () => {
     expect(() =>
-      assertValidWebhookOptions({ path: '/hook', registerOnBootstrap: false }),
+      assertValidWebhookOptions({
+        path: '/hook',
+        secretToken: 's3cr3t',
+        registerOnBootstrap: false,
+      }),
     ).not.toThrow();
   });
 });

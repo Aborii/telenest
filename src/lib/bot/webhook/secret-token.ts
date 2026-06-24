@@ -15,9 +15,36 @@
  * KEY EXPORTS
  * -----------
  * - timingSafeEqualSecret: Constant-time string equality for the secret token.
+ * - generateWebhookSecret: Mints a cryptographically-random secret token.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+
+/**
+ * Mints a cryptographically-random webhook secret token suitable for
+ * `setWebhook`'s `secret_token` and {@link TelegramBotWebhookOptions.secretToken}.
+ *
+ * The token is hex (`0-9a-f`), so it is always within Telegram's allowed charset
+ * (`A-Z a-z 0-9 _ -`) and length (1–256). The default of 32 random bytes yields a
+ * 64-character token with 256 bits of entropy.
+ *
+ * @param byteLength - Number of random bytes to draw (1–128); defaults to 32.
+ * @returns A hex secret token, twice `byteLength` characters long.
+ * @throws {RangeError} If `byteLength` is not an integer in the range 1–128.
+ *
+ * @example
+ * ```ts
+ * webhook: { path: '/tg', secretToken: generateWebhookSecret() }
+ * ```
+ */
+export function generateWebhookSecret(byteLength = 32): string {
+  // ── Bound the input: <1 yields an empty token; >128 would exceed 256 chars. ──
+  if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > 128)
+    throw new RangeError(
+      `generateWebhookSecret byteLength must be an integer in 1..128, got ${byteLength}.`,
+    );
+  return randomBytes(byteLength).toString('hex');
+}
 
 /**
  * Compares the configured secret against the value received on the request, in

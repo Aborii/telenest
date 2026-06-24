@@ -22,6 +22,12 @@ import { TelegramConfigError } from '../../common';
 import type { TelegramBotWebhookOptions } from './telegram-webhook.options';
 
 /**
+ * Telegram's allowed `secret_token` shape: 1–256 characters of `A-Z a-z 0-9 _ -`.
+ * Mirrors the Bot API docs for `setWebhook`'s `secret_token` parameter.
+ */
+const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
+
+/**
  * Joins a domain origin and a route path into a single absolute webhook URL.
  *
  * A trailing slash on `domain` and a missing leading slash on `path` are both
@@ -53,6 +59,9 @@ export function joinWebhookUrl(domain: string, path: string): string {
  *
  * Rules enforced:
  * - `path` must be a non-empty (non-blank) string.
+ * - A `secretToken` is required unless `allowInsecure` is `true` (so an
+ *   unauthenticated webhook is never stood up by accident); when present it must
+ *   match Telegram's `secret_token` shape (1–256 chars of `A-Z a-z 0-9 _ -`).
  * - When `registerOnBootstrap` is `true`, `domain` is required and must parse as
  *   an absolute `http(s)` URL (Telegram only delivers to HTTPS in production).
  *
@@ -69,6 +78,23 @@ export function assertValidWebhookOptions(
   )
     throw new TelegramConfigError(
       'TelegramBotModule webhook requires a non-empty "path".',
+    );
+
+  // ── Fail closed: a route with no secret is unauthenticated. Require either a
+  //    secretToken or an explicit allowInsecure opt-in. ───────────────────────
+  const hasSecret =
+    typeof options.secretToken === 'string' &&
+    options.secretToken.length > 0;
+  if (!hasSecret && options.allowInsecure !== true)
+    throw new TelegramConfigError(
+      'TelegramBotModule webhook requires a "secretToken" (use generateWebhookSecret() ' +
+        'to mint one) so incoming updates are authenticated. To deliberately run an ' +
+        'unauthenticated route, set "allowInsecure: true".',
+    );
+  if (hasSecret && !WEBHOOK_SECRET_PATTERN.test(options.secretToken as string))
+    throw new TelegramConfigError(
+      'TelegramBotModule webhook "secretToken" must be 1-256 characters of ' +
+        'A-Z, a-z, 0-9, underscore, or hyphen (Telegram\'s secret_token rule).',
     );
 
   if (options.registerOnBootstrap) {

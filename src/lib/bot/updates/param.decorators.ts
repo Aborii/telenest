@@ -20,6 +20,8 @@
  * - MessageText: inject the incoming message text (or `undefined`).
  * - Sender: inject the triggering `User` (`ctx.from`, or `undefined`).
  * - CallbackData: inject a callback query's `data` string (or `undefined`).
+ * - InlineQueryText: inject an inline query's text (or `undefined`).
+ * - InlineQueryOffset: inject an inline query's offset (or `undefined`).
  */
 
 import 'reflect-metadata';
@@ -111,4 +113,30 @@ export function Sender(): ParameterDecorator {
 export function CallbackData(): ParameterDecorator {
   return (target, propertyKey, index) =>
     appendParam(target, propertyKey, index, PARAM_KINDS.CALLBACK_DATA);
+}
+
+/**
+ * Injects the text of an inline query (`ctx.inlineQuery.query`), or `undefined`
+ * when the update is not an inline query. Pair with `@InlineQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function InlineQueryText(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.INLINE_QUERY_TEXT);
+}
+
+/**
+ * Injects the pagination offset of an inline query (`ctx.inlineQuery.offset`),
+ * or `undefined` when the update is not an inline query. The offset is a
+ * bot-defined string (empty for the first page); echo a non-empty value in the
+ * answer's `next_offset` to paginate. Pair with `@InlineQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function InlineQueryOffset(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.INLINE_QUERY_OFFSET);
 }

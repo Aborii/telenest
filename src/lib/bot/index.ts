@@ -11,6 +11,7 @@
  */
 
 export * from './callback-data.codec';
+export * from './inline-query-result.builder';
 export * from './keyboard.builder';
 export * from './message-splitter';
 export * from './retry';

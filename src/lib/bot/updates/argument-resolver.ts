@@ -46,6 +46,11 @@ function resolveParam(ctx: Context, kind: ParamKind): unknown {
       const query = ctx.callbackQuery;
       return query && 'data' in query ? query.data : undefined;
     }
+    case PARAM_KINDS.INLINE_QUERY_TEXT:
+      // ── `inlineQuery` is undefined on non-inline updates; optional-chain it. ─
+      return ctx.inlineQuery?.query;
+    case PARAM_KINDS.INLINE_QUERY_OFFSET:
+      return ctx.inlineQuery?.offset;
     default: {
       // ── Exhaustiveness guard: a new ParamKind without a case fails to build. ─
       const exhaustive: never = kind;

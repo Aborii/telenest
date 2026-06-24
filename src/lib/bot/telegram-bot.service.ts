@@ -557,6 +557,32 @@ export class TelegramBotService
     );
   }
 
+  /**
+   * Answers an inline query (`@botname query`) with a list of results. Build the
+   * results array with the
+   * {@link import('./inline-query-result.builder').InlineQueryResultBuilder}.
+   *
+   * @param args - Inline query id, the results array, and optional `extra`
+   *   (`cache_time`, `is_personal`, `next_offset`, `button`).
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   *
+   * @example
+   * ```ts
+   * const results = new InlineQueryResultBuilder()
+   *   .article({ title: 'Echo', text: ctx.inlineQuery.query })
+   *   .build();
+   * await bot.answerInlineQuery(ctx.inlineQuery.id, results, { cache_time: 0 });
+   * ```
+   */
+  public answerInlineQuery(
+    ...args: Parameters<Telegram['answerInlineQuery']>
+  ): Promise<Awaited<ReturnType<Telegram['answerInlineQuery']>>> {
+    return this.exec('answerInlineQuery', () =>
+      this.telegram.answerInlineQuery(...args),
+    );
+  }
+
   // ── Chat & member management ────────────────────────────────────────────────
 
   /**

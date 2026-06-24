@@ -74,6 +74,18 @@ export const BOT_UPDATE_KINDS = {
   ON: 'on',
   /** Binds to `bot.use(...)` — global middleware run for every update. */
   USE: 'use',
+  /**
+   * Binds to `bot.inlineQuery(trigger, ...)` — an incoming inline query
+   * (`@botname query`). With no trigger the registrar falls back to
+   * `bot.on('inline_query', ...)` to match every inline query.
+   */
+  INLINE_QUERY: 'inlineQuery',
+  /**
+   * Binds to `bot.on('chosen_inline_result', ...)` — the feedback update fired
+   * when a user picks one of the bot's inline results (requires inline feedback
+   * enabled via @BotFather).
+   */
+  CHOSEN_INLINE_RESULT: 'chosenInlineResult',
 } as const;
 
 /** A single update-binding kind (the value side of {@link BOT_UPDATE_KINDS}). */
@@ -130,7 +142,17 @@ export type UpdateBinding =
       readonly kind: typeof BOT_UPDATE_KINDS.ON;
       /** Update-type filter(s) forwarded to `Telegraf.on`. */
       readonly trigger: Parameters<Telegraf['on']>[0];
-    };
+    }
+  | {
+      readonly kind: typeof BOT_UPDATE_KINDS.INLINE_QUERY;
+      /**
+       * Optional inline-query pattern(s) forwarded to `Telegraf.inlineQuery`
+       * (string, `RegExp`, or an array thereof). When omitted the handler is
+       * bound via `Telegraf.on('inline_query', …)` so it matches every query.
+       */
+      readonly trigger?: Parameters<Telegraf['inlineQuery']>[0];
+    }
+  | { readonly kind: typeof BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT };
 
 // ── Parameter injection ─────────────────────────────────────────────────────
 
@@ -147,6 +169,16 @@ export const PARAM_KINDS = {
   SENDER: 'sender',
   /** Injects a callback query's `data` string, or `undefined` (`@CallbackData()`). */
   CALLBACK_DATA: 'callback_data',
+  /**
+   * Injects the inline query's text (`ctx.inlineQuery.query`), or `undefined`
+   * when the update is not an inline query (`@InlineQueryText()`).
+   */
+  INLINE_QUERY_TEXT: 'inline_query_text',
+  /**
+   * Injects the inline query's pagination offset (`ctx.inlineQuery.offset`), or
+   * `undefined` when the update is not an inline query (`@InlineQueryOffset()`).
+   */
+  INLINE_QUERY_OFFSET: 'inline_query_offset',
 } as const;
 
 /** A single parameter-injection kind (the value side of {@link PARAM_KINDS}). */

@@ -115,6 +115,30 @@ describe('RateLimitGuard', () => {
     void now;
   });
 
+  it('evicts fully-refilled buckets so the map stays bounded', () => {
+    let now = 0;
+    const guard = new RateLimitGuard({
+      capacity: 1,
+      refillPerInterval: 1,
+      intervalMs: 1000,
+      now: () => now,
+    });
+    // ── Spec-only introspection of the private bucket map (cast, no `any`). ─────
+    const buckets = (guard as unknown as { _buckets: Map<string, unknown> })
+      ._buckets;
+
+    // ── Throttle three distinct chats at t=0 → three live (below-capacity) buckets.
+    for (const id of [1, 2, 3])
+      expect(guard.canActivate(contextFor({ id }))).toBe(true);
+    expect(buckets.size).toBe(3);
+
+    // ── A full interval later, the idle buckets have refilled to capacity; the
+    //    next update triggers a sweep that drops them, leaving only the new key. ─
+    now = 1000;
+    guard.canActivate(contextFor({ id: 99 }));
+    expect(buckets.size).toBe(1);
+  });
+
   describe('option validation', () => {
     const cases: ReadonlyArray<[string, RateLimitOptions]> = [
       ['capacity below 1', { capacity: 0 }],

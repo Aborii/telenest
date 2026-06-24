@@ -101,9 +101,10 @@ export function extractCommandNames(trigger: unknown): string[] {
 }
 
 /**
- * Builds a stable map key for a `scope`/`languageCode` pair. Object property
- * order in the serialized scope is deterministic for the literal shapes Telegram
- * uses, which is sufficient to group identical scopes together.
+ * Builds a stable map key for a `scope`/`languageCode` pair. The scope object's
+ * keys are sorted before serialization so two semantically-identical scopes
+ * written with different property order (e.g. `{ type, chat_id }` vs
+ * `{ chat_id, type }`) hash to the same key and group together.
  *
  * @param scope - The command scope, or `undefined` for the default scope.
  * @param languageCode - The language code, or `undefined` for the default.
@@ -111,7 +112,20 @@ export function extractCommandNames(trigger: unknown): string[] {
  * @throws Never.
  */
 function groupKey(scope?: BotCommandScope, languageCode?: string): string {
-  return JSON.stringify({ scope: scope ?? null, languageCode: languageCode ?? null });
+  // ── Canonicalize the scope into a sorted "key=value&…" string so it is
+  //    order-insensitive. A scope is always a plain string-keyed object, so the
+  //    via-`unknown` cast to a record is sound (the union has no index sig). ───
+  const canonicalScope =
+    scope === undefined
+      ? null
+      : Object.entries(scope as unknown as Record<string, unknown>)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+          .join('&');
+  return JSON.stringify({
+    scope: canonicalScope,
+    languageCode: languageCode ?? null,
+  });
 }
 
 /**

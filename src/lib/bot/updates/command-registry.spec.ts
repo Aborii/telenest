@@ -104,6 +104,19 @@ describe('buildCommandGroups', () => {
     expect(groups[0]?.commands).toHaveLength(2);
   });
 
+  it('groups identical scopes regardless of property order', () => {
+    // ── Same scope, keys written in two different orders → one group. ─────────
+    const a = { type: 'chat', chat_id: 5 } as unknown as BotCommandScope;
+    const b = { chat_id: 5, type: 'chat' } as unknown as BotCommandScope;
+    const groups = buildCommandGroups([
+      declare({ command: 'one', scope: a }),
+      declare({ command: 'two', scope: b }),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.commands).toHaveLength(2);
+  });
+
   it.each([
     ['UPPER', 'uppercase letters'],
     ['has space', 'a space'],

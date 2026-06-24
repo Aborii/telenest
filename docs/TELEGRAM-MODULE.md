@@ -255,7 +255,7 @@ src/
       telegram-client.lifecycle.ts      # connect/disconnect lifecycle
       telegram-client.health.ts         # client health indicator
       telegram-auth.service.ts          # TelegramAuthService (login state machine, incl. QR)
-      telegram-user.service.ts          # TelegramUserService (23 account operations)
+      telegram-user.service.ts          # TelegramUserService (account operations: messages/media/chats)
       gram-client.interface.ts          # IGramClient — the abstraction boundary
       gram-client.types.ts              # GramUser/GramDialog/GramMessage/… DTOs + unions
       gramjs-client.adapter.ts          # GramJsClientAdapter (ONLY file importing 'telegram')

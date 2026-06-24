@@ -1057,12 +1057,22 @@ export class TelegramBotService
    * boundaries so no single message exceeds Telegram's 4096-character limit.
    *
    * Messages are sent sequentially to preserve their order. Empty/blank text
-   * sends nothing and returns an empty array. The same `extra` is applied to
-   * every chunk; note that a `reply_markup` will therefore appear on each part.
+   * sends nothing and returns an empty array. When the text is split across
+   * several messages, `extra` is distributed sensibly rather than duplicated:
+   * `reply_markup` is applied to the **last** chunk only (so a keyboard appears
+   * once, at the end), and `reply_parameters` (the reply target) to the **first**
+   * chunk only; all other options (e.g. `parse_mode`, `disable_notification`)
+   * apply to every chunk. A single-chunk message receives `extra` unchanged.
+   *
+   * **Caveat:** the splitter is not formatting-entity-aware — it breaks on line
+   * boundaries by length, so a `parse_mode` entity (e.g. a `**bold**` span or an
+   * HTML tag) that straddles a 4096-char boundary will be split and rejected by
+   * the Bot API. For formatted output that may exceed the limit, pre-split on
+   * safe boundaries yourself, or send without a `parse_mode`.
    *
    * @param chatId - Target chat id or `@username`.
    * @param text - The full text to send (any length).
-   * @param extra - Optional send options forwarded to each `sendMessage` call.
+   * @param extra - Optional send options; distributed across chunks as above.
    * @returns The sent messages, in order (empty if `text` was empty).
    * @throws {TelegramBotApiError} If any underlying `sendMessage` call fails.
    *
@@ -1077,12 +1087,47 @@ export class TelegramBotService
     extra?: Parameters<Telegram['sendMessage']>[2],
   ): Promise<Awaited<ReturnType<Telegram['sendMessage']>>[]> {
     const sent: Awaited<ReturnType<Telegram['sendMessage']>>[] = [];
+    const chunks = splitMessageText(text);
+    const lastIndex = chunks.length - 1;
     // ── Sequential, not parallel: Telegram preserves order this way and we stay
     //    within per-chat rate limits instead of bursting every chunk at once. ─
-    for (const chunk of splitMessageText(text)) {
-      sent.push(await this.sendMessage(chatId, chunk, extra));
+    for (let i = 0; i < chunks.length; i += 1) {
+      sent.push(
+        await this.sendMessage(
+          chatId,
+          chunks[i] as string,
+          this.extraForChunk(extra, i, lastIndex),
+        ),
+      );
     }
     return sent;
+  }
+
+  /**
+   * Computes the per-chunk `extra` for {@link sendLongMessage}: `reply_markup` is
+   * kept only on the last chunk and `reply_parameters` only on the first, so a
+   * split message neither duplicates its keyboard nor replies to the original
+   * more than once. A single chunk (or absent `extra`) is forwarded unchanged.
+   *
+   * @param extra - The caller-supplied send options (or `undefined`).
+   * @param index - Zero-based index of the current chunk.
+   * @param lastIndex - Index of the final chunk.
+   * @returns The send options to use for this chunk.
+   * @throws Never.
+   */
+  private extraForChunk(
+    extra: Parameters<Telegram['sendMessage']>[2],
+    index: number,
+    lastIndex: number,
+  ): Parameters<Telegram['sendMessage']>[2] {
+    // ── Single chunk or no options: forward as-is (preserves `undefined`). ─────
+    if (extra === undefined || lastIndex === 0) return extra;
+
+    const perChunk = { ...extra };
+    // ── Keyboard on the last chunk only; reply target on the first only. ───────
+    if (index !== lastIndex) delete perChunk.reply_markup;
+    if (index !== 0) delete perChunk.reply_parameters;
+    return perChunk;
   }
 
   /**

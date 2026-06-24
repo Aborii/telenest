@@ -81,20 +81,18 @@ export function assertValidWebhookOptions(
     );
 
   // ── Fail closed: a route with no secret is unauthenticated. Require either a
-  //    secretToken or an explicit allowInsecure opt-in. ───────────────────────
-  const hasSecret =
-    typeof options.secretToken === 'string' &&
-    options.secretToken.length > 0;
-  if (!hasSecret && options.allowInsecure !== true)
+  //    valid secretToken or an explicit allowInsecure opt-in. ─────────────────
+  if (typeof options.secretToken === 'string' && options.secretToken.length > 0) {
+    if (!WEBHOOK_SECRET_PATTERN.test(options.secretToken))
+      throw new TelegramConfigError(
+        'TelegramBotModule webhook "secretToken" must be 1-256 characters of ' +
+          "A-Z, a-z, 0-9, underscore, or hyphen (Telegram's secret_token rule).",
+      );
+  } else if (options.allowInsecure !== true)
     throw new TelegramConfigError(
       'TelegramBotModule webhook requires a "secretToken" (use generateWebhookSecret() ' +
         'to mint one) so incoming updates are authenticated. To deliberately run an ' +
         'unauthenticated route, set "allowInsecure: true".',
-    );
-  if (hasSecret && !WEBHOOK_SECRET_PATTERN.test(options.secretToken as string))
-    throw new TelegramConfigError(
-      'TelegramBotModule webhook "secretToken" must be 1-256 characters of ' +
-        'A-Z, a-z, 0-9, underscore, or hyphen (Telegram\'s secret_token rule).',
     );
 
   if (options.registerOnBootstrap) {

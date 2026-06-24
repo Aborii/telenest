@@ -1091,11 +1091,11 @@ export class TelegramBotService
     const lastIndex = chunks.length - 1;
     // ── Sequential, not parallel: Telegram preserves order this way and we stay
     //    within per-chat rate limits instead of bursting every chunk at once. ─
-    for (let i = 0; i < chunks.length; i += 1) {
+    for (const [i, chunk] of chunks.entries()) {
       sent.push(
         await this.sendMessage(
           chatId,
-          chunks[i] as string,
+          chunk,
           this.extraForChunk(extra, i, lastIndex),
         ),
       );

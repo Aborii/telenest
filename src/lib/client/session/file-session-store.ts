@@ -23,6 +23,7 @@
  * - FileSessionStore: Durable, file-backed session store.
  */
 
+import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 
 import { TelegramSessionError } from '../../common';
@@ -63,19 +64,32 @@ export class FileSessionStore implements SessionStore {
   /**
    * Persists the session to disk atomically with owner-only permissions.
    *
-   * The session is written to a sibling temp file (created `0o600`), its mode
-   * re-asserted (the `mode` write option only applies when *creating* a file,
-   * so it would not retighten a pre-existing target), then atomically renamed
-   * over the destination — readers never observe a partially-written secret.
+   * The session is written to a sibling temp file (created exclusively, `0o600`),
+   * its mode re-asserted (the `mode` write option only applies when *creating* a
+   * file, so it would not retighten a pre-existing target), then atomically
+   * renamed over the destination — readers never observe a partially-written
+   * secret.
+   *
+   * The temp name carries both the PID and per-call random bytes, so two
+   * concurrent `save()` calls in the same process never share a temp file (which
+   * would let one call's cleanup delete the other's in-flight write). The
+   * exclusive-create flag (`wx`) additionally refuses to follow a pre-existing
+   * file/symlink at the temp path, hardening against symlink attacks on a shared
+   * directory.
    *
    * @param session - The session string to write.
    * @returns Resolves once written.
    * @throws {TelegramSessionError} On a filesystem error.
    */
   public async save(session: string): Promise<void> {
-    const tempPath = `${this.filePath}.${process.pid}.tmp`;
+    const tempPath = `${this.filePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
     try {
-      await fs.writeFile(tempPath, session, { encoding: 'utf8', mode: 0o600 });
+      // ── `wx`: create-and-fail-if-exists, so a planted symlink isn't followed. ─
+      await fs.writeFile(tempPath, session, {
+        encoding: 'utf8',
+        mode: 0o600,
+        flag: 'wx',
+      });
       // ── chmod is a no-op on Windows; restrict to POSIX where it matters. ──
       if (process.platform !== 'win32') await fs.chmod(tempPath, 0o600);
       await fs.rename(tempPath, this.filePath);

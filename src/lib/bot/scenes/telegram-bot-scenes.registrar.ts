@@ -60,6 +60,7 @@ import {
 } from './scene.builder';
 import {
   SCENE_DEFINITION_METADATA,
+  SCENE_KINDS,
   SCENE_METHOD_BINDINGS_METADATA,
   type SceneDefinition,
   type SceneMethodBinding,
@@ -141,8 +142,9 @@ export class TelegramBotScenesRegistrar {
       );
       scenes.push(buildScene({ definition, methods }));
       this._logger.log(
-        `Registered @${definition.kind === 'wizard' ? 'WizardScene' : 'Scene'} ` +
-          `"${definition.id}" → bot "${this._botName}".`,
+        `Registered @${
+          definition.kind === SCENE_KINDS.WIZARD ? 'WizardScene' : 'Scene'
+        } "${definition.id}" → bot "${this._botName}".`,
       );
     }
 

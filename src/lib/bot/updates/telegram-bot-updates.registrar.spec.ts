@@ -16,13 +16,22 @@ import type { Context, Telegraf } from 'telegraf';
 
 import { TELEGRAM_BOT } from '../telegram-bot.constants';
 import { TelegramBotModule } from '../telegram-bot.module';
-import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
+import {
+  CallbackData,
+  Ctx,
+  InlineQueryOffset,
+  InlineQueryText,
+  MessageText,
+  Sender,
+} from './param.decorators';
 import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 import {
   Action,
+  ChosenInlineResult,
   Command,
   Hears,
   Help,
+  InlineQuery,
   On,
   Start,
   TelegramUpdate,
@@ -56,6 +65,7 @@ function createMockBot(): { bot: Telegraf; regs: Registration[] } {
     hears: withTrigger('hears'),
     action: withTrigger('action'),
     on: withTrigger('on'),
+    inlineQuery: withTrigger('inlineQuery'),
   };
   return { bot: bot as unknown as Telegraf, regs };
 }
@@ -138,6 +148,38 @@ class UnmarkedUpdate {
   }
 }
 
+/** Provider exercising the inline-mode decorators and their param injection. */
+@TelegramUpdate()
+@Injectable()
+class InlineUpdate {
+  /** Ordered record of which inline handlers fired. */
+  public readonly events: string[] = [];
+  /** Last inline query text injected via `@InlineQueryText()`. */
+  public lastQuery: string | undefined;
+  /** Last inline query offset injected via `@InlineQueryOffset()`. */
+  public lastOffset: string | undefined;
+
+  @InlineQuery('weather')
+  public onWeather(
+    @InlineQueryText() text: string | undefined,
+    @InlineQueryOffset() offset: string | undefined,
+  ): void {
+    this.events.push('inline:weather');
+    this.lastQuery = text;
+    this.lastOffset = offset;
+  }
+
+  @InlineQuery()
+  public onAny(@Ctx() _ctx: Context): void {
+    this.events.push('inline:any');
+  }
+
+  @ChosenInlineResult()
+  public onChosen(@Ctx() _ctx: Context): void {
+    this.events.push('chosen');
+  }
+}
+
 /** Compiles the bot module over the mock and runs the registrar once. */
 async function bootstrap(providers: ReadonlyArray<new () => object>): Promise<{
   regs: Registration[];
@@ -165,6 +207,7 @@ function fakeContext(partial: {
   text?: string;
   from?: { id: number };
   callbackQuery?: { data: string };
+  inlineQuery?: { query: string; offset: string };
 }): Context {
   return partial as unknown as Context;
 }
@@ -266,5 +309,42 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
     const { regs, get } = await bootstrap([UnmarkedUpdate]);
     expect(regs).toHaveLength(0);
     expect(get(UnmarkedUpdate).called).toBe(false);
+  });
+
+  describe('inline mode', () => {
+    it('binds @InlineQuery(pattern) via inlineQuery and the bare form via on', async () => {
+      const { regs } = await bootstrap([InlineUpdate]);
+
+      // ── A pattern routes through Telegraf.inlineQuery(trigger, …). ───────────
+      const patterned = regs.find((r) => r.method === 'inlineQuery');
+      expect(patterned?.trigger).toBe('weather');
+
+      // ── The bare @InlineQuery() falls back to on('inline_query', …). ─────────
+      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      expect(onTriggers).toContain('inline_query');
+    });
+
+    it('binds @ChosenInlineResult via on(chosen_inline_result)', async () => {
+      const { regs } = await bootstrap([InlineUpdate]);
+      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      expect(onTriggers).toContain('chosen_inline_result');
+    });
+
+    it('dispatches inline queries with injected text and offset', async () => {
+      const { regs, get } = await bootstrap([InlineUpdate]);
+      const inline = get(InlineUpdate);
+      const next = jest.fn().mockResolvedValue(undefined);
+      const ctx = fakeContext({ inlineQuery: { query: 'sun', offset: '20' } });
+
+      for (const reg of regs) await reg.middleware(ctx, next);
+
+      expect(inline.events.sort()).toEqual([
+        'chosen',
+        'inline:any',
+        'inline:weather',
+      ]);
+      expect(inline.lastQuery).toBe('sun');
+      expect(inline.lastOffset).toBe('20');
+    });
   });
 });

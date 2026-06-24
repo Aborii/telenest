@@ -100,16 +100,23 @@ interface WizardStepEntry {
  * method` mapping the top-level registrar uses applies verbatim inside a scene.
  * Matched handlers are terminal; `@Use()` continues the chain with `next`.
  *
+ * Inline-mode bindings (`@InlineQuery`/`@ChosenInlineResult`) are rejected: an
+ * inline update is not tied to a chat session, so the scene `Stage` never routes
+ * it to an active scene — binding one here would be dead code. Declare those on a
+ * top-level `@TelegramUpdate` provider instead.
+ *
  * @param composer - The scene (a `Composer`) to register the handler on.
  * @param binding - The message binding to apply.
  * @param run - The resolved runner to invoke when the binding fires.
+ * @param label - The decorated method's identifier, for error messages.
  * @returns Nothing.
- * @throws Never.
+ * @throws {TelegramConfigError} If `binding` is an inline-mode kind.
  */
 function bindMessageHandler(
   composer: Composer<Context>,
   binding: UpdateBinding,
   run: SceneRunner,
+  label: string,
 ): void {
   switch (binding.kind) {
     case BOT_UPDATE_KINDS.START:
@@ -136,6 +143,18 @@ function bindMessageHandler(
         await next();
       });
       break;
+    case BOT_UPDATE_KINDS.INLINE_QUERY:
+    case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
+      // ── Inline updates carry no chat, so they never reach an active scene. ──
+      throw new TelegramConfigError(
+        `@${
+          binding.kind === BOT_UPDATE_KINDS.INLINE_QUERY
+            ? 'InlineQuery'
+            : 'ChosenInlineResult'
+        } at ${label} is not supported inside a scene — inline updates are not ` +
+          'tied to a chat session, so a scene never receives them. Declare it on ' +
+          'a top-level @TelegramUpdate provider instead.',
+      );
     default: {
       // ── Exhaustiveness guard: an unhandled kind fails to compile. ───────────
       const exhaustive: never = binding;
@@ -168,7 +187,7 @@ function applyCommonBindings(
       // STEP bindings are wired by the wizard builder, not here.
     }
     for (const binding of method.updateBindings)
-      bindMessageHandler(composer, binding, method.run);
+      bindMessageHandler(composer, binding, method.run, method.label);
   }
 }
 

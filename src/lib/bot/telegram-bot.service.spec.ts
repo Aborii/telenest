@@ -17,11 +17,19 @@ import { TelegramBotService } from './telegram-bot.service';
 /** Builds a mock Telegraf instance exposing only what the facade touches. */
 function createMockBot(): {
   bot: Telegraf;
-  telegram: { sendMessage: jest.Mock; getMe: jest.Mock };
+  telegram: {
+    sendMessage: jest.Mock;
+    getMe: jest.Mock;
+    answerInlineQuery: jest.Mock;
+  };
   launch: jest.Mock;
   stop: jest.Mock;
 } {
-  const telegram = { sendMessage: jest.fn(), getMe: jest.fn() };
+  const telegram = {
+    sendMessage: jest.fn(),
+    getMe: jest.fn(),
+    answerInlineQuery: jest.fn(),
+  };
   const launch = jest.fn().mockResolvedValue(undefined);
   const stop = jest.fn();
   const bot = {
@@ -94,6 +102,21 @@ describe('TelegramBotService', () => {
       const { service, telegram } = createService();
       telegram.getMe.mockResolvedValue({ id: 7, is_bot: true });
       await expect(service.getMe()).resolves.toEqual({ id: 7, is_bot: true });
+    });
+
+    it('delegates answerInlineQuery and returns true', async () => {
+      const { service, telegram } = createService();
+      telegram.answerInlineQuery.mockResolvedValue(true);
+      const results = [
+        { type: 'article', id: '1', title: 'x', input_message_content: { message_text: 'y' } },
+      ] as Parameters<TelegramBotService['answerInlineQuery']>[1];
+
+      await expect(
+        service.answerInlineQuery('q1', results, { cache_time: 0 }),
+      ).resolves.toBe(true);
+      expect(telegram.answerInlineQuery).toHaveBeenCalledWith('q1', results, {
+        cache_time: 0,
+      });
     });
 
     it('wraps a non-Error rejection with no status code (String fallback)', async () => {

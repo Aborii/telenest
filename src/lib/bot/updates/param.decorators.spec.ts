@@ -10,7 +10,14 @@
 
 import 'reflect-metadata';
 
-import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
+import {
+  CallbackData,
+  Ctx,
+  InlineQueryOffset,
+  InlineQueryText,
+  MessageText,
+  Sender,
+} from './param.decorators';
 import {
   PARAM_KINDS,
   UPDATE_PARAMS_METADATA,
@@ -34,6 +41,11 @@ describe('parameter decorators', () => {
       @MessageText() _text: unknown,
       @CallbackData() _data: unknown,
     ): void {}
+
+    inline(
+      @InlineQueryText() _text: unknown,
+      @InlineQueryOffset() _offset: unknown,
+    ): void {}
   }
 
   const proto = Handlers.prototype;
@@ -53,6 +65,16 @@ describe('parameter decorators', () => {
       { index: 0, kind: PARAM_KINDS.SENDER },
       { index: 1, kind: PARAM_KINDS.MESSAGE_TEXT },
       { index: 2, kind: PARAM_KINDS.CALLBACK_DATA },
+    ]);
+  });
+
+  it('records the inline-query parameter kinds', () => {
+    const sorted = [...paramsOf(proto, 'inline')].sort(
+      (a, b) => a.index - b.index,
+    );
+    expect(sorted).toEqual([
+      { index: 0, kind: PARAM_KINDS.INLINE_QUERY_TEXT },
+      { index: 1, kind: PARAM_KINDS.INLINE_QUERY_OFFSET },
     ]);
   });
 });

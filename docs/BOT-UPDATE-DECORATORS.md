@@ -37,10 +37,12 @@ The system has four cooperating pieces, all under `src/lib/bot/updates`:
 1. **Decorators** record intent as reflect-metadata.
    - `@TelegramUpdate()` marks a class as a handler provider to scan.
    - Method decorators (`@Start`, `@Help`, `@Command`, `@Hears`, `@Action`,
-     `@On`, `@Use`) append an `UpdateBinding` describing which `Telegraf` method
-     the handler binds to and with what trigger.
-   - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`)
-     append a `ParamMetadata` describing what to inject at each argument slot.
+     `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`) append an
+     `UpdateBinding` describing which `Telegraf` method the handler binds to and
+     with what trigger.
+   - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`,
+     `@InlineQueryText`, `@InlineQueryOffset`) append a `ParamMetadata` describing
+     what to inject at each argument slot.
 2. **The argument resolver** (`resolveHandlerArguments`) is a pure function that
    turns a Telegraf `Context` + the method's `ParamMetadata[]` into the positional
    argument array passed to the handler.
@@ -74,7 +76,9 @@ src/lib/bot/updates/
   telegram-update.types.ts          # BOT_UPDATE_KINDS / PARAM_KINDS (as-const, no enum),
                                      #   UpdateBinding union, ParamMetadata, metadata keys
   telegram-update.decorator.ts      # @TelegramUpdate + @Start/@Help/@Command/@Hears/@Action/@On/@Use
+                                     #   + @InlineQuery/@ChosenInlineResult
   param.decorators.ts               # @Ctx / @MessageText / @Sender / @CallbackData
+                                     #   + @InlineQueryText / @InlineQueryOffset
   argument-resolver.ts              # resolveHandlerArguments(ctx, params) — pure
   telegram-bot-updates.registrar.ts # DiscoveryService scanner; binds to Telegraf before launch
   index.ts                          # barrel
@@ -138,10 +142,17 @@ on one method (e.g. `@Command('a') @Command('b')`).
 | `@Action(trigger)` | `bot.action` | callback-data string / RegExp / array |
 | `@On(updateType)` | `bot.on` | update-type filter(s), e.g. `'text'` |
 | `@Use()` | `bot.use` | — (global middleware) |
+| `@InlineQuery(pattern?)` | `bot.inlineQuery` (or `bot.on('inline_query')`) | optional string / RegExp / array |
+| `@ChosenInlineResult()` | `bot.on('chosen_inline_result')` | — |
 
-Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`) are
-**terminal** — they do not call `next`. `@Use()` middleware is **not** terminal:
-the registrar calls `next()` after it so the chain continues.
+Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`,
+`inlineQuery`, `chosen_inline_result`) are **terminal** — they do not call
+`next`. `@Use()` middleware is **not** terminal: the registrar calls `next()`
+after it so the chain continues.
+
+> **Inline mode** (`@InlineQuery` / `@ChosenInlineResult`, the
+> `InlineQueryResultBuilder`, and `answerInlineQuery`) has its own guide:
+> [BOT-INLINE-MODE.md](./BOT-INLINE-MODE.md).
 
 ## Auto-registering the command menu
 
@@ -216,6 +227,8 @@ not thrown, so it never takes down an otherwise-healthy app.
 | `@MessageText()` | `ctx.text` | `string \| undefined` | `undefined` |
 | `@Sender()` | `ctx.from` | `User \| undefined` | `undefined` |
 | `@CallbackData()` | callback query `data` | `string \| undefined` | `undefined` |
+| `@InlineQueryText()` | `ctx.inlineQuery.query` | `string \| undefined` | `undefined` |
+| `@InlineQueryOffset()` | `ctx.inlineQuery.offset` | `string \| undefined` | `undefined` |
 
 If a method has **no** parameter decorators, the raw `Context` is passed as the
 single argument (the common `(ctx) => …` ergonomic). Otherwise the resolver builds

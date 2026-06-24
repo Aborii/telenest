@@ -6,9 +6,9 @@
  * The class and method decorators that make a NestJS provider a first-class Bot
  * API update handler. `@TelegramUpdate()` marks the class so the registrar scans
  * it; the method decorators (`@Start`, `@Help`, `@Command`, `@Hears`, `@Action`,
- * `@On`, `@Use`) record how each method binds onto the underlying `Telegraf`
- * instance. Multiple method decorators may be stacked on one method — each
- * appends a binding.
+ * `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`) record how each method
+ * binds onto the underlying `Telegraf` instance. Multiple method decorators may
+ * be stacked on one method — each appends a binding.
  *
  * USAGE
  * -----
@@ -31,7 +31,8 @@
  * - TelegramUpdate: class decorator marking an update provider (optionally
  *   scoped to a named bot).
  * - TelegramUpdateOptions: options accepted by `@TelegramUpdate`.
- * - Start / Help / Command / Hears / Action / On / Use: method decorators.
+ * - Start / Help / Command / Hears / Action / On / Use / InlineQuery /
+ *   ChosenInlineResult: method decorators.
  */
 
 import 'reflect-metadata';
@@ -277,4 +278,68 @@ export function On(trigger: Parameters<Telegraf['on']>[0]): MethodDecorator {
 export function Use(): MethodDecorator {
   return (target, propertyKey) =>
     appendBinding(target, propertyKey, { kind: BOT_UPDATE_KINDS.USE });
+}
+
+/**
+ * Handles incoming inline queries — a bot invoked via `@botname query` from any
+ * chat (binds to `Telegraf.inlineQuery`). Answer with
+ * {@link import('../telegram-bot.service').TelegramBotService.answerInlineQuery}
+ * (or `ctx.answerInlineQuery`), building results with the
+ * {@link import('../inline-query-result.builder').InlineQueryResultBuilder}.
+ *
+ * Pass `pattern` to only handle queries whose text matches it (string, `RegExp`,
+ * or an array thereof, forwarded verbatim to `Telegraf.inlineQuery`); omit it to
+ * match **every** inline query, in which case the binding falls back to
+ * `Telegraf.on('inline_query', …)`.
+ *
+ * @param pattern - Optional inline-query text pattern(s) to match.
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @InlineQuery()
+ * async onQuery(@InlineQueryText() text: string | undefined, @Ctx() ctx: Context) {
+ *   const results = new InlineQueryResultBuilder()
+ *     .article({ title: 'Echo', text: text ?? '' })
+ *     .build();
+ *   await ctx.answerInlineQuery(results);
+ * }
+ * ```
+ */
+export function InlineQuery(
+  pattern?: Parameters<Telegraf['inlineQuery']>[0],
+): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.INLINE_QUERY,
+      // ── Only record a trigger when one was supplied; a bare @InlineQuery()
+      //    stays trigger-free so the registrar matches every inline query. ─────
+      ...(pattern !== undefined && { trigger: pattern }),
+    });
+}
+
+/**
+ * Handles the `chosen_inline_result` update — fired when a user picks one of the
+ * bot's inline results (binds to `Telegraf.on('chosen_inline_result', …)`).
+ *
+ * Telegram only delivers these once **inline feedback** is enabled for the bot
+ * via @BotFather; without it the handler simply never fires.
+ *
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @ChosenInlineResult()
+ * onChosen(@Ctx() ctx: Context) {
+ *   this.analytics.track(ctx.chosenInlineResult?.result_id);
+ * }
+ * ```
+ */
+export function ChosenInlineResult(): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT,
+    });
 }

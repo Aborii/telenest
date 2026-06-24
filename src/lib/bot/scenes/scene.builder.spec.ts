@@ -236,6 +236,20 @@ describe('buildScene — validation', () => {
     ).toThrow(/each step position must be unique/);
   });
 
+  it('rejects inline-mode bindings inside a scene', () => {
+    for (const kind of [
+      BOT_UPDATE_KINDS.INLINE_QUERY,
+      BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT,
+    ] as const) {
+      expect(() =>
+        buildScene({
+          definition: sceneDef('inline'),
+          methods: [methodSpec({ updateBindings: [{ kind }] })],
+        }),
+      ).toThrow(/not supported inside a scene/);
+    }
+  });
+
   it('rejects a non-positive or non-integer step position', () => {
     expect(() =>
       buildScene({

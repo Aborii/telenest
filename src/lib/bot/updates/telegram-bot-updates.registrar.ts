@@ -351,6 +351,16 @@ export class TelegramBotUpdatesRegistrar
       case BOT_UPDATE_KINDS.ON:
         this.bot.on(binding.trigger, (ctx: Context) => run(ctx));
         break;
+      case BOT_UPDATE_KINDS.INLINE_QUERY:
+        // ── With a pattern, use the dedicated matcher; without one, fall back
+        //    to a raw `on('inline_query')` so every query is handled. ─────────
+        if (binding.trigger !== undefined)
+          this.bot.inlineQuery(binding.trigger, (ctx: Context) => run(ctx));
+        else this.bot.on('inline_query', (ctx: Context) => run(ctx));
+        break;
+      case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
+        this.bot.on('chosen_inline_result', (ctx: Context) => run(ctx));
+        break;
       case BOT_UPDATE_KINDS.USE:
         this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
           await run(ctx);

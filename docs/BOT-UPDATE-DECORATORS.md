@@ -20,6 +20,7 @@ method's arguments from the update context.
 - [File structure](#file-structure)
 - [Quick start](#quick-start)
 - [Method decorators](#method-decorators)
+- [Auto-registering the command menu](#auto-registering-the-command-menu)
 - [Parameter decorators](#parameter-decorators)
 - [Dispatch flow](#dispatch-flow)
 - [Behaviour notes & edge cases](#behaviour-notes--edge-cases)
@@ -141,6 +142,71 @@ on one method (e.g. `@Command('a') @Command('b')`).
 Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`) are
 **terminal** — they do not call `next`. `@Use()` middleware is **not** terminal:
 the registrar calls `next()` after it so the chain continues.
+
+## Auto-registering the command menu
+
+The command list users see in Telegram (the `/`-menu) is set via the Bot API's
+`setMyCommands`. Rather than maintaining that list by hand and watching it drift
+from your handlers, you can derive it straight from your `@Command` decorators.
+
+**1. Describe the commands.** Pass a `description` (and optionally a `scope` /
+`languageCode`) as the second argument to `@Command`:
+
+```ts
+@TelegramUpdate()
+@Injectable()
+export class MenuUpdate {
+  @Command('ping', { description: 'Check the bot is alive' })
+  onPing(@Ctx() ctx: Context) { return ctx.reply('pong'); }
+
+  @Command(['add', 'plus'], { description: 'Add two numbers' })
+  onAdd(@Ctx() ctx: Context) { /* both names share the description */ }
+
+  @Command('admin', {
+    description: 'Admin tools',
+    scope: { type: 'all_private_chats' }, // only listed in private chats
+  })
+  onAdmin(@Ctx() ctx: Context) { /* … */ }
+
+  @Command('secret') // no description → handled, but never listed in the menu
+  onSecret(@Ctx() ctx: Context) { /* … */ }
+}
+```
+
+**2. Opt in on the module.** Auto-registration is **off by default**; turn it on
+per bot with the `commands.autoRegister` flag:
+
+```ts
+TelegramBotModule.forRoot({
+  token: process.env.BOT_TOKEN!,
+  commands: { autoRegister: true },
+});
+```
+
+**What happens.** At bootstrap the registrar collects every described `@Command`
+for that bot, validates them, and calls `setMyCommands` **once per scope /
+language group** after launch. With no scopes that is exactly **one** call per
+bot; commands declared with a `scope` or `languageCode` are grouped and sent in
+their own call. Each named bot registers only its own commands.
+
+**Validation (fails fast as `TelegramConfigError` at bootstrap).** The derived
+payload is checked against Telegram's documented limits *before* launch, so a
+mistake surfaces immediately rather than as an opaque Bot API rejection:
+
+| Rule | Limit |
+| --- | --- |
+| Command name | 1–32 chars, lowercase letters / digits / underscores (`^[a-z0-9_]{1,32}$`) |
+| Description | 1–256 characters |
+| Commands per scope | ≤ 100 |
+| Uniqueness | no duplicate name within the same scope/language |
+
+A leading slash on a name is stripped (`'/ping'` ≡ `'ping'`). A `description` on
+a `RegExp`/predicate trigger is rejected — there is no string name to list. A
+failure of the `setMyCommands` *call itself* (e.g. a transient `429`) is logged,
+not thrown, so it never takes down an otherwise-healthy app.
+
+> **No-op when disabled.** Leave `commands.autoRegister` unset (or `false`) and
+> the library never calls `setMyCommands` — your menu is left exactly as is.
 
 ## Parameter decorators
 

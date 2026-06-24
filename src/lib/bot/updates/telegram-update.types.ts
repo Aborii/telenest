@@ -26,7 +26,31 @@
  * - *_METADATA: reflect-metadata keys (including the per-provider target bot).
  */
 
-import type { Telegraf } from 'telegraf';
+import type { Telegraf, Telegram } from 'telegraf';
+
+// ── Command-menu types (derived from Telegraf, never imported from typegram) ──
+
+/**
+ * A single Bot API command descriptor (`{ command, description }`), derived from
+ * Telegraf's own `setMyCommands` signature so it stays in lock-step with the
+ * installed version instead of importing the `typegram` shape directly.
+ */
+export type BotCommand = Parameters<Telegram['setMyCommands']>[0][number];
+
+/**
+ * The optional `extra` accepted by `setMyCommands` — its `scope` and
+ * `language_code`. Derived from Telegraf rather than imported from `typegram`.
+ */
+export type SetMyCommandsExtra = NonNullable<
+  Parameters<Telegram['setMyCommands']>[1]
+>;
+
+/**
+ * A Bot API command scope (default, all-private-chats, a specific chat, …),
+ * derived from {@link SetMyCommandsExtra}. Used by `@Command` to scope an
+ * auto-registered command's visibility.
+ */
+export type BotCommandScope = NonNullable<SetMyCommandsExtra['scope']>;
 
 // ── Update kinds ────────────────────────────────────────────────────────────
 
@@ -72,6 +96,25 @@ export type UpdateBinding =
       readonly kind: typeof BOT_UPDATE_KINDS.COMMAND;
       /** Command name(s) forwarded to `Telegraf.command`. */
       readonly trigger: Parameters<Telegraf['command']>[0];
+      /**
+       * Human-readable description for the Telegram command menu. Present only
+       * when supplied via `@Command(name, { description })`; when set (and the
+       * module's `commands.autoRegister` is on) the command is included in the
+       * `setMyCommands` payload derived at bootstrap. Omitted commands are still
+       * handled — they just never appear in the menu.
+       */
+      readonly description?: string;
+      /**
+       * Optional command-menu scope (e.g. all private chats, a specific chat).
+       * Commands sharing a `scope`/`languageCode` are registered together in one
+       * `setMyCommands` call. Omit for the default scope (all users).
+       */
+      readonly scope?: BotCommandScope;
+      /**
+       * Optional two-letter language code the description applies to. Omit to set
+       * the language-agnostic default. Grouped with `scope` for registration.
+       */
+      readonly languageCode?: string;
     }
   | {
       readonly kind: typeof BOT_UPDATE_KINDS.HEARS;

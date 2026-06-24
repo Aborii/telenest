@@ -45,6 +45,7 @@ import {
   IS_TELEGRAM_UPDATE_METADATA,
   TELEGRAM_UPDATE_BOT_METADATA,
   UPDATE_BINDINGS_METADATA,
+  type BotCommandScope,
   type UpdateBinding,
 } from './telegram-update.types';
 
@@ -149,19 +150,69 @@ export function Help(): MethodDecorator {
 }
 
 /**
+ * Per-command metadata for the Telegram command menu, supplied as the optional
+ * second argument to {@link Command}. Only commands given a `description` are
+ * eligible for auto-registration via `setMyCommands`; `scope`/`languageCode`
+ * further place the command into a specific menu.
+ */
+export interface CommandOptions {
+  /**
+   * Human-readable description shown in the Telegram command menu (1–256 chars).
+   * Required for a command to be auto-registered; omit to handle the command
+   * without listing it in the menu.
+   */
+  readonly description?: string;
+  /**
+   * Command-menu scope (e.g. all private chats, a specific chat). Commands that
+   * share a `scope`/`languageCode` are registered together. Omit for the default
+   * scope (all users).
+   */
+  readonly scope?: BotCommandScope;
+  /**
+   * Two-letter language code the description applies to. Omit for the
+   * language-agnostic default.
+   */
+  readonly languageCode?: string;
+}
+
+/**
  * Handles one or more named slash commands (binds to `Telegraf.command`).
  *
+ * Pass `options.description` to additionally surface the command in the Telegram
+ * command menu when the module's `commands.autoRegister` flag is enabled — the
+ * registrar derives a `setMyCommands` payload from every described command at
+ * bootstrap. When `trigger` is an array, the same description/scope is applied to
+ * each name. Commands without a description are handled but never listed.
+ *
  * @param trigger - Command name(s), e.g. `'ping'` or `['ping', 'pong']`.
+ * @param options - Optional command-menu metadata (`description`, `scope`,
+ *   `languageCode`).
  * @returns A method decorator recording the binding.
  * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @Command('ping', { description: 'Check the bot is alive' })
+ * onPing(@Ctx() ctx: Context) { return ctx.reply('pong'); }
+ * ```
  */
 export function Command(
   trigger: Parameters<Telegraf['command']>[0],
+  options?: CommandOptions,
 ): MethodDecorator {
   return (target, propertyKey) =>
     appendBinding(target, propertyKey, {
       kind: BOT_UPDATE_KINDS.COMMAND,
       trigger,
+      // ── Only attach menu fields that were actually supplied, so a plain
+      //    @Command('x') binding stays free of undefined menu metadata. ────────
+      ...(options?.description !== undefined && {
+        description: options.description,
+      }),
+      ...(options?.scope !== undefined && { scope: options.scope }),
+      ...(options?.languageCode !== undefined && {
+        languageCode: options.languageCode,
+      }),
     });
 }
 

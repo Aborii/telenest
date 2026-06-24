@@ -15,9 +15,25 @@
  * KEY EXPORTS
  * -----------
  * - TelegramBotModuleOptions: Synchronous configuration object.
+ * - TelegramBotCommandsOptions: Command-menu auto-registration settings.
  */
 
 import type { Context, Telegraf } from 'telegraf';
+
+/**
+ * Settings controlling automatic registration of the bot's command menu
+ * (`setMyCommands`) from `@Command` metadata. Opt-in: nothing is sent unless
+ * {@link TelegramBotCommandsOptions.autoRegister} is `true`.
+ */
+export interface TelegramBotCommandsOptions {
+  /**
+   * When `true`, the registrar derives a `BotCommand[]` payload from every
+   * `@Command(name, { description })` declared for this bot and calls
+   * `setMyCommands` once per command scope at bootstrap. Defaults to `false`
+   * (no `setMyCommands` call is ever made).
+   */
+  autoRegister?: boolean;
+}
 
 /**
  * Synchronous configuration for `TelegramBotModule`.
@@ -54,4 +70,12 @@ export interface TelegramBotModuleOptions {
    * and serverless/webhook deployments that mount the callback themselves).
    */
   launch?: boolean;
+
+  /**
+   * Command-menu auto-registration settings. Opt-in via
+   * `commands: { autoRegister: true }` to sync the Telegram command menu from
+   * `@Command(name, { description })` metadata at bootstrap. Omit to leave the
+   * menu untouched.
+   */
+  commands?: TelegramBotCommandsOptions;
 }

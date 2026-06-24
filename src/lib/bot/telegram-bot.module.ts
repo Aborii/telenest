@@ -165,6 +165,7 @@ function createBotProviders(name: string): Provider[] {
         reflector: Reflector,
         enhancers: TelegramEnhancerResolver,
         bot: Telegraf,
+        options: TelegramBotModuleOptions,
       ): TelegramBotUpdatesRegistrar =>
         new TelegramBotUpdatesRegistrar(
           name,
@@ -173,6 +174,7 @@ function createBotProviders(name: string): Provider[] {
           reflector,
           enhancers,
           bot,
+          options,
         ),
       inject: [
         DiscoveryService,
@@ -180,6 +182,7 @@ function createBotProviders(name: string): Provider[] {
         Reflector,
         TelegramEnhancerResolver,
         instanceToken,
+        TELEGRAM_BOT_OPTIONS,
       ],
     },
   ];

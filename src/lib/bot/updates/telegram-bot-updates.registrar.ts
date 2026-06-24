@@ -32,14 +32,23 @@
 import {
   Injectable,
   Logger,
+  type OnApplicationBootstrap,
   type OnModuleInit,
   type Type,
 } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
 
+import { TelegramConfigError } from '../../common';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
+import type { TelegramBotModuleOptions } from '../telegram-bot.options';
 import { resolveHandlerArguments } from './argument-resolver';
+import {
+  buildCommandGroups,
+  extractCommandNames,
+  type CommandRegistrationGroup,
+  type DeclaredCommand,
+} from './command-registry';
 import type { ResolvedEnhancers } from './execution/enhancer.types';
 import { RUN_OUTCOMES, runWithEnhancers } from './execution/handler-execution';
 import { TelegramEnhancerResolver } from './execution/telegram-enhancer.resolver';
@@ -82,9 +91,18 @@ interface PendingBinding {
  * constructor parameter is always provided by the factory, not resolved by DI.
  */
 @Injectable()
-export class TelegramBotUpdatesRegistrar implements OnModuleInit {
+export class TelegramBotUpdatesRegistrar
+  implements OnModuleInit, OnApplicationBootstrap
+{
   /** Logger scoped to the registrar (annotated with the bot name when named). */
   private readonly _logger: Logger;
+
+  /**
+   * Validated `setMyCommands` payloads derived from `@Command` metadata in
+   * {@link onModuleInit}, applied in {@link onApplicationBootstrap}. Empty unless
+   * `options.commands.autoRegister` is enabled and described commands exist.
+   */
+  private _commandGroups: readonly CommandRegistrationGroup[] = [];
 
   /**
    * @param _botName - Name of the bot this registrar serves; only
@@ -94,6 +112,7 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
    * @param reflector - Reads the decorator metadata off classes and methods.
    * @param enhancers - Resolves a handler's guard/interceptor/filter refs.
    * @param bot - The `Telegraf` instance this registrar's handlers are bound onto.
+   * @param options - Module options for this bot; read for `commands.autoRegister`.
    */
   public constructor(
     private readonly _botName: string,
@@ -102,6 +121,7 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
     private readonly reflector: Reflector,
     private readonly enhancers: TelegramEnhancerResolver,
     private readonly bot: Telegraf,
+    private readonly options: TelegramBotModuleOptions,
   ) {
     // ── For the default bot keep the bare class name; annotate named bots so
     //    their binding logs are attributable in a multi-bot application. ──────
@@ -188,6 +208,96 @@ export class TelegramBotUpdatesRegistrar implements OnModuleInit {
       entry.binding.kind === BOT_UPDATE_KINDS.USE;
     for (const entry of collected) if (isUse(entry)) this.bind(entry);
     for (const entry of collected) if (!isUse(entry)) this.bind(entry);
+
+    // ── Derive (and validate) the command menu now, before launch, so any
+    //    misconfiguration fails fast; the API call itself waits for bootstrap. ─
+    if (this.options.commands?.autoRegister)
+      this._commandGroups = buildCommandGroups(
+        this.collectDeclaredCommands(collected),
+      );
+  }
+
+  /**
+   * Harvests the described commands (`@Command(name, { description })`) from the
+   * already-collected bindings into {@link DeclaredCommand}s for validation. Only
+   * `COMMAND` bindings carrying a `description` are eligible; commands without a
+   * description are handled but stay out of the menu.
+   *
+   * @param collected - The bindings gathered during discovery.
+   * @returns One declaration per string command name, in discovery order.
+   * @throws {TelegramConfigError} If a described command's trigger yields no
+   *   string name (e.g. a `RegExp` trigger), which cannot become a menu entry.
+   */
+  private collectDeclaredCommands(
+    collected: readonly PendingBinding[],
+  ): DeclaredCommand[] {
+    const declared: DeclaredCommand[] = [];
+    for (const entry of collected) {
+      const { binding, label } = entry;
+      if (binding.kind !== BOT_UPDATE_KINDS.COMMAND) continue;
+      if (binding.description === undefined) continue;
+
+      const names = extractCommandNames(binding.trigger);
+      if (names.length === 0)
+        throw new TelegramConfigError(
+          `@Command at ${label} has a description but no string command name; ` +
+            'a RegExp/predicate trigger cannot be auto-registered in the command menu.',
+        );
+
+      for (const command of names)
+        declared.push({
+          command,
+          description: binding.description,
+          ...(binding.scope !== undefined && { scope: binding.scope }),
+          ...(binding.languageCode !== undefined && {
+            languageCode: binding.languageCode,
+          }),
+          source: label,
+        });
+    }
+    return declared;
+  }
+
+  /**
+   * Syncs the bot's command menu to Telegram after the application has
+   * bootstrapped (and the bot has launched), making one `setMyCommands` call per
+   * scope/language group derived in {@link onModuleInit}. A no-op when
+   * `commands.autoRegister` is disabled or no described commands were found.
+   *
+   * Failures are logged, never thrown: a transient Bot API error syncing the
+   * menu must not take down an otherwise-healthy application.
+   *
+   * @returns Resolves once every group has been sent (or logged as failed).
+   * @throws Never.
+   */
+  public async onApplicationBootstrap(): Promise<void> {
+    if (this._commandGroups.length === 0) return;
+
+    for (const group of this._commandGroups) {
+      // ── Build the extra only when a scope/language is set, so the default
+      //    registration omits it entirely (matching Telegram's default menu). ─
+      const extra =
+        group.scope !== undefined || group.languageCode !== undefined
+          ? {
+              ...(group.scope !== undefined && { scope: group.scope }),
+              ...(group.languageCode !== undefined && {
+                language_code: group.languageCode,
+              }),
+            }
+          : undefined;
+      try {
+        await this.bot.telegram.setMyCommands(group.commands, extra);
+        this._logger.log(
+          `Registered ${group.commands.length} command(s) for bot "${this._botName}"` +
+            `${extra ? ' (scoped)' : ''}.`,
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        this._logger.error(
+          `Failed to register commands for bot "${this._botName}": ${reason}`,
+        );
+      }
+    }
   }
 
   /**

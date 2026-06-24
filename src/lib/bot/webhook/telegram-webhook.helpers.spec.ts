@@ -11,7 +11,39 @@ import { TelegramConfigError } from '../../common';
 import {
   assertValidWebhookOptions,
   joinWebhookUrl,
+  normalizeWebhookPath,
 } from './telegram-webhook.helpers';
+
+describe('normalizeWebhookPath', () => {
+  it('adds a leading slash when missing', () => {
+    expect(normalizeWebhookPath('hook')).toBe('/hook');
+  });
+
+  it('strips trailing slashes', () => {
+    expect(normalizeWebhookPath('/hook/')).toBe('/hook');
+    expect(normalizeWebhookPath('/hook///')).toBe('/hook');
+  });
+
+  it('collapses duplicate internal slashes', () => {
+    expect(normalizeWebhookPath('telegram//webhook')).toBe('/telegram/webhook');
+  });
+
+  it('canonicalizes a messy path end to end', () => {
+    expect(normalizeWebhookPath('  telegram//webhook/  ')).toBe(
+      '/telegram/webhook',
+    );
+  });
+
+  it('leaves an already-canonical path unchanged', () => {
+    expect(normalizeWebhookPath('/telegram/webhook')).toBe('/telegram/webhook');
+  });
+
+  it('normalizes an empty or root path to "/"', () => {
+    expect(normalizeWebhookPath('')).toBe('/');
+    expect(normalizeWebhookPath('/')).toBe('/');
+    expect(normalizeWebhookPath('///')).toBe('/');
+  });
+});
 
 describe('joinWebhookUrl', () => {
   it('joins a plain domain and an absolute path', () => {
@@ -29,6 +61,12 @@ describe('joinWebhookUrl', () => {
   it('preserves a base path already present on the domain', () => {
     expect(joinWebhookUrl('https://x.com/api/', '/tg')).toBe(
       'https://x.com/api/tg',
+    );
+  });
+
+  it('normalizes a messy path so it matches the mounted route', () => {
+    expect(joinWebhookUrl('https://x.com', 'telegram//webhook/')).toBe(
+      'https://x.com/telegram/webhook',
     );
   });
 });
@@ -68,6 +106,12 @@ describe('assertValidWebhookOptions', () => {
     expect(() =>
       assertValidWebhookOptions({ path: '   ', secretToken: 's3cr3t' }),
     ).toThrow(TelegramConfigError);
+  });
+
+  it('rejects a path with internal whitespace', () => {
+    expect(() =>
+      assertValidWebhookOptions({ path: '/ho ok', secretToken: 's3cr3t' }),
+    ).toThrow(/whitespace/);
   });
 
   it('requires a domain when registerOnBootstrap is true', () => {

@@ -14,6 +14,7 @@
  *
  * KEY EXPORTS
  * -----------
+ * - normalizeWebhookPath: Canonicalizes a route path (leading slash, no trailing).
  * - joinWebhookUrl: Joins a domain and path into the URL passed to `setWebhook`.
  * - assertValidWebhookOptions: Throws `TelegramConfigError` on bad webhook config.
  */
@@ -28,12 +29,36 @@ import type { TelegramBotWebhookOptions } from './telegram-webhook.options';
 const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
 
 /**
+ * Canonicalizes a webhook route path so the controller route mounted by Nest and
+ * the URL registered with Telegram (`setWebhook`) are derived identically and can
+ * never diverge. Trims surrounding whitespace, collapses duplicate slashes,
+ * ensures exactly one leading slash, and drops any trailing slash(es).
+ *
+ * @param path - The raw `webhook.path` from the options.
+ * @returns The canonical path, e.g. `'telegram//webhook/'` → `'/telegram/webhook'`;
+ *   an empty or `'/'`-only path normalizes to `'/'`.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * normalizeWebhookPath('telegram/webhook/'); // -> '/telegram/webhook'
+ * ```
+ */
+export function normalizeWebhookPath(path: string): string {
+  const collapsed = path.trim().replace(/\/{2,}/g, '/');
+  const withLeading = collapsed.startsWith('/') ? collapsed : `/${collapsed}`;
+  const withoutTrailing = withLeading.replace(/\/+$/, '');
+  return withoutTrailing === '' ? '/' : withoutTrailing;
+}
+
+/**
  * Joins a domain origin and a route path into a single absolute webhook URL.
  *
- * A trailing slash on `domain` and a missing leading slash on `path` are both
- * tolerated, so `('https://x.com/', 'hook')` and `('https://x.com', '/hook')`
- * each yield `https://x.com/hook`. Any base path already present on `domain` is
- * preserved (unlike `new URL(path, domain)`, which would discard it).
+ * The `path` is run through {@link normalizeWebhookPath}, and a trailing slash on
+ * `domain` is stripped, so `('https://x.com/', 'hook/')` and
+ * `('https://x.com', '/hook')` each yield `https://x.com/hook` — the exact route
+ * the controller mounts. Any base path already present on `domain` is preserved
+ * (unlike `new URL(path, domain)`, which would discard it).
  *
  * @param domain - The public origin, e.g. `https://bot.example.com`.
  * @param path - The controller route path, e.g. `/telegram/webhook`.
@@ -48,8 +73,7 @@ const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
  */
 export function joinWebhookUrl(domain: string, path: string): string {
   const base = domain.replace(/\/+$/, '');
-  const suffix = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${suffix}`;
+  return `${base}${normalizeWebhookPath(path)}`;
 }
 
 /**
@@ -58,7 +82,8 @@ export function joinWebhookUrl(domain: string, path: string): string {
  * as a confusing routing or `setWebhook` failure later.
  *
  * Rules enforced:
- * - `path` must be a non-empty (non-blank) string.
+ * - `path` must be a non-empty (non-blank) string with no internal whitespace
+ *   (it is canonicalized via {@link normalizeWebhookPath} for routing).
  * - A `secretToken` is required unless `allowInsecure` is `true` (so an
  *   unauthenticated webhook is never stood up by accident); when present it must
  *   match Telegram's `secret_token` shape (1–256 chars of `A-Z a-z 0-9 _ -`).
@@ -78,6 +103,13 @@ export function assertValidWebhookOptions(
   )
     throw new TelegramConfigError(
       'TelegramBotModule webhook requires a non-empty "path".',
+    );
+
+  // ── Internal whitespace can't be normalized away and would split the route
+  //    from the registered URL; reject it outright. ──────────────────────────
+  if (/\s/.test(options.path.trim()))
+    throw new TelegramConfigError(
+      'TelegramBotModule webhook "path" must not contain whitespace.',
     );
 
   // ── Fail closed: a route with no secret is unauthenticated. Require either a

@@ -166,6 +166,29 @@ class UseThrowingUpdate {
   }
 }
 
+/** Base provider whose handler is guarded by a denying guard. */
+@TelegramUpdate()
+@Injectable()
+class BaseGuardedUpdate {
+  /** Names of handlers that actually ran. */
+  public readonly calls: string[] = [];
+
+  @Command('inherited')
+  @UseTelegramGuards(DenyGuard)
+  public onCmd(@Ctx() _ctx: Context): void {
+    this.calls.push('base');
+  }
+}
+
+/** Subclass overriding the guarded handler WITHOUT re-declaring the guard. */
+@TelegramUpdate()
+@Injectable()
+class OverridingGuardedUpdate extends BaseGuardedUpdate {
+  public override onCmd(_ctx: Context): void {
+    this.calls.push('override');
+  }
+}
+
 /** Provider whose handler is wrapped by an interceptor. */
 @TelegramUpdate()
 @Injectable()
@@ -315,6 +338,22 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
     await expect(useFor(regs)(fakeContext(), proceed)).resolves.toBeUndefined();
     expect(proceed).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('applies an inherited guard to an overridden handler', async () => {
+    const { regs, get } = await bootstrap([
+      OverridingGuardedUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
+    const update = get(OverridingGuardedUpdate);
+
+    await commandFor(regs, 'inherited')(fakeContext(), next);
+
+    // ── The inherited DenyGuard still blocks; the override never ran. ──────────
+    expect(update.calls).toEqual([]);
+    expect(debugSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('runs an update when the guard allows it', async () => {

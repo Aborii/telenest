@@ -43,8 +43,15 @@ export interface DispatchTarget {
   readonly instance: object;
   /** The provider class (for the execution context's `getClass`). */
   readonly metatype: Type;
-  /** The decorated method to invoke. */
+  /** The method to invoke (the instance's resolved, override-aware method). */
   readonly handler: TelegramUpdateHandler;
+  /**
+   * The metadata-carrying function exposed via the execution context's
+   * `getHandler()` (for `Reflector`-driven enhancers). Defaults to
+   * {@link DispatchTarget.handler}; differs only for an overridden inherited
+   * handler, where it is the base-prototype function.
+   */
+  readonly decorated?: TelegramUpdateHandler;
   /** The method's parameter descriptors (drives argument resolution). */
   readonly params: readonly ParamMetadata[];
   /** The handler's resolved guards / interceptors / filters. */
@@ -73,7 +80,8 @@ export async function dispatchToHandler(
   ctx: Context,
   logger: Logger,
 ): Promise<boolean> {
-  const { instance, metatype, handler, params, enhancers, label } = target;
+  const { instance, metatype, handler, decorated, params, enhancers, label } =
+    target;
 
   // ── Fast path: nothing to wrap, behave exactly like a plain invoke. ─────────
   if (
@@ -91,7 +99,9 @@ export async function dispatchToHandler(
     }
   }
 
-  const context = new TelegramExecutionContext(ctx, metatype, handler);
+  // ── getHandler() exposes the metadata-bearing function so Reflector-driven
+  //    enhancers read the inherited method's metadata, not the override's. ──────
+  const context = new TelegramExecutionContext(ctx, metatype, decorated ?? handler);
   try {
     const outcome = await runWithEnhancers({
       context,

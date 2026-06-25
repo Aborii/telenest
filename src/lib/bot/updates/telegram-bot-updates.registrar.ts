@@ -68,8 +68,14 @@ interface PendingBinding {
   readonly instance: object;
   /** The provider class (for class-level enhancer metadata + execution context). */
   readonly metatype: Type;
-  /** The decorated method. */
+  /** The method to execute — the instance's resolved method (override-aware). */
   readonly handler: TelegramUpdateHandler;
+  /**
+   * The function carrying the decorator metadata (bindings, params, enhancers).
+   * Equals {@link PendingBinding.handler} for a normal method, but for an
+   * overridden inherited handler it is the base-prototype function instead.
+   */
+  readonly decorated: TelegramUpdateHandler;
   /** The method's parameter descriptors. */
   readonly params: readonly ParamMetadata[];
   /** How the handler binds onto Telegraf. */
@@ -175,19 +181,27 @@ export class TelegramBotUpdatesRegistrar
       for (const methodName of this.scanner.getAllMethodNames(prototype)) {
         const method = (instance as Record<string, unknown>)[methodName];
         if (typeof method !== 'function') continue;
-        // ── Narrowed to a function; the handler shape is loose by design. ─────
+        // ── The function to execute (override-aware): a subclass may override a
+        //    decorated base method without re-decorating it. ───────────────────
         const handler = method as TelegramUpdateHandler;
+
+        // ── Decorator metadata lives on the function it was applied to, which —
+        //    for an overridden method — is a base-prototype function, not the
+        //    instance's resolved method. Resolve it along the prototype chain so
+        //    inherited handlers are not silently dropped. ──────────────────────
+        const decorated =
+          this.findDecoratedMethod(prototype, methodName) ?? handler;
 
         const bindings = this.reflector.get<UpdateBinding[]>(
           UPDATE_BINDINGS_METADATA,
-          handler,
+          decorated,
         );
         if (!bindings || bindings.length === 0) continue;
 
         const params =
           this.reflector.get<ParamMetadata[]>(
             UPDATE_PARAMS_METADATA,
-            handler,
+            decorated,
           ) ?? [];
 
         const label = `${wrapper.name ?? metatype.name}.${methodName}`;
@@ -197,6 +211,7 @@ export class TelegramBotUpdatesRegistrar
             // ── A discovered @TelegramUpdate provider always has a class. ─────
             metatype: metatype as Type,
             handler,
+            decorated,
             params,
             binding,
             label,
@@ -308,6 +323,40 @@ export class TelegramBotUpdatesRegistrar
   }
 
   /**
+   * Walks the prototype chain from `prototype` (most-derived first) to find the
+   * function for `methodName` that actually carries `@Command`/`@On`/… binding
+   * metadata. When a subclass overrides a decorated base method without
+   * re-decorating it, the function on the instance (the override that runs) has no
+   * metadata while the base-prototype function does — so binding/param metadata
+   * must be resolved along the chain, not just off the instance method.
+   *
+   * @param prototype - The instance's prototype (most-derived class prototype).
+   * @param methodName - The method whose decorator metadata to locate.
+   * @returns The metadata-carrying function, or `undefined` if none in the chain.
+   * @throws Never.
+   */
+  private findDecoratedMethod(
+    prototype: object | null,
+    methodName: string,
+  ): TelegramUpdateHandler | undefined {
+    for (
+      let proto: object | null = prototype;
+      proto !== null && proto !== Object.prototype;
+      proto = Object.getPrototypeOf(proto) as object | null
+    ) {
+      const candidate = (proto as Record<string, unknown>)[methodName];
+      if (typeof candidate !== 'function') continue;
+      const bindings = this.reflector.get<UpdateBinding[]>(
+        UPDATE_BINDINGS_METADATA,
+        candidate,
+      );
+      if (bindings && bindings.length > 0)
+        return candidate as TelegramUpdateHandler;
+    }
+    return undefined;
+  }
+
+  /**
    * Binds a single pending binding onto the matching `Telegraf` method, wrapping
    * dispatch with the handler's resolved enhancers.
    *
@@ -326,15 +375,18 @@ export class TelegramBotUpdatesRegistrar
    *   cannot be resolved from the DI container.
    */
   private bind(entry: PendingBinding): void {
-    const { instance, metatype, handler, params, binding, label } = entry;
+    const { instance, metatype, handler, decorated, params, binding, label } =
+      entry;
 
-    // ── Resolve enhancers once per binding (metadata is fixed at bootstrap). ──
-    const enhancers = this.enhancers.resolve(metatype, handler);
+    // ── Resolve enhancers once per binding (metadata is fixed at bootstrap).
+    //    Read off `decorated` so inherited guards/filters/interceptors on an
+    //    overridden handler are not lost. ──────────────────────────────────────
+    const enhancers = this.enhancers.resolve(metatype, decorated);
     // ── Returns whether the middleware chain should proceed: true on success,
     //    false when a guard denied the update or the handler threw uncaught. ───
     const proceed = (ctx: Context): Promise<boolean> =>
       dispatchToHandler(
-        { instance, metatype, handler, params, enhancers, label },
+        { instance, metatype, handler, decorated, params, enhancers, label },
         ctx,
         this._logger,
       );

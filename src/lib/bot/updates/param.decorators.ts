@@ -20,6 +20,9 @@
  * - MessageText: inject the incoming message text (or `undefined`).
  * - Sender: inject the triggering `User` (`ctx.from`, or `undefined`).
  * - CallbackData: inject a callback query's `data` string (or `undefined`).
+ * - CallbackPayload: inject a decoded callback-action payload (or `undefined`).
+ * - InlineQueryText: inject an inline query's text (or `undefined`).
+ * - InlineQueryOffset: inject an inline query's offset (or `undefined`).
  */
 
 import 'reflect-metadata';
@@ -111,4 +114,55 @@ export function Sender(): ParameterDecorator {
 export function CallbackData(): ParameterDecorator {
   return (target, propertyKey, index) =>
     appendParam(target, propertyKey, index, PARAM_KINDS.CALLBACK_DATA);
+}
+
+/**
+ * Injects the decoded payload (the envelope's `d` field) of a callback-action
+ * query, or `undefined` when the callback data carries no payload. Pair with
+ * {@link import('./telegram-update.decorator').CallbackAction}: when that
+ * decorator was given a schema, the value injected here is the schema's validated
+ * result (a validation error is routed to the handler's exception filters);
+ * without a schema the raw decoded payload is injected as `unknown`.
+ *
+ * Annotate the parameter with the type your schema guarantees — the decorator
+ * cannot widen or narrow the declared parameter type for you.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @CallbackAction('page', (v): { n: number } => v as { n: number })
+ * onPage(@CallbackPayload() payload: { n: number }) { ... }
+ * ```
+ */
+export function CallbackPayload(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.CALLBACK_PAYLOAD);
+}
+
+/**
+ * Injects the text of an inline query (`ctx.inlineQuery.query`), or `undefined`
+ * when the update is not an inline query. Pair with `@InlineQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function InlineQueryText(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.INLINE_QUERY_TEXT);
+}
+
+/**
+ * Injects the pagination offset of an inline query (`ctx.inlineQuery.offset`),
+ * or `undefined` when the update is not an inline query. The offset is a
+ * bot-defined string (empty for the first page); echo a non-empty value in the
+ * answer's `next_offset` to paginate. Pair with `@InlineQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function InlineQueryOffset(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.INLINE_QUERY_OFFSET);
 }

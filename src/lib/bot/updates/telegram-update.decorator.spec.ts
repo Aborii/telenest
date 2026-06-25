@@ -13,9 +13,11 @@ import 'reflect-metadata';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   Action,
+  ChosenInlineResult,
   Command,
   Hears,
   Help,
+  InlineQuery,
   On,
   Start,
   TelegramUpdate,
@@ -108,6 +110,26 @@ describe('method decorators', () => {
     ]);
     expect(bindingsOf(proto, 'onText')).toEqual([
       { kind: BOT_UPDATE_KINDS.ON, trigger: 'text' },
+    ]);
+  });
+
+  it('records @InlineQuery with and without a pattern', () => {
+    class Inline {
+      @InlineQuery() onAny(): void {}
+      @InlineQuery('weather') onWeather(): void {}
+      @ChosenInlineResult() onChosen(): void {}
+    }
+    const p = Inline.prototype;
+
+    // ── A bare @InlineQuery() carries no trigger (matches every query). ────────
+    expect(bindingsOf(p, 'onAny')).toEqual([
+      { kind: BOT_UPDATE_KINDS.INLINE_QUERY },
+    ]);
+    expect(bindingsOf(p, 'onWeather')).toEqual([
+      { kind: BOT_UPDATE_KINDS.INLINE_QUERY, trigger: 'weather' },
+    ]);
+    expect(bindingsOf(p, 'onChosen')).toEqual([
+      { kind: BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT },
     ]);
   });
 

@@ -56,7 +56,7 @@ function validateWebAppInitData(
 | --- | --- |
 | `initData` | The raw `window.Telegram.WebApp.initData` query string from the client. |
 | `botToken` | The bot token whose Mini App produced the data. |
-| `options.maxAgeSeconds` | If set, data older than this (per `auth_date`) returns `null`. |
+| `options.maxAgeSeconds` | Maximum accepted age (per `auth_date`); older data returns `null`. **Defaults to `86400` (24h)** — pass `0` (or a negative value) to disable the freshness check entirely. |
 
 ## Return value & error semantics
 
@@ -119,8 +119,9 @@ explicitly is still available under `raw`.
   only the HMAC-checked `initData` is trustworthy.
 - **Keep the bot token secret.** It is the signing key — never expose it to the
   Mini App front-end. The token is read but never logged by this function.
-- **Use `maxAgeSeconds`.** Without a freshness bound, a captured valid `initData`
-  stays valid forever; an hour is a common ceiling.
+- **Freshness is on by default (24h).** A captured valid `initData` would
+  otherwise replay forever, so the check defaults to `86400` seconds. Lower it
+  (e.g. `maxAgeSeconds: 3600`) for tighter bounds, or pass `0` to opt out.
 - **Constant-time compare.** The hash check uses `timingSafeEqual`; a malformed or
   wrong-length hash fails closed (returns `null`).
 

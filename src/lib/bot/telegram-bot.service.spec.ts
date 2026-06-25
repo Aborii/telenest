@@ -17,11 +17,19 @@ import { TelegramBotService } from './telegram-bot.service';
 /** Builds a mock Telegraf instance exposing only what the facade touches. */
 function createMockBot(): {
   bot: Telegraf;
-  telegram: { sendMessage: jest.Mock; getMe: jest.Mock };
+  telegram: {
+    sendMessage: jest.Mock;
+    getMe: jest.Mock;
+    answerInlineQuery: jest.Mock;
+  };
   launch: jest.Mock;
   stop: jest.Mock;
 } {
-  const telegram = { sendMessage: jest.fn(), getMe: jest.fn() };
+  const telegram = {
+    sendMessage: jest.fn(),
+    getMe: jest.fn(),
+    answerInlineQuery: jest.fn(),
+  };
   const launch = jest.fn().mockResolvedValue(undefined);
   const stop = jest.fn();
   const bot = {
@@ -96,6 +104,21 @@ describe('TelegramBotService', () => {
       await expect(service.getMe()).resolves.toEqual({ id: 7, is_bot: true });
     });
 
+    it('delegates answerInlineQuery and returns true', async () => {
+      const { service, telegram } = createService();
+      telegram.answerInlineQuery.mockResolvedValue(true);
+      const results = [
+        { type: 'article', id: '1', title: 'x', input_message_content: { message_text: 'y' } },
+      ] as Parameters<TelegramBotService['answerInlineQuery']>[1];
+
+      await expect(
+        service.answerInlineQuery('q1', results, { cache_time: 0 }),
+      ).resolves.toBe(true);
+      expect(telegram.answerInlineQuery).toHaveBeenCalledWith('q1', results, {
+        cache_time: 0,
+      });
+    });
+
     it('wraps a non-Error rejection with no status code (String fallback)', async () => {
       const { service, telegram } = createService();
       telegram.sendMessage.mockRejectedValue('plain string failure');
@@ -119,6 +142,20 @@ describe('TelegramBotService', () => {
     it('delegates webhookCallback', () => {
       const { service } = createService();
       expect(service.webhookCallback('/hook')).toBe('middleware');
+    });
+  });
+
+  describe('callback-data codec wrappers', () => {
+    it('encodes/decodes structured callback data round-trip', () => {
+      const { service } = createService();
+      const encoded = service.encodeCallbackData({ a: 'page', n: 3 });
+      expect(service.decodeCallbackData(encoded)).toEqual({ a: 'page', n: 3 });
+    });
+
+    it('encodes a callback-action envelope via encodeCallbackAction', () => {
+      const { service } = createService();
+      const encoded = service.encodeCallbackAction('buy', { id: 42 });
+      expect(JSON.parse(encoded)).toEqual({ a: 'buy', d: { id: 42 } });
     });
   });
 

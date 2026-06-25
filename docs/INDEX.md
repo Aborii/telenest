@@ -40,6 +40,17 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Parameter injection
   - Best practices
 
+- **[BOT-SCENES-WIZARDS.md](./BOT-SCENES-WIZARDS.md)**
+  - Multi-step flows with `@Scene` / `@WizardScene`
+  - `@SceneEnter`, `@SceneLeave`, `@WizardStep`
+  - Auto session + `Stage`, bootstrap ordering
+  - Reusing param decorators & enhancers in scenes
+
+- **[BOT-INLINE-MODE.md](./BOT-INLINE-MODE.md)**
+  - Inline mode (`@botname query`)
+  - `@InlineQuery` / `@ChosenInlineResult`
+  - `InlineQueryResultBuilder` + `answerInlineQuery`
+
 - **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
   - Guards, interceptors, exception filters
   - `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`
@@ -300,6 +311,7 @@ The library uses subpath exports to load only what you need:
 | `nestjs-telegram/bot`    | Bot API only        | Bot-only app (no GramJS)        |
 | `nestjs-telegram/client` | MTProto only        | User account only (no Telegraf) |
 | `nestjs-telegram/common` | Shared types/errors | Type imports only               |
+| `nestjs-telegram/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
 
 **Example:**
 
@@ -365,6 +377,7 @@ nestjs-telegram/
     │   ├── BOT-API.md            ← Complete Bot API guide
     │   ├── USER-CLIENT-MTPROTO.md ← MTProto client guide
     │   ├── BOT-UPDATE-DECORATORS.md ← Decorator handlers
+    │   ├── BOT-INLINE-MODE.md    ← Inline mode (@botname query)
     │   ├── MULTIPLE-BOTS.md      ← Several named bots in one app
     │   ├── MULTIPLE-ACCOUNTS.md  ← Several named user accounts in one app
     │   ├── AUTHENTICATION.md     ← Auth deep-dive
@@ -383,6 +396,7 @@ nestjs-telegram/
     │
     └── examples/
         ├── decorator-bot.example.ts
+        ├── inline-mode.example.ts
         ├── example-app.module.ts
         └── login-cli.ts
 ```

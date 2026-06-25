@@ -15,9 +15,17 @@ import { Injectable } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 import type { IGramClient } from '../gram-client.interface';
-import type { GramMessage } from '../gram-client.types';
+import {
+  GRAM_CHAT_ACTIONS,
+  type GramChatActionEvent,
+  type GramDeletedMessages,
+  type GramMessage,
+} from '../gram-client.types';
 import { TelegramClientModule } from '../telegram-client.module';
 import { TelegramUserService } from '../telegram-user.service';
+import { OnChatAction } from './on-chat-action.decorator';
+import { OnUserDeleted } from './on-user-deleted.decorator';
+import { OnUserEdited } from './on-user-edited.decorator';
 import { OnUserMessage } from './on-user-message.decorator';
 import type { GramUserMessageContext } from './on-user-message.types';
 import { TelegramUserUpdatesRegistrar } from './telegram-user-updates.registrar';
@@ -45,6 +53,32 @@ class CapturingHandler {
   }
 }
 
+/** A provider covering the edited / deleted / chat-action decorators. */
+@Injectable()
+class MultiKindHandler {
+  /** Edited messages seen (incoming only). */
+  public readonly edited: GramMessage[] = [];
+  /** Deletion events seen. */
+  public readonly deleted: GramDeletedMessages[] = [];
+  /** Chat actions seen (typing only). */
+  public readonly typing: GramChatActionEvent[] = [];
+
+  @OnUserEdited({ incoming: true })
+  public onEdited(message: GramMessage): void {
+    this.edited.push(message);
+  }
+
+  @OnUserDeleted()
+  public onDeleted(event: GramDeletedMessages): void {
+    this.deleted.push(event);
+  }
+
+  @OnChatAction({ actions: GRAM_CHAT_ACTIONS.TYPING })
+  public onTyping(event: GramChatActionEvent): void {
+    this.typing.push(event);
+  }
+}
+
 /** A provider whose handler always throws. */
 @Injectable()
 class ThrowingHandler {
@@ -58,13 +92,19 @@ class ThrowingHandler {
   }
 }
 
-/** Builds a fake client whose new-message stream can be driven by the test. */
+/** Builds a fake client whose update streams can be driven by the test. */
 function createEmittableClient(): {
   client: IGramClient;
   sendMessage: jest.Mock;
   emit: (message: GramMessage) => void;
+  emitEdited: (message: GramMessage) => void;
+  emitDeleted: (event: GramDeletedMessages) => void;
+  emitChatAction: (event: GramChatActionEvent) => void;
 } {
   let handler: ((message: GramMessage) => void) | undefined;
+  let editedHandler: ((message: GramMessage) => void) | undefined;
+  let deletedHandler: ((event: GramDeletedMessages) => void) | undefined;
+  let chatActionHandler: ((event: GramChatActionEvent) => void) | undefined;
   const sendMessage = jest.fn().mockResolvedValue({
     id: 99,
     peerId: '555',
@@ -112,9 +152,34 @@ function createEmittableClient(): {
         handler = undefined;
       };
     },
+    onEditedMessage: (h) => {
+      editedHandler = h;
+      return () => {
+        editedHandler = undefined;
+      };
+    },
+    onDeletedMessages: (h) => {
+      deletedHandler = h;
+      return () => {
+        deletedHandler = undefined;
+      };
+    },
+    onChatAction: (h) => {
+      chatActionHandler = h;
+      return () => {
+        chatActionHandler = undefined;
+      };
+    },
   };
 
-  return { client, sendMessage, emit: (message) => handler?.(message) };
+  return {
+    client,
+    sendMessage,
+    emit: (message) => handler?.(message),
+    emitEdited: (message) => editedHandler?.(message),
+    emitDeleted: (event) => deletedHandler?.(event),
+    emitChatAction: (event) => chatActionHandler?.(event),
+  };
 }
 
 /** Flushes pending microtasks (the registrar invokes handlers asynchronously). */
@@ -185,6 +250,35 @@ describe('TelegramUserUpdatesRegistrar (integration)', () => {
     emit({ id: 3, peerId: '555', text: 'late', date: 0, out: false });
     await flush();
     expect(captured.all).toHaveLength(2);
+  });
+
+  it('dispatches edited, deleted, and chat-action events to their handlers', async () => {
+    const { client, emitEdited, emitDeleted, emitChatAction } =
+      createEmittableClient();
+    const { handler } = await bootstrap(client, MultiKindHandler);
+    const captured = handler as MultiKindHandler;
+
+    // ── Edited: the incoming-only filter passes an incoming edit, drops self. ─
+    emitEdited({ id: 1, peerId: '555', text: 'edited', date: 0, out: false });
+    emitEdited({ id: 2, peerId: '555', text: 'mine', date: 0, out: true });
+    // ── Deleted: unfiltered, always delivered. ───────────────────────────────
+    emitDeleted({ messageIds: [9, 10], peerId: '555' });
+    // ── Chat action: the typing filter passes typing, drops online. ──────────
+    emitChatAction({ peerId: '7', userId: '7', action: GRAM_CHAT_ACTIONS.TYPING });
+    emitChatAction({
+      peerId: '7',
+      userId: '7',
+      action: GRAM_CHAT_ACTIONS.ONLINE,
+    });
+    await flush();
+
+    expect(captured.edited).toEqual([
+      { id: 1, peerId: '555', text: 'edited', date: 0, out: false },
+    ]);
+    expect(captured.deleted).toEqual([{ messageIds: [9, 10], peerId: '555' }]);
+    expect(captured.typing).toEqual([
+      { peerId: '7', userId: '7', action: GRAM_CHAT_ACTIONS.TYPING },
+    ]);
   });
 
   it('isolates a throwing handler so it does not break the stream', async () => {

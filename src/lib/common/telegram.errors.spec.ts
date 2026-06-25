@@ -49,6 +49,16 @@ describe('Telegram error hierarchy', () => {
 
     expect(error.kind).toBe('client');
     expect(error.operation).toBe('getDialogs');
+    expect(error.retryAfterSeconds).toBeUndefined();
+  });
+
+  it('TelegramClientError carries an optional flood-wait delay', () => {
+    const error = new TelegramClientError('rate limited', {
+      operation: 'sendMessage',
+      retryAfterSeconds: 25,
+    });
+
+    expect(error.retryAfterSeconds).toBe(25);
   });
 
   it('TelegramAuthError carries a code and optional retry delay', () => {

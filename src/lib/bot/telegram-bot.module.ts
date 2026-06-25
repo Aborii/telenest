@@ -62,7 +62,6 @@ import type { Telegraf } from 'telegraf';
 import {
   InMemoryTelegramMetrics,
   NOOP_TELEGRAM_TRACER,
-  type TelegramMetrics,
   type TelegramMetricsRecorder,
   type TelegramTracer,
 } from '../common';
@@ -77,11 +76,13 @@ import {
 } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 import { TelegramBotService } from './telegram-bot.service';
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import {
   getBotHealthToken,
   getBotInstanceToken,
   getBotMetricsToken,
   getBotRegistrarToken,
+  getBotScenesRegistrarToken,
   getBotToken,
   getBotTracerToken,
 } from './telegram-bot.tokens';
@@ -93,7 +94,10 @@ import {
 } from './webhook/telegram-webhook.constants';
 import { createTelegramWebhookController } from './webhook/telegram-webhook.controller';
 import { TelegramWebhookGuard } from './webhook/telegram-webhook.guard';
-import { assertValidWebhookOptions } from './webhook/telegram-webhook.helpers';
+import {
+  assertValidWebhookOptions,
+  normalizeWebhookPath,
+} from './webhook/telegram-webhook.helpers';
 import type { TelegramBotWebhookOptions } from './webhook/telegram-webhook.options';
 import { TelegramWebhookRegistrar } from './webhook/telegram-webhook.registrar';
 
@@ -128,10 +132,15 @@ function createBotProviders(name: string): Provider[] {
         createTelegrafInstance(options),
       inject: [TELEGRAM_BOT_OPTIONS],
     },
-    // ── Per-bot metrics sink (in-memory by default; readable via .snapshot()). ─
+    // ── Per-bot metrics sink: the configured recorder, else an in-memory one
+    //    (readable via .snapshot()). Swap it (e.g. an OTel bridge) via options. ─
     {
       provide: metricsToken,
-      useFactory: (): TelegramMetrics => new InMemoryTelegramMetrics(),
+      useFactory: (
+        options: TelegramBotModuleOptions,
+      ): TelegramMetricsRecorder =>
+        options.metrics ?? new InMemoryTelegramMetrics(),
+      inject: [TELEGRAM_BOT_OPTIONS],
     },
     // ── Per-bot tracer; no-op by default (override to emit OpenTelemetry spans). ─
     { provide: tracerToken, useValue: NOOP_TELEGRAM_TRACER },
@@ -156,7 +165,38 @@ function createBotProviders(name: string): Provider[] {
     },
     // ── Resolves a handler's guard/interceptor/filter refs (DI + @Catch). ─────
     TelegramEnhancerResolver,
-    // ── Discovery-based handler registrar, scoped to this bot by name. ────────
+    // ── Discovery-based scene/wizard registrar, scoped to this bot by name. ───
+    {
+      provide: getBotScenesRegistrarToken(name),
+      useFactory: (
+        discovery: DiscoveryService,
+        scanner: MetadataScanner,
+        reflector: Reflector,
+        enhancers: TelegramEnhancerResolver,
+        bot: Telegraf,
+        options: TelegramBotModuleOptions,
+      ): TelegramBotScenesRegistrar =>
+        new TelegramBotScenesRegistrar(
+          name,
+          discovery,
+          scanner,
+          reflector,
+          enhancers,
+          bot,
+          options,
+        ),
+      inject: [
+        DiscoveryService,
+        MetadataScanner,
+        Reflector,
+        TelegramEnhancerResolver,
+        instanceToken,
+        TELEGRAM_BOT_OPTIONS,
+      ],
+    },
+    // ── Discovery-based handler registrar, scoped to this bot by name. It owns
+    //    bootstrap ordering: it registers scenes (session + Stage) between the
+    //    @Use() global middleware and the terminal handlers. ───────────────────
     {
       provide: getBotRegistrarToken(name),
       useFactory: (
@@ -165,6 +205,8 @@ function createBotProviders(name: string): Provider[] {
         reflector: Reflector,
         enhancers: TelegramEnhancerResolver,
         bot: Telegraf,
+        options: TelegramBotModuleOptions,
+        scenes: TelegramBotScenesRegistrar,
       ): TelegramBotUpdatesRegistrar =>
         new TelegramBotUpdatesRegistrar(
           name,
@@ -173,6 +215,8 @@ function createBotProviders(name: string): Provider[] {
           reflector,
           enhancers,
           bot,
+          options,
+          scenes,
         ),
       inject: [
         DiscoveryService,
@@ -180,6 +224,8 @@ function createBotProviders(name: string): Provider[] {
         Reflector,
         TelegramEnhancerResolver,
         instanceToken,
+        TELEGRAM_BOT_OPTIONS,
+        getBotScenesRegistrarToken(name),
       ],
     },
   ];
@@ -252,15 +298,21 @@ function withWebhook(
 ): DynamicModule {
   // ── Fail fast at registration rather than as a confusing runtime error. ─────
   assertValidWebhookOptions(webhook);
+  // ── Canonicalize the path once so the controller route and the URL registered
+  //    with Telegram (joinWebhookUrl, via the options below) cannot diverge. ───
+  const normalized: TelegramBotWebhookOptions = {
+    ...webhook,
+    path: normalizeWebhookPath(webhook.path),
+  };
   return {
     ...dynamicModule,
     controllers: [
       ...(dynamicModule.controllers ?? []),
-      createTelegramWebhookController(webhook.path),
+      createTelegramWebhookController(normalized.path),
     ],
     providers: [
       ...(dynamicModule.providers ?? []),
-      { provide: TELEGRAM_WEBHOOK_OPTIONS, useValue: webhook },
+      { provide: TELEGRAM_WEBHOOK_OPTIONS, useValue: normalized },
       // ── Stable alias so the controller/registrar inject one token whether
       //    this is the default bot (TELEGRAM_BOT) or a named bot. ─────────────
       { provide: TELEGRAM_WEBHOOK_BOT, useExisting: getBotInstanceToken(name) },

@@ -57,6 +57,26 @@ describe('FileSessionStore', () => {
     await expect(store.clear()).resolves.toBeUndefined();
   });
 
+  it('writes to a unique temp file per save so concurrent saves do not collide', async () => {
+    // ── Mock the fs ops so the temp paths are captured deterministically,
+    //    without real concurrent I/O (which races and makes the assert flaky). ─
+    const writeFile = jest
+      .spyOn(fs, 'writeFile')
+      .mockResolvedValue(undefined);
+    jest.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+    jest.spyOn(fs, 'rename').mockResolvedValue(undefined);
+    try {
+      const store = new FileSessionStore(filePath);
+      await Promise.all([store.save('one'), store.save('two')]);
+      const tempPaths = writeFile.mock.calls.map((call) => call[0]);
+      expect(tempPaths).toHaveLength(2);
+      // ── Distinct temp files → neither save can clobber the other's. ─────────
+      expect(new Set(tempPaths).size).toBe(2);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   it('wraps read failures (e.g. a directory path) in TelegramSessionError', async () => {
     // ── tmpdir() is a directory; reading it as a file yields EISDIR, not
     //    ENOENT, so it must surface as a typed session error. ───────────────

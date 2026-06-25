@@ -72,7 +72,7 @@ export class TelegramWebhookRegistrar implements OnApplicationBootstrap {
   public async onApplicationBootstrap(): Promise<void> {
     if (!this._options.secretToken)
       this._logger.warn(
-        `Webhook route "${this._options.path}" has no secretToken; ` +
+        `Webhook route "${this._options.path}" runs with allowInsecure (no secretToken); ` +
           'incoming updates are NOT authenticated.',
       );
 

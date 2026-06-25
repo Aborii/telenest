@@ -98,6 +98,13 @@ export class RateLimitGuard implements TelegramGuard {
   private readonly _now: () => number;
 
   /**
+   * Timestamp (ms) of the last bucket sweep. Sweeps are throttled to roughly once
+   * per interval so eviction costs O(n) only occasionally. Starts at `-Infinity`
+   * so the first update triggers a (cheap, near-empty) sweep.
+   */
+  private _lastSweepAt = Number.NEGATIVE_INFINITY;
+
+  /**
    * @param options - Bucket sizing, key derivation, and (test) clock.
    * @throws {TelegramConfigError} If `capacity`, `refillPerInterval`, or
    *   `intervalMs` are out of range.
@@ -140,7 +147,11 @@ export class RateLimitGuard implements TelegramGuard {
     const rawKey = this._key(ctx);
     if (rawKey === undefined) return this._allowWhenNoKey;
 
-    const bucket = this._refill(String(rawKey), this._now());
+    const now = this._now();
+    // ── Drop fully-refilled (idle) buckets periodically so the map stays bounded
+    //    to keys that are actively throttled, not every key ever seen. ──────────
+    this._maybeSweep(now);
+    const bucket = this._refill(String(rawKey), now);
     if (bucket.tokens < 1) return false;
     bucket.tokens -= 1;
     return true;
@@ -171,5 +182,39 @@ export class RateLimitGuard implements TelegramGuard {
       existing.updatedAt = now;
     }
     return existing;
+  }
+
+  /**
+   * Runs a {@link RateLimitGuard._sweep} at most once per interval, so eviction
+   * costs O(n) only occasionally rather than on every update.
+   *
+   * @param now - The current time in milliseconds.
+   * @returns Nothing.
+   * @throws Never.
+   */
+  private _maybeSweep(now: number): void {
+    if (now - this._lastSweepAt < this._intervalMs) return;
+    this._lastSweepAt = now;
+    this._sweep(now);
+  }
+
+  /**
+   * Evicts every bucket that has refilled back to capacity as of `now`. A full
+   * bucket is indistinguishable from a never-seen key (both start at capacity), so
+   * dropping it frees memory without changing behaviour — bounding the map to the
+   * keys currently below capacity (i.e. actively throttled). Deleting during
+   * `Map` iteration is well-defined in JavaScript.
+   *
+   * @param now - The current time in milliseconds.
+   * @returns Nothing.
+   * @throws Never.
+   */
+  private _sweep(now: number): void {
+    for (const [key, bucket] of this._buckets) {
+      const elapsed = Math.max(0, now - bucket.updatedAt);
+      const projected =
+        bucket.tokens + (elapsed / this._intervalMs) * this._refillPerInterval;
+      if (projected >= this._capacity) this._buckets.delete(key);
+    }
   }
 }

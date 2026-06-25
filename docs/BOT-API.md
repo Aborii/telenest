@@ -661,6 +661,72 @@ bot.action(/.*/, async (ctx) => {
 });
 ```
 
+### Typed callback-action router (`@CallbackAction` / `@CallbackPayload`)
+
+The codec above tells you *whether* a payload fits 64 bytes, but you still have to
+decode and `switch` on the action in every `action` handler. The **callback-action
+router** layers a tiny envelope — `{ a: <key>, d?: <payload> }` — over the codec so
+each handler claims one action **key** and receives its decoded (optionally
+validated) payload directly.
+
+Build the button data with `encodeCallbackAction(key, payload?)` (it reuses the
+same 64-byte check, and omits `d` for key-only actions):
+
+```ts
+import { encodeCallbackAction, InlineKeyboardBuilder } from 'nestjs-telegram';
+
+const markup = new InlineKeyboardBuilder()
+  .callback('Buy', encodeCallbackAction('buy', { id: 42 })) // {"a":"buy","d":{"id":42}}
+  .callback('Cancel', encodeCallbackAction('cancel'))       // {"a":"cancel"}
+  .build();
+await bot.sendMessage(chatId, 'Confirm?', { reply_markup: markup });
+```
+
+Handle each key with `@CallbackAction(key, schema?)` on a `@TelegramUpdate`
+provider, and inject the payload with `@CallbackPayload()`:
+
+```ts
+import { Context } from 'telegraf';
+import { CallbackAction, CallbackPayload, Ctx, TelegramUpdate } from 'nestjs-telegram';
+
+type Buy = { id: number };
+
+@TelegramUpdate()
+export class CheckoutUpdate {
+  // `schema` validates the decoded payload; a throw is routed to your filters.
+  @CallbackAction('buy', (v): Buy => {
+    if (typeof v === 'object' && v !== null && typeof (v as Buy).id === 'number')
+      return v as Buy;
+    throw new Error('invalid buy payload');
+  })
+  onBuy(@CallbackPayload() payload: Buy, @Ctx() ctx: Context) {
+    return ctx.answerCbQuery(`Buying #${payload.id}`);
+  }
+
+  @CallbackAction('cancel') // key-only; no payload
+  onCancel(@Ctx() ctx: Context) {
+    return ctx.answerCbQuery('Cancelled');
+  }
+}
+```
+
+Notes:
+
+- **Routing is by decoded key.** The router registers a `Telegraf.action`
+  predicate per handler; the matching handler runs through the same
+  guards/interceptors/filters as any other update.
+- **Stray callbacks are ignored, not fatal.** Unknown keys, oversized, or legacy
+  (`action:id`) data simply don't match any `@CallbackAction`, so no handler fires
+  and nothing throws.
+- **`schema` is optional and library-agnostic.** It is just `(value: unknown) => T`
+  — pass a hand-written guard or wrap a schema library, e.g.
+  `@CallbackAction('buy', (v) => buySchema.parse(v))` for Zod. Without a schema the
+  payload is injected as `unknown`.
+- **Security:** as with the raw codec, the payload is **not authenticated** —
+  re-derive the acting user from `ctx.from` and re-check permissions server-side.
+- **Scenes:** declare `@CallbackAction` on a top-level provider, not inside a
+  `@Scene`/`@WizardScene` (use `@Action` + `decodeCallbackAction` there).
+
 ### `sendLongMessage` (auto-splitting)
 
 Sends text of any length as one or more messages, splitting on line boundaries so

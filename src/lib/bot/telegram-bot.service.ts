@@ -46,6 +46,7 @@ import {
   type TelegramMetricsRecorder,
   type TelegramTracer,
 } from '../common';
+import { encodeCallbackAction as encodeCallbackActionFn } from './callback-action.codec';
 import {
   decodeCallbackData as decodeCallbackDataFn,
   encodeCallbackData as encodeCallbackDataFn,
@@ -557,6 +558,32 @@ export class TelegramBotService
     );
   }
 
+  /**
+   * Answers an inline query (`@botname query`) with a list of results. Build the
+   * results array with the
+   * {@link import('./inline-query-result.builder').InlineQueryResultBuilder}.
+   *
+   * @param args - Inline query id, the results array, and optional `extra`
+   *   (`cache_time`, `is_personal`, `next_offset`, `button`).
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   *
+   * @example
+   * ```ts
+   * const results = new InlineQueryResultBuilder()
+   *   .article({ title: 'Echo', text: ctx.inlineQuery.query })
+   *   .build();
+   * await bot.answerInlineQuery(ctx.inlineQuery.id, results, { cache_time: 0 });
+   * ```
+   */
+  public answerInlineQuery(
+    ...args: Parameters<Telegram['answerInlineQuery']>
+  ): Promise<Awaited<ReturnType<Telegram['answerInlineQuery']>>> {
+    return this.exec('answerInlineQuery', () =>
+      this.telegram.answerInlineQuery(...args),
+    );
+  }
+
   // ── Chat & member management ────────────────────────────────────────────────
 
   /**
@@ -1031,12 +1058,22 @@ export class TelegramBotService
    * boundaries so no single message exceeds Telegram's 4096-character limit.
    *
    * Messages are sent sequentially to preserve their order. Empty/blank text
-   * sends nothing and returns an empty array. The same `extra` is applied to
-   * every chunk; note that a `reply_markup` will therefore appear on each part.
+   * sends nothing and returns an empty array. When the text is split across
+   * several messages, `extra` is distributed sensibly rather than duplicated:
+   * `reply_markup` is applied to the **last** chunk only (so a keyboard appears
+   * once, at the end), and `reply_parameters` (the reply target) to the **first**
+   * chunk only; all other options (e.g. `parse_mode`, `disable_notification`)
+   * apply to every chunk. A single-chunk message receives `extra` unchanged.
+   *
+   * **Caveat:** the splitter is not formatting-entity-aware — it breaks on line
+   * boundaries by length, so a `parse_mode` entity (e.g. a `**bold**` span or an
+   * HTML tag) that straddles a 4096-char boundary will be split and rejected by
+   * the Bot API. For formatted output that may exceed the limit, pre-split on
+   * safe boundaries yourself, or send without a `parse_mode`.
    *
    * @param chatId - Target chat id or `@username`.
    * @param text - The full text to send (any length).
-   * @param extra - Optional send options forwarded to each `sendMessage` call.
+   * @param extra - Optional send options; distributed across chunks as above.
    * @returns The sent messages, in order (empty if `text` was empty).
    * @throws {TelegramBotApiError} If any underlying `sendMessage` call fails.
    *
@@ -1051,12 +1088,47 @@ export class TelegramBotService
     extra?: Parameters<Telegram['sendMessage']>[2],
   ): Promise<Awaited<ReturnType<Telegram['sendMessage']>>[]> {
     const sent: Awaited<ReturnType<Telegram['sendMessage']>>[] = [];
+    const chunks = splitMessageText(text);
+    const lastIndex = chunks.length - 1;
     // ── Sequential, not parallel: Telegram preserves order this way and we stay
     //    within per-chat rate limits instead of bursting every chunk at once. ─
-    for (const chunk of splitMessageText(text)) {
-      sent.push(await this.sendMessage(chatId, chunk, extra));
+    for (const [i, chunk] of chunks.entries()) {
+      sent.push(
+        await this.sendMessage(
+          chatId,
+          chunk,
+          this.extraForChunk(extra, i, lastIndex),
+        ),
+      );
     }
     return sent;
+  }
+
+  /**
+   * Computes the per-chunk `extra` for {@link sendLongMessage}: `reply_markup` is
+   * kept only on the last chunk and `reply_parameters` only on the first, so a
+   * split message neither duplicates its keyboard nor replies to the original
+   * more than once. A single chunk (or absent `extra`) is forwarded unchanged.
+   *
+   * @param extra - The caller-supplied send options (or `undefined`).
+   * @param index - Zero-based index of the current chunk.
+   * @param lastIndex - Index of the final chunk.
+   * @returns The send options to use for this chunk.
+   * @throws Never.
+   */
+  private extraForChunk(
+    extra: Parameters<Telegram['sendMessage']>[2],
+    index: number,
+    lastIndex: number,
+  ): Parameters<Telegram['sendMessage']>[2] {
+    // ── Single chunk or no options: forward as-is (preserves `undefined`). ─────
+    if (extra === undefined || lastIndex === 0) return extra;
+
+    const perChunk = { ...extra };
+    // ── Keyboard on the last chunk only; reply target on the first only. ───────
+    if (index !== lastIndex) delete perChunk.reply_markup;
+    if (index !== 0) delete perChunk.reply_parameters;
+    return perChunk;
   }
 
   /**
@@ -1096,6 +1168,23 @@ export class TelegramBotService
    */
   public encodeCallbackData<T>(payload: T): string {
     return encodeCallbackDataFn(payload);
+  }
+
+  /**
+   * Encodes an action key and optional payload into a 64-byte-safe `callback_data`
+   * envelope (`{ a, d? }`) for the typed callback-action router. Thin instance
+   * wrapper around the standalone {@link encodeCallbackActionFn}; pair with a
+   * `@CallbackAction(key)` handler.
+   *
+   * @typeParam P - The (JSON-serializable) payload shape.
+   * @param key - The non-empty action key the router dispatches on.
+   * @param payload - The optional structured payload; omit for a key-only action.
+   * @returns The encoded `callback_data` string (≤ 64 bytes).
+   * @throws {TypeError} If `key` is empty or the payload is not JSON-serializable.
+   * @throws {RangeError} If the encoded envelope exceeds 64 bytes.
+   */
+  public encodeCallbackAction<P>(key: string, payload?: P): string {
+    return encodeCallbackActionFn(key, payload);
   }
 
   /**

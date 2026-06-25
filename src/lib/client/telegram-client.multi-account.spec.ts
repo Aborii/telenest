@@ -90,6 +90,9 @@ function createFakeAccount(session = 'SESSION'): FakeAccount {
         onMessage = undefined;
       };
     },
+    onEditedMessage: jest.fn().mockReturnValue(() => undefined),
+    onDeletedMessages: jest.fn().mockReturnValue(() => undefined),
+    onChatAction: jest.fn().mockReturnValue(() => undefined),
   };
   return { client, store, emit: (message) => onMessage?.(message) };
 }

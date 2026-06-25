@@ -20,6 +20,7 @@ method's arguments from the update context.
 - [File structure](#file-structure)
 - [Quick start](#quick-start)
 - [Method decorators](#method-decorators)
+- [Auto-registering the command menu](#auto-registering-the-command-menu)
 - [Parameter decorators](#parameter-decorators)
 - [Dispatch flow](#dispatch-flow)
 - [Behaviour notes & edge cases](#behaviour-notes--edge-cases)
@@ -36,10 +37,12 @@ The system has four cooperating pieces, all under `src/lib/bot/updates`:
 1. **Decorators** record intent as reflect-metadata.
    - `@TelegramUpdate()` marks a class as a handler provider to scan.
    - Method decorators (`@Start`, `@Help`, `@Command`, `@Hears`, `@Action`,
-     `@On`, `@Use`) append an `UpdateBinding` describing which `Telegraf` method
-     the handler binds to and with what trigger.
-   - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`)
-     append a `ParamMetadata` describing what to inject at each argument slot.
+     `@CallbackAction`, `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`)
+     append an `UpdateBinding` describing which `Telegraf` method the handler binds
+     to and with what trigger.
+   - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`,
+     `@CallbackPayload`, `@InlineQueryText`, `@InlineQueryOffset`) append a
+     `ParamMetadata` describing what to inject at each argument slot.
 2. **The argument resolver** (`resolveHandlerArguments`) is a pure function that
    turns a Telegraf `Context` + the method's `ParamMetadata[]` into the positional
    argument array passed to the handler.
@@ -73,7 +76,9 @@ src/lib/bot/updates/
   telegram-update.types.ts          # BOT_UPDATE_KINDS / PARAM_KINDS (as-const, no enum),
                                      #   UpdateBinding union, ParamMetadata, metadata keys
   telegram-update.decorator.ts      # @TelegramUpdate + @Start/@Help/@Command/@Hears/@Action/@On/@Use
+                                     #   + @InlineQuery/@ChosenInlineResult
   param.decorators.ts               # @Ctx / @MessageText / @Sender / @CallbackData
+                                     #   + @InlineQueryText / @InlineQueryOffset
   argument-resolver.ts              # resolveHandlerArguments(ctx, params) — pure
   telegram-bot-updates.registrar.ts # DiscoveryService scanner; binds to Telegraf before launch
   index.ts                          # barrel
@@ -135,12 +140,94 @@ on one method (e.g. `@Command('a') @Command('b')`).
 | `@Command(name)` | `bot.command` | command name(s) |
 | `@Hears(trigger)` | `bot.hears` | string / RegExp / predicate / array |
 | `@Action(trigger)` | `bot.action` | callback-data string / RegExp / array |
+| `@CallbackAction(key, schema?)` | `bot.action` (key-matching predicate) | action key + optional payload validator |
 | `@On(updateType)` | `bot.on` | update-type filter(s), e.g. `'text'` |
 | `@Use()` | `bot.use` | — (global middleware) |
+| `@InlineQuery(pattern?)` | `bot.inlineQuery` (or `bot.on('inline_query')`) | optional string / RegExp / array |
+| `@ChosenInlineResult()` | `bot.on('chosen_inline_result')` | — |
 
-Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`) are
-**terminal** — they do not call `next`. `@Use()` middleware is **not** terminal:
-the registrar calls `next()` after it so the chain continues.
+Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`,
+`inlineQuery`, `chosen_inline_result`) are **terminal** — they do not call
+`next`. `@Use()` middleware is **not** terminal: the registrar calls `next()`
+after it so the chain continues.
+
+> **Inline mode** (`@InlineQuery` / `@ChosenInlineResult`, the
+> `InlineQueryResultBuilder`, and `answerInlineQuery`) has its own guide:
+> [BOT-INLINE-MODE.md](./BOT-INLINE-MODE.md).
+
+> **Typed callback-action router.** `@CallbackAction(key, schema?)` routes a
+> callback query by the action key of its `{ a, d? }` `callback_data` envelope
+> (built with `encodeCallbackAction`), and `@CallbackPayload()` injects the
+> decoded, optionally schema-validated payload — so you dispatch by key instead of
+> decoding by hand in a `@Action(/.*/)` catch-all. Unknown/oversized/legacy data
+> simply doesn't match (no throw). Declare it on a top-level provider, not inside a
+> scene. Full guide + example:
+> [BOT-API.md → Typed callback-action router](./BOT-API.md#typed-callback-action-router-callbackaction--callbackpayload).
+
+## Auto-registering the command menu
+
+The command list users see in Telegram (the `/`-menu) is set via the Bot API's
+`setMyCommands`. Rather than maintaining that list by hand and watching it drift
+from your handlers, you can derive it straight from your `@Command` decorators.
+
+**1. Describe the commands.** Pass a `description` (and optionally a `scope` /
+`languageCode`) as the second argument to `@Command`:
+
+```ts
+@TelegramUpdate()
+@Injectable()
+export class MenuUpdate {
+  @Command('ping', { description: 'Check the bot is alive' })
+  onPing(@Ctx() ctx: Context) { return ctx.reply('pong'); }
+
+  @Command(['add', 'plus'], { description: 'Add two numbers' })
+  onAdd(@Ctx() ctx: Context) { /* both names share the description */ }
+
+  @Command('admin', {
+    description: 'Admin tools',
+    scope: { type: 'all_private_chats' }, // only listed in private chats
+  })
+  onAdmin(@Ctx() ctx: Context) { /* … */ }
+
+  @Command('secret') // no description → handled, but never listed in the menu
+  onSecret(@Ctx() ctx: Context) { /* … */ }
+}
+```
+
+**2. Opt in on the module.** Auto-registration is **off by default**; turn it on
+per bot with the `commands.autoRegister` flag:
+
+```ts
+TelegramBotModule.forRoot({
+  token: process.env.BOT_TOKEN!,
+  commands: { autoRegister: true },
+});
+```
+
+**What happens.** At bootstrap the registrar collects every described `@Command`
+for that bot, validates them, and calls `setMyCommands` **once per scope /
+language group** after launch. With no scopes that is exactly **one** call per
+bot; commands declared with a `scope` or `languageCode` are grouped and sent in
+their own call. Each named bot registers only its own commands.
+
+**Validation (fails fast as `TelegramConfigError` at bootstrap).** The derived
+payload is checked against Telegram's documented limits *before* launch, so a
+mistake surfaces immediately rather than as an opaque Bot API rejection:
+
+| Rule | Limit |
+| --- | --- |
+| Command name | 1–32 chars, lowercase letters / digits / underscores (`^[a-z0-9_]{1,32}$`) |
+| Description | 1–256 characters |
+| Commands per scope | ≤ 100 |
+| Uniqueness | no duplicate name within the same scope/language |
+
+A leading slash on a name is stripped (`'/ping'` ≡ `'ping'`). A `description` on
+a `RegExp`/predicate trigger is rejected — there is no string name to list. A
+failure of the `setMyCommands` *call itself* (e.g. a transient `429`) is logged,
+not thrown, so it never takes down an otherwise-healthy app.
+
+> **No-op when disabled.** Leave `commands.autoRegister` unset (or `false`) and
+> the library never calls `setMyCommands` — your menu is left exactly as is.
 
 ## Parameter decorators
 
@@ -150,6 +237,9 @@ the registrar calls `next()` after it so the chain continues.
 | `@MessageText()` | `ctx.text` | `string \| undefined` | `undefined` |
 | `@Sender()` | `ctx.from` | `User \| undefined` | `undefined` |
 | `@CallbackData()` | callback query `data` | `string \| undefined` | `undefined` |
+| `@CallbackPayload()` | decoded callback-action payload (`d`), validated if `@CallbackAction` has a schema | your payload type / `unknown` | `undefined` |
+| `@InlineQueryText()` | `ctx.inlineQuery.query` | `string \| undefined` | `undefined` |
+| `@InlineQueryOffset()` | `ctx.inlineQuery.offset` | `string \| undefined` | `undefined` |
 
 If a method has **no** parameter decorators, the raw `Context` is passed as the
 single argument (the common `(ctx) => …` ergonomic). Otherwise the resolver builds

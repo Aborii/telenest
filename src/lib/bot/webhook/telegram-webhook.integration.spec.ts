@@ -159,20 +159,41 @@ describe('webhook controller (e2e)', () => {
     expect(fake.handleUpdate).not.toHaveBeenCalled();
   });
 
-  it('accepts any request when no secret token is configured', async () => {
+  it('accepts any request when allowInsecure is set (no secret token)', async () => {
     const fake = createFakeBot();
     const port = await listen(
       [
         TelegramBotModule.forRoot({
           token: '123:abc',
           launch: false,
-          webhook: { path },
+          webhook: { path, allowInsecure: true },
         }),
       ],
       [{ token: TELEGRAM_BOT, bot: fake.bot }],
     );
 
     const response = await post(port, path);
+
+    expect(response.status).toBe(200);
+    expect(fake.handleUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts the controller at the normalized path (trailing/duplicate slashes)', async () => {
+    const fake = createFakeBot();
+    const port = await listen(
+      [
+        TelegramBotModule.forRoot({
+          token: '123:abc',
+          launch: false,
+          // ── Messy path: leading-less, duplicate + trailing slash. ────────────
+          webhook: { path: 'telegram//webhook/', secretToken: secret },
+        }),
+      ],
+      [{ token: TELEGRAM_BOT, bot: fake.bot }],
+    );
+
+    // ── The route is mounted at the canonical '/telegram/webhook'. ────────────
+    const response = await post(port, '/telegram/webhook', secret);
 
     expect(response.status).toBe(200);
     expect(fake.handleUpdate).toHaveBeenCalledTimes(1);

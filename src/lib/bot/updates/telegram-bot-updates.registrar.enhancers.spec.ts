@@ -34,7 +34,7 @@ import {
 import { TelegramExecutionContext } from './execution/telegram-execution-context';
 import { Ctx } from './param.decorators';
 import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
-import { Command, TelegramUpdate } from './telegram-update.decorator';
+import { Command, TelegramUpdate, Use } from './telegram-update.decorator';
 
 /** A recorded `Telegraf` registration: which method, optional trigger, the mw. */
 interface Registration {
@@ -128,6 +128,67 @@ class GuardedUpdate {
   }
 }
 
+/** Provider with a `@Use` middleware guarded by a denying guard. */
+@TelegramUpdate()
+@Injectable()
+class UseDenyUpdate {
+  /** Set true if the middleware body ran (it must not, under a deny guard). */
+  public ran = false;
+
+  @Use()
+  @UseTelegramGuards(DenyGuard)
+  public mw(@Ctx() _ctx: Context): void {
+    this.ran = true;
+  }
+}
+
+/** Provider with a `@Use` middleware guarded by an allowing guard. */
+@TelegramUpdate()
+@Injectable()
+class UseAllowUpdate {
+  /** Set true when the middleware body ran. */
+  public ran = false;
+
+  @Use()
+  @UseTelegramGuards(AllowGuard)
+  public mw(@Ctx() _ctx: Context): void {
+    this.ran = true;
+  }
+}
+
+/** Provider whose `@Use` middleware throws (error-isolation for middleware). */
+@TelegramUpdate()
+@Injectable()
+class UseThrowingUpdate {
+  @Use()
+  public mw(@Ctx() _ctx: Context): void {
+    throw new Error('middleware blew up');
+  }
+}
+
+/** Base provider whose handler is guarded by a denying guard. */
+@TelegramUpdate()
+@Injectable()
+class BaseGuardedUpdate {
+  /** Names of handlers that actually ran. */
+  public readonly calls: string[] = [];
+
+  @Command('inherited')
+  @UseTelegramGuards(DenyGuard)
+  public onCmd(@Ctx() _ctx: Context): void {
+    this.calls.push('base');
+  }
+}
+
+/** Subclass overriding the guarded handler WITHOUT re-declaring the guard. */
+@TelegramUpdate()
+@Injectable()
+class OverridingGuardedUpdate extends BaseGuardedUpdate {
+  public override onCmd(_ctx: Context): void {
+    this.calls.push('override');
+  }
+}
+
 /** Provider whose handler is wrapped by an interceptor. */
 @TelegramUpdate()
 @Injectable()
@@ -193,6 +254,13 @@ function commandFor(
   return reg.middleware;
 }
 
+/** Finds the single recorded `@Use` middleware. */
+function useFor(regs: Registration[]): Registration['middleware'] {
+  const reg = regs.find((r) => r.method === 'use');
+  if (!reg) throw new Error('no @Use middleware registered');
+  return reg.middleware;
+}
+
 /** Builds a throwaway context for dispatch. */
 function fakeContext(): Context {
   return { reply: jest.fn() } as unknown as Context;
@@ -233,6 +301,59 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
     // ── Denial is a debug event, not an error. ────────────────────────────────
     expect(errorSpy).not.toHaveBeenCalled();
     expect(debugSpy).toHaveBeenCalled();
+  });
+
+  it('does NOT continue the chain when a guard denies a @Use middleware', async () => {
+    const { regs, get } = await bootstrap([UseDenyUpdate, DenyGuard, AllowGuard]);
+    const update = get(UseDenyUpdate);
+    const proceed = jest.fn().mockResolvedValue(undefined);
+
+    await useFor(regs)(fakeContext(), proceed);
+
+    expect(update.ran).toBe(false);
+    expect(proceed).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('continues the chain when a guard allows a @Use middleware', async () => {
+    const { regs, get } = await bootstrap([
+      UseAllowUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
+    const update = get(UseAllowUpdate);
+    const proceed = jest.fn().mockResolvedValue(undefined);
+
+    await useFor(regs)(fakeContext(), proceed);
+
+    expect(update.ran).toBe(true);
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates a throwing @Use middleware and does NOT continue the chain', async () => {
+    const { regs } = await bootstrap([UseThrowingUpdate]);
+    const proceed = jest.fn().mockResolvedValue(undefined);
+
+    await expect(useFor(regs)(fakeContext(), proceed)).resolves.toBeUndefined();
+    expect(proceed).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('applies an inherited guard to an overridden handler', async () => {
+    const { regs, get } = await bootstrap([
+      OverridingGuardedUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
+    const update = get(OverridingGuardedUpdate);
+
+    await commandFor(regs, 'inherited')(fakeContext(), next);
+
+    // ── The inherited DenyGuard still blocks; the override never ran. ──────────
+    expect(update.calls).toEqual([]);
+    expect(debugSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('runs an update when the guard allows it', async () => {

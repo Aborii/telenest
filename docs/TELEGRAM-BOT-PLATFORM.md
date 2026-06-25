@@ -1,6 +1,15 @@
 # Telegram Bot Platform
 
-This feature provides a modern, strongly-typed NestJS application that runs multiple Telegraf bots in one process. It mirrors the architecture and ergonomics of `nestjs-telegraf` examples while adding stricter config validation, better module boundaries, and extension-ready conventions.
+> **⚠️ This document describes the bundled _demo app_ (`src/bots/`), not the published library.**
+> The demo is a runnable example built on `nestjs-telegraf` and is **excluded from
+> the npm package**. For the library's own bot platform — `TelegramBotModule`,
+> `TelegramBotService`, the `@TelegramUpdate` decorator system, guards/filters, the
+> webhook controller, and Mini Apps — see
+> [BOT-API.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-API.md),
+> [BOT-UPDATE-DECORATORS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-UPDATE-DECORATORS.md),
+> and [WEBHOOK-CONTROLLER.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/WEBHOOK-CONTROLLER.md).
+
+This document covers the bundled demo application that runs multiple Telegraf bots in one process. It mirrors the architecture and ergonomics of `nestjs-telegraf` examples while adding stricter config validation, better module boundaries, and extension-ready conventions.
 
 ---
 

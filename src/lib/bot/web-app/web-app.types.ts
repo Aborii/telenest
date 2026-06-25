@@ -129,7 +129,8 @@ export interface ValidateWebAppInitDataOptions {
   /**
    * Maximum accepted age of the data, in seconds, checked against `auth_date`.
    * When the data is older, validation returns `null` (treated as expired).
-   * Omit to skip the freshness check.
+   * Defaults to `86400` (24h) to prevent replay of a captured-but-valid
+   * `initData`; pass `0` (or a negative value) to disable the freshness check.
    */
   maxAgeSeconds?: number;
 }

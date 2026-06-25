@@ -26,7 +26,33 @@
  * - *_METADATA: reflect-metadata keys (including the per-provider target bot).
  */
 
-import type { Telegraf } from 'telegraf';
+import type { Telegraf, Telegram } from 'telegraf';
+
+import type { CallbackActionSchema } from '../callback-action.codec';
+
+// ── Command-menu types (derived from Telegraf, never imported from typegram) ──
+
+/**
+ * A single Bot API command descriptor (`{ command, description }`), derived from
+ * Telegraf's own `setMyCommands` signature so it stays in lock-step with the
+ * installed version instead of importing the `typegram` shape directly.
+ */
+export type BotCommand = Parameters<Telegram['setMyCommands']>[0][number];
+
+/**
+ * The optional `extra` accepted by `setMyCommands` — its `scope` and
+ * `language_code`. Derived from Telegraf rather than imported from `typegram`.
+ */
+export type SetMyCommandsExtra = NonNullable<
+  Parameters<Telegram['setMyCommands']>[1]
+>;
+
+/**
+ * A Bot API command scope (default, all-private-chats, a specific chat, …),
+ * derived from {@link SetMyCommandsExtra}. Used by `@Command` to scope an
+ * auto-registered command's visibility.
+ */
+export type BotCommandScope = NonNullable<SetMyCommandsExtra['scope']>;
 
 // ── Update kinds ────────────────────────────────────────────────────────────
 
@@ -46,10 +72,29 @@ export const BOT_UPDATE_KINDS = {
   HEARS: 'hears',
   /** Binds to `bot.action(trigger, ...)` — callback-query (button) matching. */
   ACTION: 'action',
+  /**
+   * Binds to `bot.action(predicate, ...)` via the typed callback-action router —
+   * a callback query whose `callback_data` envelope (`{ a, d? }`) carries a
+   * matching action key. Layered over the callback-data codec; see
+   * {@link import('../callback-action.codec').decodeCallbackAction}.
+   */
+  CALLBACK_ACTION: 'callbackAction',
   /** Binds to `bot.on(updateType, ...)` — a raw update/message type filter. */
   ON: 'on',
   /** Binds to `bot.use(...)` — global middleware run for every update. */
   USE: 'use',
+  /**
+   * Binds to `bot.inlineQuery(trigger, ...)` — an incoming inline query
+   * (`@botname query`). With no trigger the registrar falls back to
+   * `bot.on('inline_query', ...)` to match every inline query.
+   */
+  INLINE_QUERY: 'inlineQuery',
+  /**
+   * Binds to `bot.on('chosen_inline_result', ...)` — the feedback update fired
+   * when a user picks one of the bot's inline results (requires inline feedback
+   * enabled via @BotFather).
+   */
+  CHOSEN_INLINE_RESULT: 'chosenInlineResult',
 } as const;
 
 /** A single update-binding kind (the value side of {@link BOT_UPDATE_KINDS}). */
@@ -72,6 +117,25 @@ export type UpdateBinding =
       readonly kind: typeof BOT_UPDATE_KINDS.COMMAND;
       /** Command name(s) forwarded to `Telegraf.command`. */
       readonly trigger: Parameters<Telegraf['command']>[0];
+      /**
+       * Human-readable description for the Telegram command menu. Present only
+       * when supplied via `@Command(name, { description })`; when set (and the
+       * module's `commands.autoRegister` is on) the command is included in the
+       * `setMyCommands` payload derived at bootstrap. Omitted commands are still
+       * handled — they just never appear in the menu.
+       */
+      readonly description?: string;
+      /**
+       * Optional command-menu scope (e.g. all private chats, a specific chat).
+       * Commands sharing a `scope`/`languageCode` are registered together in one
+       * `setMyCommands` call. Omit for the default scope (all users).
+       */
+      readonly scope?: BotCommandScope;
+      /**
+       * Optional two-letter language code the description applies to. Omit to set
+       * the language-agnostic default. Grouped with `scope` for registration.
+       */
+      readonly languageCode?: string;
     }
   | {
       readonly kind: typeof BOT_UPDATE_KINDS.HEARS;
@@ -84,10 +148,35 @@ export type UpdateBinding =
       readonly trigger: Parameters<Telegraf['action']>[0];
     }
   | {
+      readonly kind: typeof BOT_UPDATE_KINDS.CALLBACK_ACTION;
+      /**
+       * The action key this handler claims. The router decodes each callback
+       * query's `{ a, d? }` envelope and dispatches here when `a` equals this key.
+       */
+      readonly key: string;
+      /**
+       * Optional runtime validator for the decoded payload (`d`). When present, a
+       * {@link import('../param.decorators').CallbackPayload} parameter is parsed
+       * through it; a thrown validation error is routed to the handler's exception
+       * filters. Omit to inject the payload untyped (`unknown`).
+       */
+      readonly schema?: CallbackActionSchema<unknown>;
+    }
+  | {
       readonly kind: typeof BOT_UPDATE_KINDS.ON;
       /** Update-type filter(s) forwarded to `Telegraf.on`. */
       readonly trigger: Parameters<Telegraf['on']>[0];
-    };
+    }
+  | {
+      readonly kind: typeof BOT_UPDATE_KINDS.INLINE_QUERY;
+      /**
+       * Optional inline-query pattern(s) forwarded to `Telegraf.inlineQuery`
+       * (string, `RegExp`, or an array thereof). When omitted the handler is
+       * bound via `Telegraf.on('inline_query', …)` so it matches every query.
+       */
+      readonly trigger?: Parameters<Telegraf['inlineQuery']>[0];
+    }
+  | { readonly kind: typeof BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT };
 
 // ── Parameter injection ─────────────────────────────────────────────────────
 
@@ -104,6 +193,23 @@ export const PARAM_KINDS = {
   SENDER: 'sender',
   /** Injects a callback query's `data` string, or `undefined` (`@CallbackData()`). */
   CALLBACK_DATA: 'callback_data',
+  /**
+   * Injects the decoded (and, when a schema is set, validated) callback-action
+   * payload — the envelope's `d` field — or `undefined` when absent
+   * (`@CallbackPayload()`). See
+   * {@link import('../callback-action.codec').decodeCallbackAction}.
+   */
+  CALLBACK_PAYLOAD: 'callback_payload',
+  /**
+   * Injects the inline query's text (`ctx.inlineQuery.query`), or `undefined`
+   * when the update is not an inline query (`@InlineQueryText()`).
+   */
+  INLINE_QUERY_TEXT: 'inline_query_text',
+  /**
+   * Injects the inline query's pagination offset (`ctx.inlineQuery.offset`), or
+   * `undefined` when the update is not an inline query (`@InlineQueryOffset()`).
+   */
+  INLINE_QUERY_OFFSET: 'inline_query_offset',
 } as const;
 
 /** A single parameter-injection kind (the value side of {@link PARAM_KINDS}). */

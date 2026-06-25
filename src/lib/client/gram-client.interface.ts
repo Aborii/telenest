@@ -22,7 +22,9 @@
  */
 
 import type {
+  GramChatActionEvent,
   GramChatInfo,
+  GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
   GramGetDialogsParams,
@@ -428,4 +430,43 @@ export interface IGramClient {
    *   elsewhere).
    */
   onNewMessage(handler: (message: GramMessage) => void): () => void;
+
+  /**
+   * Subscribes to message-edited events for the logged-in account. The handler
+   * receives the edited message as a normalized {@link GramMessage} (its `text`
+   * reflects the new content).
+   *
+   * @param handler - Called for every edited message while subscribed.
+   * @returns An unsubscribe function that removes the handler. Idempotent.
+   * @throws Never (registration is synchronous; transport errors surface
+   *   elsewhere).
+   */
+  onEditedMessage(handler: (message: GramMessage) => void): () => void;
+
+  /**
+   * Subscribes to message-deleted events for the logged-in account. The handler
+   * receives a {@link GramDeletedMessages} carrying the deleted ids and — for
+   * channels/supergroups only — the originating peer.
+   *
+   * @param handler - Called for every deletion event while subscribed.
+   * @returns An unsubscribe function that removes the handler. Idempotent.
+   * @throws Never (registration is synchronous; transport errors surface
+   *   elsewhere).
+   */
+  onDeletedMessages(
+    handler: (event: GramDeletedMessages) => void,
+  ): () => void;
+
+  /**
+   * Subscribes to chat-action events (typing, recording, online/offline, …) for
+   * the logged-in account. The handler receives a normalized
+   * {@link GramChatActionEvent}; actions this library does not model are
+   * reported as {@link GRAM_CHAT_ACTIONS.UNKNOWN}.
+   *
+   * @param handler - Called for every chat-action event while subscribed.
+   * @returns An unsubscribe function that removes the handler. Idempotent.
+   * @throws Never (registration is synchronous; transport errors surface
+   *   elsewhere).
+   */
+  onChatAction(handler: (event: GramChatActionEvent) => void): () => void;
 }

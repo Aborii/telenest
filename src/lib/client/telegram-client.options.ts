@@ -21,11 +21,35 @@
  * KEY EXPORTS
  * -----------
  * - TelegramClientModuleOptions: Synchronous configuration object.
+ * - TelegramClientRetryDefaults: Module-level FLOOD_WAIT retry defaults.
  * - GramClientFactory: Seam for injecting a custom/fake client (tests).
  */
 
+import type { TelegramMetricsRecorder } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type { SessionStore } from './session/session-store.interface';
+
+/**
+ * Module-level defaults for the opt-in `FLOOD_WAIT` retry helper
+ * ({@link import('./telegram-user.service').TelegramUserService.withRetry} and
+ * the standalone {@link import('./retry').withClientRetry}). These set the
+ * baseline used whenever a per-call override is not supplied; retry is still
+ * opt-in (it only applies to operations the caller explicitly wraps).
+ */
+export interface TelegramClientRetryDefaults {
+  /**
+   * Maximum number of retries after the initial attempt. Defaults to
+   * {@link import('./retry').DEFAULT_CLIENT_RETRIES} (`2`) when omitted.
+   */
+  retries?: number;
+
+  /**
+   * Upper bound, in milliseconds, on any single flood-wait back-off. Caps a
+   * pathological `FLOOD_WAIT` so a wrapped call cannot hang for minutes. Omit
+   * for no cap.
+   */
+  maxDelayMs?: number;
+}
 
 /**
  * Factory that produces an {@link IGramClient}. Supply one via
@@ -93,6 +117,33 @@ export interface TelegramClientModuleOptions {
    * `false` to connect lazily/manually (e.g. in tests or CLI login scripts).
    */
   autoConnect?: boolean;
+
+  /**
+   * Catch-up buffer depth for the inbound update streams
+   * ({@link import('./telegram-user.service').TelegramUserService.updates$} and
+   * its edited/deleted/chat-action siblings). When greater than zero, each
+   * stream replays up to this many of its most recent events to a subscriber
+   * added *after* bootstrap, so a late `@OnUserMessage` (or manual `subscribe`)
+   * still sees the recent backlog. Defaults to `0` — hot streams with no replay.
+   */
+  replayBufferSize?: number;
+
+  /**
+   * Module-level defaults for the opt-in `FLOOD_WAIT` retry helper exposed as
+   * {@link import('./telegram-user.service').TelegramUserService.withRetry}.
+   * Per-call options always take precedence. Omit to use the built-in defaults.
+   */
+  retry?: TelegramClientRetryDefaults;
+
+  /**
+   * Metrics recorder for this account's counters, resolved as the
+   * {@link import('../common').TELEGRAM_CLIENT_METRICS} token. Defaults to a
+   * fresh {@link import('../common').InMemoryTelegramMetrics} (readable via
+   * `.snapshot()`). Supply a custom recorder — e.g.
+   * {@link import('../common').createOpenTelemetryMetrics} — to export the
+   * counters to your own observability backend instead.
+   */
+  metrics?: TelegramMetricsRecorder;
 
   /**
    * Override the client construction. Primarily a test seam; when omitted the

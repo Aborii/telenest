@@ -8,7 +8,7 @@
  * (the timing property itself is not asserted — only correctness).
  */
 
-import { timingSafeEqualSecret } from './secret-token';
+import { generateWebhookSecret, timingSafeEqualSecret } from './secret-token';
 
 describe('timingSafeEqualSecret', () => {
   it('returns true for identical secrets', () => {
@@ -40,5 +40,31 @@ describe('timingSafeEqualSecret', () => {
   it('treats unicode secrets byte-accurately', () => {
     expect(timingSafeEqualSecret('séçret', 'séçret')).toBe(true);
     expect(timingSafeEqualSecret('séçret', 'secret')).toBe(false);
+  });
+});
+
+describe('generateWebhookSecret', () => {
+  it('returns a 64-char hex token by default (32 bytes)', () => {
+    const secret = generateWebhookSecret();
+    expect(secret).toHaveLength(64);
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('honors a custom byte length', () => {
+    expect(generateWebhookSecret(16)).toHaveLength(32);
+  });
+
+  it('stays within Telegram\'s allowed secret_token charset and length', () => {
+    expect(generateWebhookSecret(128)).toMatch(/^[A-Za-z0-9_-]{1,256}$/);
+  });
+
+  it('produces a distinct value on each call', () => {
+    expect(generateWebhookSecret()).not.toBe(generateWebhookSecret());
+  });
+
+  it('rejects an out-of-range byte length', () => {
+    expect(() => generateWebhookSecret(0)).toThrow(RangeError);
+    expect(() => generateWebhookSecret(129)).toThrow(RangeError);
+    expect(() => generateWebhookSecret(1.5)).toThrow(RangeError);
   });
 });

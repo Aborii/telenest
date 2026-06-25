@@ -194,15 +194,26 @@ export class TelegramClientError extends TelegramError {
   public readonly operation?: string;
 
   /**
+   * Seconds to wait before retrying, present only when the failure is a
+   * Telegram `FLOOD_WAIT` rate-limit. Populated by the GramJS adapter (which
+   * confines the SDK's error shape) and consumed by the client retry helper
+   * ({@link import('../client/retry').withClientRetry}) to back off for exactly
+   * the requested interval.
+   */
+  public readonly retryAfterSeconds?: number;
+
+  /**
    * @param message - Description of the failure.
-   * @param options - Optional operation name and underlying cause.
+   * @param options - Optional operation name, flood-wait delay, and underlying
+   *   cause.
    */
   public constructor(
     message: string,
-    options?: { operation?: string; cause?: unknown },
+    options?: { operation?: string; retryAfterSeconds?: number; cause?: unknown },
   ) {
     super(message, options?.cause);
     this.operation = options?.operation;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
   }
 }
 

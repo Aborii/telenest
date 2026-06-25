@@ -16,13 +16,24 @@ import type { Context, Telegraf } from 'telegraf';
 
 import { TELEGRAM_BOT } from '../telegram-bot.constants';
 import { TelegramBotModule } from '../telegram-bot.module';
-import { CallbackData, Ctx, MessageText, Sender } from './param.decorators';
+import {
+  CallbackData,
+  CallbackPayload,
+  Ctx,
+  InlineQueryOffset,
+  InlineQueryText,
+  MessageText,
+  Sender,
+} from './param.decorators';
 import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 import {
   Action,
+  CallbackAction,
+  ChosenInlineResult,
   Command,
   Hears,
   Help,
+  InlineQuery,
   On,
   Start,
   TelegramUpdate,
@@ -56,6 +67,7 @@ function createMockBot(): { bot: Telegraf; regs: Registration[] } {
     hears: withTrigger('hears'),
     action: withTrigger('action'),
     on: withTrigger('on'),
+    inlineQuery: withTrigger('inlineQuery'),
   };
   return { bot: bot as unknown as Telegraf, regs };
 }
@@ -138,7 +150,97 @@ class UnmarkedUpdate {
   }
 }
 
+/** Provider exercising the inline-mode decorators and their param injection. */
+@TelegramUpdate()
+@Injectable()
+class InlineUpdate {
+  /** Ordered record of which inline handlers fired. */
+  public readonly events: string[] = [];
+  /** Last inline query text injected via `@InlineQueryText()`. */
+  public lastQuery: string | undefined;
+  /** Last inline query offset injected via `@InlineQueryOffset()`. */
+  public lastOffset: string | undefined;
+
+  @InlineQuery('weather')
+  public onWeather(
+    @InlineQueryText() text: string | undefined,
+    @InlineQueryOffset() offset: string | undefined,
+  ): void {
+    this.events.push('inline:weather');
+    this.lastQuery = text;
+    this.lastOffset = offset;
+  }
+
+  @InlineQuery()
+  public onAny(@Ctx() _ctx: Context): void {
+    this.events.push('inline:any');
+  }
+
+  @ChosenInlineResult()
+  public onChosen(@Ctx() _ctx: Context): void {
+    this.events.push('chosen');
+  }
+}
+
+/** Payload shape carried by the `buy` callback action. */
+interface BuyPayload {
+  /** The product id the user chose to buy. */
+  readonly id: number;
+}
+
+/** Provider exercising the typed callback-action router and payload injection. */
+@TelegramUpdate()
+@Injectable()
+class CallbackActionUpdate {
+  /** Ordered record of which callback actions fired. */
+  public readonly events: string[] = [];
+  /** Last payload injected via `@CallbackPayload()`. */
+  public lastPayload: unknown;
+
+  @CallbackAction('buy', (value): BuyPayload => {
+    // ── Validate the decoded payload; a throw is routed to filters / logged. ────
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { id: unknown }).id === 'number'
+    )
+      return value as BuyPayload;
+    throw new Error('invalid buy payload');
+  })
+  public onBuy(@CallbackPayload() payload: BuyPayload): void {
+    this.events.push('buy');
+    this.lastPayload = payload;
+  }
+
+  @CallbackAction('cancel')
+  public onCancel(@Ctx() _ctx: Context): void {
+    this.events.push('cancel');
+  }
+}
+
 /** Compiles the bot module over the mock and runs the registrar once. */
+/** Base provider declaring a decorated handler. */
+@TelegramUpdate()
+@Injectable()
+class BasePingUpdate {
+  /** Records which implementation ran. */
+  public readonly events: string[] = [];
+
+  @Command('ping')
+  public onPing(@Ctx() _ctx: Context): void {
+    this.events.push('base-ping');
+  }
+}
+
+/** Subclass overriding the decorated method WITHOUT re-decorating it. */
+@TelegramUpdate()
+@Injectable()
+class OverridingPingUpdate extends BasePingUpdate {
+  public override onPing(_ctx: Context): void {
+    this.events.push('override-ping');
+  }
+}
+
 async function bootstrap(providers: ReadonlyArray<new () => object>): Promise<{
   regs: Registration[];
   get: <T>(token: new () => T) => T;
@@ -165,6 +267,7 @@ function fakeContext(partial: {
   text?: string;
   from?: { id: number };
   callbackQuery?: { data: string };
+  inlineQuery?: { query: string; offset: string };
 }): Context {
   return partial as unknown as Context;
 }
@@ -266,5 +369,132 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
     const { regs, get } = await bootstrap([UnmarkedUpdate]);
     expect(regs).toHaveLength(0);
     expect(get(UnmarkedUpdate).called).toBe(false);
+  });
+
+  it('binds a decorated handler inherited from a base class, running the override', async () => {
+    const { regs, get } = await bootstrap([OverridingPingUpdate]);
+    const update = get(OverridingPingUpdate);
+
+    // ── The inherited @Command('ping') binding is not dropped. ────────────────
+    const command = regs.find((r) => r.method === 'command');
+    expect(command?.trigger).toBe('ping');
+
+    // ── Dispatching runs the SUBCLASS override (with inherited @Ctx injection). ─
+    const next = jest.fn().mockResolvedValue(undefined);
+    await command?.middleware(fakeContext({ text: 'ping' }), next);
+    expect(update.events).toEqual(['override-ping']);
+  });
+
+  describe('inline mode', () => {
+    it('binds @InlineQuery(pattern) via inlineQuery and the bare form via on', async () => {
+      const { regs } = await bootstrap([InlineUpdate]);
+
+      // ── A pattern routes through Telegraf.inlineQuery(trigger, …). ───────────
+      const patterned = regs.find((r) => r.method === 'inlineQuery');
+      expect(patterned?.trigger).toBe('weather');
+
+      // ── The bare @InlineQuery() falls back to on('inline_query', …). ─────────
+      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      expect(onTriggers).toContain('inline_query');
+    });
+
+    it('binds @ChosenInlineResult via on(chosen_inline_result)', async () => {
+      const { regs } = await bootstrap([InlineUpdate]);
+      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      expect(onTriggers).toContain('chosen_inline_result');
+    });
+
+    it('dispatches inline queries with injected text and offset', async () => {
+      const { regs, get } = await bootstrap([InlineUpdate]);
+      const inline = get(InlineUpdate);
+      const next = jest.fn().mockResolvedValue(undefined);
+      const ctx = fakeContext({ inlineQuery: { query: 'sun', offset: '20' } });
+
+      for (const reg of regs) await reg.middleware(ctx, next);
+
+      expect(inline.events.sort()).toEqual([
+        'chosen',
+        'inline:any',
+        'inline:weather',
+      ]);
+      expect(inline.lastQuery).toBe('sun');
+      expect(inline.lastOffset).toBe('20');
+    });
+  });
+
+  describe('callback-action router', () => {
+    /** Invokes a recorded action trigger predicate with raw callback data. */
+    const fireTrigger = (reg: Registration, data: string): unknown =>
+      (reg.trigger as (value: string) => unknown)(data);
+
+    it('binds @CallbackAction onto action with a key-matching function trigger', async () => {
+      const { regs } = await bootstrap([CallbackActionUpdate]);
+      const actions = regs.filter((r) => r.method === 'action');
+      expect(actions).toHaveLength(2);
+
+      // ── Every callback-action trigger is a predicate, not a string/RegExp. ────
+      for (const action of actions)
+        expect(typeof action.trigger).toBe('function');
+
+      // ── The 'buy' predicate matches its envelope and rejects others / legacy. ─
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":1}}') !== null,
+      );
+      expect(buy).toBeDefined();
+      expect(fireTrigger(buy as Registration, '{"a":"cancel"}')).toBeNull();
+      expect(fireTrigger(buy as Registration, 'legacy:1')).toBeNull();
+      expect(fireTrigger(buy as Registration, 'not json')).toBeNull();
+    });
+
+    it('dispatches the matching action with a decoded, validated payload', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":9}}' } });
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":9}}') !== null,
+      );
+      await (buy as Registration).middleware(ctx, next);
+
+      expect(update.events).toEqual(['buy']);
+      expect(update.lastPayload).toEqual({ id: 9 });
+    });
+
+    it('injects no payload for a key-only callback action', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"cancel"}' } });
+      const cancel = actions.find(
+        (a) => fireTrigger(a, '{"a":"cancel"}') !== null,
+      );
+      await (cancel as Registration).middleware(ctx, next);
+
+      expect(update.events).toEqual(['cancel']);
+    });
+
+    it('isolates a payload-schema validation failure (logs, does not rethrow)', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      // ── A 'buy' envelope whose payload fails the schema (id is not a number). ─
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":"x"}}' } });
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":"x"}}') !== null,
+      );
+
+      await expect(
+        (buy as Registration).middleware(ctx, next),
+      ).resolves.toBeUndefined();
+      // The handler never ran (validation threw during argument resolution).
+      expect(update.events).toEqual([]);
+      expect(errorSpy).toHaveBeenCalled();
+    });
   });
 });

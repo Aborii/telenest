@@ -275,6 +275,50 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('FLOOD_WAIT on user operations', () => {
+    it('surfaces the delay on TelegramClientError from a typed FloodWaitError', async () => {
+      const flood = new errors.FloodWaitError({
+        request: new Api.messages.GetHistory({ peer: 'me' }),
+        capture: 22,
+      });
+      const mock = createMockClient({
+        getMe: jest.fn().mockRejectedValue(flood),
+      });
+
+      const error = (await createAdapter(mock)
+        .getMe()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.operation).toBe('getMe');
+      expect(error.retryAfterSeconds).toBe(22);
+    });
+
+    it('parses the delay from a plain FLOOD_WAIT_<n> message', async () => {
+      const mock = createMockClient({
+        sendMessage: jest.fn().mockRejectedValue(new Error('FLOOD_WAIT_17')),
+      });
+
+      const error = (await createAdapter(mock)
+        .sendMessage('me', { message: 'hi' })
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.operation).toBe('sendMessage');
+      expect(error.retryAfterSeconds).toBe(17);
+    });
+
+    it('leaves retryAfterSeconds undefined for a non-flood failure', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(new Error('CHANNEL_PRIVATE')),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.retryAfterSeconds).toBeUndefined();
+    });
+  });
+
   describe('signInWithCode', () => {
     it('returns authorized with a mapped user', async () => {
       const mock = createMockClient({
@@ -901,6 +945,277 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('onEditedMessage', () => {
+    /** Invokes the most recently registered event callback with `event`. */
+    function deliver(mock: MockClient, event: unknown): void {
+      const callback = mock.addEventHandler.mock.calls[0]?.[0] as (
+        e: unknown,
+      ) => void;
+      callback(event);
+    }
+
+    it('maps the edited event message', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onEditedMessage((message) => received.push(message));
+      deliver(mock, {
+        message: {
+          id: 8,
+          peerId: new Api.PeerUser({ userId: bigInt('1001') }),
+          message: 'edited',
+          date: 9,
+          out: false,
+          senderId: bigInt('1001'),
+        },
+      });
+
+      expect(received).toEqual([
+        {
+          id: 8,
+          peerId: '1001',
+          text: 'edited',
+          date: 9,
+          out: false,
+          senderId: '1001',
+          hasMedia: false,
+        },
+      ]);
+    });
+
+    it('unsubscribe removes the event handler', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const unsubscribe = adapter.onEditedMessage(() => undefined);
+      const registeredCb = mock.addEventHandler.mock.calls[0]?.[0];
+      unsubscribe();
+      expect(mock.removeEventHandler.mock.calls[0]?.[0]).toBe(registeredCb);
+    });
+  });
+
+  describe('onDeletedMessages', () => {
+    /** Invokes the most recently registered event callback with `event`. */
+    function deliver(mock: MockClient, event: unknown): void {
+      const callback = mock.addEventHandler.mock.calls[0]?.[0] as (
+        e: unknown,
+      ) => void;
+      callback(event);
+    }
+
+    it('carries the peer for a channel deletion', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onDeletedMessages((event) => received.push(event));
+      deliver(mock, {
+        deletedIds: [10, 11],
+        peer: new Api.PeerChannel({ channelId: bigInt('999') }),
+      });
+
+      expect(received).toEqual([{ messageIds: [10, 11], peerId: '999' }]);
+    });
+
+    it('omits the peer for a non-channel deletion', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onDeletedMessages((event) => received.push(event));
+      deliver(mock, { deletedIds: [5], peer: undefined });
+
+      expect(received).toEqual([{ messageIds: [5], peerId: undefined }]);
+    });
+
+    it('unsubscribe removes the event handler', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const unsubscribe = adapter.onDeletedMessages(() => undefined);
+      const registeredCb = mock.addEventHandler.mock.calls[0]?.[0];
+      unsubscribe();
+      expect(mock.removeEventHandler.mock.calls[0]?.[0]).toBe(registeredCb);
+    });
+  });
+
+  describe('onChatAction', () => {
+    /** Invokes the most recently registered event callback with `update`. */
+    function deliver(mock: MockClient, update: unknown): void {
+      const callback = mock.addEventHandler.mock.calls[0]?.[0] as (
+        u: unknown,
+      ) => void;
+      callback(update);
+    }
+
+    it('maps a private-chat typing update (peer == actor)', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserTyping, {
+          userId: bigInt('111'),
+          action: asEntity(Api.SendMessageTypingAction, {}),
+        }),
+      );
+
+      expect(received).toEqual([
+        { peerId: '111', userId: '111', action: 'typing' },
+      ]);
+    });
+
+    it('maps a channel typing update (peer == channel, actor == fromId)', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateChannelUserTyping, {
+          channelId: bigInt('222'),
+          fromId: new Api.PeerUser({ userId: bigInt('333') }),
+          action: asEntity(Api.SendMessageUploadPhotoAction, {}),
+        }),
+      );
+
+      expect(received).toEqual([
+        { peerId: '222', userId: '333', action: 'uploading-photo' },
+      ]);
+    });
+
+    it('maps an online status update', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserStatus, {
+          userId: bigInt('444'),
+          status: asEntity(Api.UserStatusOnline, {}),
+        }),
+      );
+
+      expect(received).toEqual([
+        { peerId: '444', userId: '444', action: 'online' },
+      ]);
+    });
+
+    it('reports an unmodelled typing action as "unknown"', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: Array<{ action: string }> = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserTyping, {
+          userId: bigInt('1'),
+          action: asEntity(Api.SendMessageHistoryImportAction, { progress: 0 }),
+        }),
+      );
+
+      expect(received[0]?.action).toBe('unknown');
+    });
+
+    it.each<[{ prototype: Api.TypeSendMessageAction }, string]>([
+      [Api.SendMessageCancelAction, 'cancel'],
+      [Api.SendMessageRecordVideoAction, 'recording-video'],
+      [Api.SendMessageUploadVideoAction, 'uploading-video'],
+      [Api.SendMessageRecordAudioAction, 'recording-voice'],
+      [Api.SendMessageUploadAudioAction, 'uploading-audio'],
+      [Api.SendMessageUploadDocumentAction, 'uploading-document'],
+      [Api.SendMessageRecordRoundAction, 'recording-round'],
+      [Api.SendMessageUploadRoundAction, 'uploading-round'],
+      [Api.SendMessageGeoLocationAction, 'picking-location'],
+      [Api.SendMessageChooseContactAction, 'choosing-contact'],
+      [Api.SendMessageChooseStickerAction, 'choosing-sticker'],
+      [Api.SendMessageGamePlayAction, 'playing-game'],
+    ])('maps the %p typing action to "%s"', (ActionCtor, expected) => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: Array<{ action: string }> = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserTyping, {
+          userId: bigInt('1'),
+          action: asEntity(ActionCtor, {}),
+        }),
+      );
+
+      expect(received[0]?.action).toBe(expected);
+    });
+
+    it('maps an offline status update', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: Array<{ action: string }> = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserStatus, {
+          userId: bigInt('6'),
+          status: asEntity(Api.UserStatusOffline, { wasOnline: 0 }),
+        }),
+      );
+
+      expect(received[0]?.action).toBe('offline');
+    });
+
+    it('maps a basic-group typing update (peer == chat, actor == fromId)', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateChatUserTyping, {
+          chatId: bigInt('888'),
+          fromId: new Api.PeerUser({ userId: bigInt('777') }),
+          action: asEntity(Api.SendMessageTypingAction, {}),
+        }),
+      );
+
+      expect(received).toEqual([
+        { peerId: '888', userId: '777', action: 'typing' },
+      ]);
+    });
+
+    it('drops a coarse "last seen recently" status update', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const received: unknown[] = [];
+
+      adapter.onChatAction((event) => received.push(event));
+      deliver(
+        mock,
+        asEntity(Api.UpdateUserStatus, {
+          userId: bigInt('5'),
+          status: asEntity(Api.UserStatusRecently, {}),
+        }),
+      );
+
+      expect(received).toHaveLength(0);
+    });
+
+    it('unsubscribe removes the event handler', () => {
+      const mock = createMockClient();
+      const adapter = createAdapter(mock);
+      const unsubscribe = adapter.onChatAction(() => undefined);
+      const registeredCb = mock.addEventHandler.mock.calls[0]?.[0];
+      unsubscribe();
+      expect(mock.removeEventHandler.mock.calls[0]?.[0]).toBe(registeredCb);
+    });
+  });
+
   describe('media operations', () => {
     it('flags non-empty media via hasMedia when mapping', async () => {
       const mock = createMockClient({
@@ -1255,6 +1570,15 @@ describe('GramJsClientAdapter', () => {
       });
     });
 
+    it('editMessage throws a precise TelegramClientError when GramJS returns no message', async () => {
+      const mock = createMockClient({
+        editMessage: jest.fn().mockResolvedValue(undefined),
+      });
+      await expect(
+        createAdapter(mock).editMessage('me', 12, 'edited'),
+      ).rejects.toBeInstanceOf(TelegramClientError);
+    });
+
     it('deleteMessages revokes by default and respects an explicit flag', async () => {
       const mock = createMockClient({
         deleteMessages: jest.fn().mockResolvedValue([]),
@@ -1288,6 +1612,21 @@ describe('GramJsClientAdapter', () => {
         messages: [21, 22],
         fromPeer: '@from',
       });
+    });
+
+    it('forwardMessages skips entries GramJS returns as undefined', async () => {
+      const mock = createMockClient({
+        forwardMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 21 }), undefined]),
+      });
+      const forwarded = await createAdapter(mock).forwardMessages(
+        '@to',
+        '@from',
+        [21, 22],
+      );
+      // ── Only the message that was actually forwarded is mapped. ──────────────
+      expect(forwarded.map((m) => m.id)).toEqual([21]);
     });
 
     it('markAsRead delegates to the client', async () => {
@@ -1596,6 +1935,20 @@ describe('GramJsClientAdapter', () => {
           createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
         ).rejects.toBeInstanceOf(TelegramClientError);
       });
+
+      it('rejects a negative offset with a TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: -1,
+            limit: 4,
+          }),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
     });
 
     describe('streamMedia', () => {
@@ -1614,6 +1967,17 @@ describe('GramJsClientAdapter', () => {
         for await (const chunk of await createAdapter(mock).streamMedia('me', 1))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('helloworld'));
+      });
+
+      it('rejects a negative offset with a TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+        });
+        await expect(
+          createAdapter(mock).streamMedia('me', 1, { offset: -5 }),
+        ).rejects.toBeInstanceOf(TelegramClientError);
       });
 
       it('trims the leading surplus and honours the byte limit', async () => {

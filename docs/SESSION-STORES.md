@@ -17,6 +17,7 @@ implementations.
   - [`FileSessionStore`](#filesessionstore)
   - [`RedisSessionStore`](#redissessionstore)
   - [`KeyValueSessionStore`](#keyvaluesessionstore)
+  - [`OrmSessionStore`](#ormsessionstore)
   - [`EncryptedSessionStore`](#encryptedsessionstore)
 - [Composing stores](#composing-stores)
 - [Environment Variables](#environment-variables)
@@ -47,6 +48,7 @@ src/lib/client/session/
   file-session-store.ts          # FileSessionStore       — 0o600 file
   redis-session-store.ts         # RedisSessionStore      — injected redis client
   key-value-session-store.ts     # KeyValueSessionStore   — any async get/set/delete
+  orm-session-store.ts           # OrmSessionStore        — SQL/ORM repository row
   encrypted-session-store.ts     # EncryptedSessionStore  — AES-256-GCM decorator
 ```
 
@@ -82,13 +84,19 @@ const store = new InMemorySessionStore(process.env.TG_SESSION);
 
 ### `FileSessionStore`
 
-Durable, file-backed. Writes the session atomically (temp file + rename) with
+Durable, file-backed. Writes the session atomically — to a per-call **unique**
+temp file (PID + random suffix) created with the exclusive-create flag (`wx`, so
+a planted symlink isn't followed), then `rename`d over the destination — with
 `0o600` permissions on POSIX systems.
 
 ```ts
 import { FileSessionStore } from 'nestjs-telegram';
 const store = new FileSessionStore('./.telegram.session');
 ```
+
+> **Windows note:** `chmod`/`0o600` is a POSIX concept and is a no-op on Windows.
+> There the session file inherits the directory's ACLs, so keep it in an
+> owner-only directory (or use [`EncryptedSessionStore`](#encryptedsessionstore)).
 
 ### `RedisSessionStore`
 
@@ -132,6 +140,65 @@ const store = new KeyValueSessionStore(new Keyv('postgres://…'), 'tg:session')
 | `store`           | `AsyncKeyValueStore` | —                             | Backend exposing `get/set/delete`. |
 | `key`             | `string`             | `nestjs-telegram:session`     | Key the session lives under.       |
 
+### `OrmSessionStore`
+
+A concrete SQL/ORM-backed store, built on `KeyValueSessionStore`, for apps that
+already run a relational database. It persists the session as a single keyed row,
+so you don't have to hand-write a `get/set/delete` adapter. The ORM is an
+**optional peer** — the library imports no ORM package; you pass a small
+structural `OrmSessionRepository` (`findByKey` / `upsert` / `deleteByKey`) that
+your ORM satisfies directly or through a few-line wrapper.
+
+Back it with a two-column table:
+
+```sql
+CREATE TABLE telegram_session (
+  "key"   VARCHAR(255) PRIMARY KEY,
+  "value" TEXT NOT NULL
+);
+```
+
+**TypeORM** — wrap a `Repository<SessionEntity>` (entity columns `key`, `value`):
+
+```ts
+import { OrmSessionStore } from 'nestjs-telegram';
+
+const repo = dataSource.getRepository(SessionEntity);
+const store = new OrmSessionStore({
+  findByKey: (key) => repo.findOne({ where: { key } }),
+  upsert: (row) => repo.save(row), // save() inserts or updates by primary key
+  deleteByKey: (key) => repo.delete({ key }),
+});
+```
+
+**Prisma** — wrap a model delegate:
+
+```ts
+const store = new OrmSessionStore({
+  findByKey: (key) => prisma.telegramSession.findUnique({ where: { key } }),
+  upsert: (row) =>
+    prisma.telegramSession.upsert({
+      where: { key: row.key },
+      create: row,
+      update: { value: row.value },
+    }),
+  deleteByKey: (key) =>
+    prisma.telegramSession.delete({ where: { key } }).catch(() => undefined),
+});
+```
+
+| Constructor param | Type                  | Default                   | Notes                                              |
+| ----------------- | --------------------- | ------------------------- | -------------------------------------------------- |
+| `repository`      | `OrmSessionRepository`| —                         | `findByKey` / `upsert` / `deleteByKey` over a row. |
+| `key`             | `string`              | `nestjs-telegram:session` | Row key; use a **per-account** value for multi-account (see below). |
+
+**Multi-account.** Give each account its own store instance with a distinct key —
+`new OrmSessionStore(repo, 'nestjs-telegram:session:ops')` — and the rows share
+one table without colliding.
+
+**Security.** A plain column holds the session in plaintext; wrap it in an
+`EncryptedSessionStore` (below) when the database or its backups could be exposed.
+
 ### `EncryptedSessionStore`
 
 A **decorator** that encrypts the session with AES-256-GCM before delegating to
@@ -169,6 +236,7 @@ whichever backend you chose:
 new EncryptedSessionStore(new FileSessionStore('./.telegram.session'), key);
 new EncryptedSessionStore(new RedisSessionStore(redis), key);
 new EncryptedSessionStore(new KeyValueSessionStore(keyv), key);
+new EncryptedSessionStore(new OrmSessionStore(repo), key);
 ```
 
 ## Environment Variables

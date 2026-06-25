@@ -178,6 +178,27 @@ describe('webhook controller (e2e)', () => {
     expect(fake.handleUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it('mounts the controller at the normalized path (trailing/duplicate slashes)', async () => {
+    const fake = createFakeBot();
+    const port = await listen(
+      [
+        TelegramBotModule.forRoot({
+          token: '123:abc',
+          launch: false,
+          // ── Messy path: leading-less, duplicate + trailing slash. ────────────
+          webhook: { path: 'telegram//webhook/', secretToken: secret },
+        }),
+      ],
+      [{ token: TELEGRAM_BOT, bot: fake.bot }],
+    );
+
+    // ── The route is mounted at the canonical '/telegram/webhook'. ────────────
+    const response = await post(port, '/telegram/webhook', secret);
+
+    expect(response.status).toBe(200);
+    expect(fake.handleUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('registers the webhook on bootstrap when opted in', async () => {
     const fake = createFakeBot();
     await listen(

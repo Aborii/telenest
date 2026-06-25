@@ -95,7 +95,10 @@ import {
 } from './webhook/telegram-webhook.constants';
 import { createTelegramWebhookController } from './webhook/telegram-webhook.controller';
 import { TelegramWebhookGuard } from './webhook/telegram-webhook.guard';
-import { assertValidWebhookOptions } from './webhook/telegram-webhook.helpers';
+import {
+  assertValidWebhookOptions,
+  normalizeWebhookPath,
+} from './webhook/telegram-webhook.helpers';
 import type { TelegramBotWebhookOptions } from './webhook/telegram-webhook.options';
 import { TelegramWebhookRegistrar } from './webhook/telegram-webhook.registrar';
 
@@ -291,15 +294,21 @@ function withWebhook(
 ): DynamicModule {
   // ── Fail fast at registration rather than as a confusing runtime error. ─────
   assertValidWebhookOptions(webhook);
+  // ── Canonicalize the path once so the controller route and the URL registered
+  //    with Telegram (joinWebhookUrl, via the options below) cannot diverge. ───
+  const normalized: TelegramBotWebhookOptions = {
+    ...webhook,
+    path: normalizeWebhookPath(webhook.path),
+  };
   return {
     ...dynamicModule,
     controllers: [
       ...(dynamicModule.controllers ?? []),
-      createTelegramWebhookController(webhook.path),
+      createTelegramWebhookController(normalized.path),
     ],
     providers: [
       ...(dynamicModule.providers ?? []),
-      { provide: TELEGRAM_WEBHOOK_OPTIONS, useValue: webhook },
+      { provide: TELEGRAM_WEBHOOK_OPTIONS, useValue: normalized },
       // ── Stable alias so the controller/registrar inject one token whether
       //    this is the default bot (TELEGRAM_BOT) or a named bot. ─────────────
       { provide: TELEGRAM_WEBHOOK_BOT, useExisting: getBotInstanceToken(name) },

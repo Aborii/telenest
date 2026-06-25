@@ -51,6 +51,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - `@InlineQuery` / `@ChosenInlineResult`
   - `InlineQueryResultBuilder` + `answerInlineQuery`
 
+- **[PAYMENTS.md](./PAYMENTS.md)**
+  - Telegram Payments checkout flow
+  - `sendInvoice` / `createInvoiceLink` / `answerShippingQuery` / `answerPreCheckoutQuery`
+  - `@PreCheckoutQuery` / `@ShippingQuery` / `@SuccessfulPayment` (+ data decorators)
+  - Telegram Stars (XTR)
+
 - **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
   - Guards, interceptors, exception filters
   - `@UseTelegramGuards` / `@UseTelegramInterceptors` / `@UseTelegramFilters`
@@ -229,6 +235,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Multiple named bots         | [MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)                                              |
 | Callback queries            | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
 | Incoming messages (User)    | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
+| Payments / invoices         | [PAYMENTS.md](./PAYMENTS.md)                                                        |
 | Multiple user accounts      | [MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)                                      |
 
 ### Authentication

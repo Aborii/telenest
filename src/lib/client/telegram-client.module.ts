@@ -152,8 +152,10 @@ function createClientProviders(name: string): Provider[] {
       useFactory: (
         client: IGramClient,
         metrics: TelegramMetricsRecorder,
-      ): TelegramUserService => new TelegramUserService(client, metrics),
-      inject: [clientToken, metricsToken],
+        options: TelegramClientModuleOptions,
+      ): TelegramUserService =>
+        new TelegramUserService(client, metrics, options.replayBufferSize),
+      inject: [clientToken, metricsToken, TELEGRAM_CLIENT_OPTIONS],
     },
     // ── Health indicator probing connection/authorization for terminus. ───────
     {

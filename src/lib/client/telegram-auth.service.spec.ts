@@ -67,6 +67,9 @@ function createFakeClient(
     pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue('SESSION-STRING'),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
+    onEditedMessage: jest.fn().mockReturnValue(() => undefined),
+    onDeletedMessages: jest.fn().mockReturnValue(() => undefined),
+    onChatAction: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
   return Object.assign(base, overrides);
 }

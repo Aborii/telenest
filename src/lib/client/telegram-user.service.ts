@@ -33,7 +33,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
+import { Observable, ReplaySubject, Subject } from 'rxjs';
 
 import {
   NOOP_TELEGRAM_METRICS,
@@ -42,7 +42,9 @@ import {
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type {
+  GramChatActionEvent,
   GramChatInfo,
+  GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
   GramGetDialogsParams,
@@ -68,9 +70,17 @@ import {
  * Facade for acting as the logged-in account over MTProto.
  *
  * Implements `OnModuleInit`/`OnModuleDestroy`: on init it subscribes to the
- * client's inbound-message events and fans them out through
- * {@link TelegramUserService.updates$}; on destroy it tears the subscription
- * down and completes the stream.
+ * client's inbound update events (new / edited / deleted messages and chat
+ * actions) and fans each out through its matching stream
+ * ({@link TelegramUserService.updates$}, {@link TelegramUserService.editedMessages$},
+ * {@link TelegramUserService.deletedMessages$}, {@link TelegramUserService.chatActions$});
+ * on destroy it tears the subscriptions down and completes every stream.
+ *
+ * **Catch-up buffer.** When the account is configured with a `replayBufferSize`
+ * greater than zero, each stream is backed by a `ReplaySubject` of that size, so
+ * a subscriber added *after* bootstrap still receives up to that many of the
+ * most recent events. With no buffer (the default) the streams are hot:
+ * late subscribers only see events from their subscription point onward.
  */
 @Injectable()
 export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
@@ -78,60 +88,142 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
   private readonly _logger = new Logger(TelegramUserService.name);
 
   /** Multicast source backing {@link updates$}. */
-  private readonly _messages = new Subject<GramMessage>();
+  private readonly _messages: Subject<GramMessage>;
 
-  /** Unsubscribe handle returned by `client.onNewMessage`. */
-  private _unsubscribe?: () => void;
+  /** Multicast source backing {@link editedMessages$}. */
+  private readonly _edited: Subject<GramMessage>;
+
+  /** Multicast source backing {@link deletedMessages$}. */
+  private readonly _deleted: Subject<GramDeletedMessages>;
+
+  /** Multicast source backing {@link chatActions$}. */
+  private readonly _chatActions: Subject<GramChatActionEvent>;
+
+  /** Unsubscribe handles for every client event subscription opened on init. */
+  private readonly _unsubscribers: Array<() => void> = [];
 
   /** Metrics sink for this account's counters; no-op recorder when none wired. */
   private readonly _metrics: TelegramMetricsRecorder;
 
   /**
-   * Hot, multicast stream of inbound messages received by the logged-in
-   * account. Subscribers added later only see messages from that point on.
+   * Per-stream catch-up depth (`0` = none). When positive, each stream replays
+   * up to this many recent events to a late subscriber.
    */
-  public readonly updates$: Observable<GramMessage> =
-    this._messages.asObservable();
+  private readonly _replayBufferSize: number;
+
+  /**
+   * Multicast stream of inbound **new** messages received by the account.
+   * Hot by default; replays recent messages to late subscribers when the
+   * account is configured with a `replayBufferSize`.
+   */
+  public readonly updates$: Observable<GramMessage>;
+
+  /**
+   * Multicast stream of **edited** messages. Each emission is the message in its
+   * edited state (its `text` reflects the new content). Honors the same
+   * catch-up buffer as {@link updates$}.
+   */
+  public readonly editedMessages$: Observable<GramMessage>;
+
+  /**
+   * Multicast stream of **deletion** events. `peerId` is populated only for
+   * channel/supergroup deletions (Telegram omits it elsewhere). Honors the same
+   * catch-up buffer as {@link updates$}.
+   */
+  public readonly deletedMessages$: Observable<GramDeletedMessages>;
+
+  /**
+   * Multicast stream of **chat-action** events (typing, recording,
+   * online/offline, …). Honors the same catch-up buffer as {@link updates$}.
+   */
+  public readonly chatActions$: Observable<GramChatActionEvent>;
 
   /**
    * @param client - The MTProto client abstraction.
    * @param metrics - Optional metrics sink. Provided by the module so the
    *   account's `messagesSent` / `messagesReceived` counters are recorded;
    *   omitted in direct unit construction, where it falls back to a no-op.
+   * @param replayBufferSize - Optional catch-up depth: when greater than zero,
+   *   each update stream replays up to this many recent events to subscribers
+   *   added after bootstrap. Defaults to `0` (hot streams, no replay).
    */
   public constructor(
     @Inject(TELEGRAM_GRAM_CLIENT) private readonly client: IGramClient,
     @Optional()
     @Inject(TELEGRAM_CLIENT_METRICS)
     metrics?: TelegramMetricsRecorder,
+    // ── `@Optional()` so direct-DI construction (the module builds this via a
+    //    factory that passes the size explicitly) resolves it to `undefined`
+    //    rather than failing to find a `Number` provider; the default applies. ─
+    @Optional() replayBufferSize = 0,
   ) {
     this._metrics = metrics ?? NOOP_TELEGRAM_METRICS;
+    // ── Clamp to a non-negative integer: a bad value disables replay rather
+    //    than corrupting the ReplaySubject's buffer size. ─────────────────────
+    this._replayBufferSize =
+      Number.isFinite(replayBufferSize) && replayBufferSize > 0
+        ? Math.floor(replayBufferSize)
+        : 0;
+
+    // ── Subjects are built here (not as field initializers) so they can read
+    //    the constructor-assigned buffer size. ────────────────────────────────
+    this._messages = this.createSubject<GramMessage>();
+    this._edited = this.createSubject<GramMessage>();
+    this._deleted = this.createSubject<GramDeletedMessages>();
+    this._chatActions = this.createSubject<GramChatActionEvent>();
+
+    this.updates$ = this._messages.asObservable();
+    this.editedMessages$ = this._edited.asObservable();
+    this.deletedMessages$ = this._deleted.asObservable();
+    this.chatActions$ = this._chatActions.asObservable();
   }
 
   /**
-   * Begins fanning the client's new-message events into {@link updates$}.
+   * Builds a stream source honoring the configured catch-up buffer: a
+   * `ReplaySubject` of {@link _replayBufferSize} when positive, else a plain hot
+   * `Subject`.
+   *
+   * @returns A fresh multicast subject for one update stream.
+   * @throws Never.
+   */
+  private createSubject<T>(): Subject<T> {
+    return this._replayBufferSize > 0
+      ? new ReplaySubject<T>(this._replayBufferSize)
+      : new Subject<T>();
+  }
+
+  /**
+   * Subscribes to every inbound client event and fans each into its stream.
    *
    * @returns Nothing.
    * @throws Never.
    */
   public onModuleInit(): void {
-    this._unsubscribe = this.client.onNewMessage((message) => {
-      this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_RECEIVED);
-      this._messages.next(message);
-    });
-    this._logger.log('Subscribed to inbound account messages.');
+    this._unsubscribers.push(
+      this.client.onNewMessage((message) => {
+        this._metrics.increment(TELEGRAM_COUNTERS.MESSAGES_RECEIVED);
+        this._messages.next(message);
+      }),
+      this.client.onEditedMessage((message) => this._edited.next(message)),
+      this.client.onDeletedMessages((event) => this._deleted.next(event)),
+      this.client.onChatAction((event) => this._chatActions.next(event)),
+    );
+    this._logger.log('Subscribed to inbound account updates.');
   }
 
   /**
-   * Stops forwarding events and completes the stream.
+   * Stops forwarding events and completes every stream.
    *
    * @returns Nothing.
    * @throws Never.
    */
   public onModuleDestroy(): void {
-    this._unsubscribe?.();
-    this._unsubscribe = undefined;
+    for (const unsubscribe of this._unsubscribers) unsubscribe();
+    this._unsubscribers.length = 0;
     this._messages.complete();
+    this._edited.complete();
+    this._deleted.complete();
+    this._chatActions.complete();
   }
 
   /**

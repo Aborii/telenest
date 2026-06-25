@@ -133,6 +133,9 @@ export function createMockGramClient(
     pinMessage: jest.fn().mockResolvedValue(undefined),
     exportSession: jest.fn().mockReturnValue('TEST_SESSION'),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
+    onEditedMessage: jest.fn().mockReturnValue(() => undefined),
+    onDeletedMessages: jest.fn().mockReturnValue(() => undefined),
+    onChatAction: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
 
   return Object.assign(base, overrides);

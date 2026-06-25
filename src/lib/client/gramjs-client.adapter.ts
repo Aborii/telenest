@@ -20,7 +20,15 @@
  */
 
 import { Api, errors, password, sessions, TelegramClient } from 'telegram';
-import { NewMessage, type NewMessageEvent } from 'telegram/events';
+import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events';
+import {
+  EditedMessage,
+  type EditedMessageEvent,
+} from 'telegram/events/EditedMessage';
+import {
+  DeletedMessage,
+  type DeletedMessageEvent,
+} from 'telegram/events/DeletedMessage';
 import type { Dialog } from 'telegram/tl/custom/dialog';
 
 // ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
@@ -36,10 +44,14 @@ import {
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import {
+  GRAM_CHAT_ACTIONS,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
+  type GramChatAction,
+  type GramChatActionEvent,
   type GramChatInfo,
+  type GramDeletedMessages,
   type GramDeleteMessagesParams,
   type GramDialog,
   type GramDialogType,
@@ -827,6 +839,59 @@ export class GramJsClientAdapter implements IGramClient {
     };
   }
 
+  /** {@inheritDoc IGramClient.onEditedMessage} */
+  public onEditedMessage(handler: (message: GramMessage) => void): () => void {
+    const builder = new EditedMessage({});
+    const callback = (event: EditedMessageEvent): void => {
+      handler(this.mapMessage(event.message));
+    };
+    this.client.addEventHandler(callback, builder);
+    return () => {
+      this.client.removeEventHandler(callback, builder);
+    };
+  }
+
+  /** {@inheritDoc IGramClient.onDeletedMessages} */
+  public onDeletedMessages(
+    handler: (event: GramDeletedMessages) => void,
+  ): () => void {
+    const builder = new DeletedMessage({});
+    const callback = (event: DeletedMessageEvent): void => {
+      handler(this.mapDeletedMessages(event));
+    };
+    this.client.addEventHandler(callback, builder);
+    return () => {
+      this.client.removeEventHandler(callback, builder);
+    };
+  }
+
+  /** {@inheritDoc IGramClient.onChatAction} */
+  public onChatAction(
+    handler: (event: GramChatActionEvent) => void,
+  ): () => void {
+    // ── Chat actions have no dedicated GramJS event builder; they arrive as raw
+    //    updates. Filter to just the typing/presence update types so the handler
+    //    is not woken for every unrelated update. ─────────────────────────────
+    const builder = new Raw({
+      types: [
+        Api.UpdateUserTyping,
+        Api.UpdateChatUserTyping,
+        Api.UpdateChannelUserTyping,
+        Api.UpdateUserStatus,
+      ],
+    });
+    const callback = (update: Api.TypeUpdate): void => {
+      const event = this.mapChatAction(update);
+      // ── An update we don't model (e.g. an unrecognized status) maps to
+      //    undefined; skip it rather than surface a meaningless event. ─────────
+      if (event) handler(event);
+    };
+    this.client.addEventHandler(callback, builder);
+    return () => {
+      this.client.removeEventHandler(callback, builder);
+    };
+  }
+
   // ── Mapping helpers (Api.* → library DTOs) ─────────────────────────────────
 
   /**
@@ -1111,6 +1176,139 @@ export class GramJsClientAdapter implements IGramClient {
     if (peer instanceof Api.PeerChat) return peer.chatId.toString();
     if (peer instanceof Api.PeerChannel) return peer.channelId.toString();
     return '';
+  }
+
+  /**
+   * Maps a GramJS deleted-message event into a {@link GramDeletedMessages}.
+   *
+   * GramJS only carries the originating peer for channel/supergroup deletions
+   * (`UpdateDeleteChannelMessages` → an `Api.PeerChannel`); private-chat and
+   * small-group deletions arrive without one, so `peerId` is left `undefined`.
+   *
+   * @param event - The GramJS `DeletedMessageEvent`.
+   * @returns The normalized deletion DTO.
+   * @throws Never.
+   */
+  private mapDeletedMessages(
+    event: DeletedMessageEvent,
+  ): GramDeletedMessages {
+    const peer = event.peer;
+    return {
+      messageIds: event.deletedIds,
+      peerId:
+        peer instanceof Api.PeerChannel
+          ? peer.channelId.toString()
+          : undefined,
+    };
+  }
+
+  /**
+   * Maps a raw typing/presence update into a {@link GramChatActionEvent}.
+   *
+   * @param update - The raw `Api.TypeUpdate` delivered by the `Raw` event.
+   * @returns The normalized event, or `undefined` for an update kind (or user
+   *   status) this library does not surface.
+   * @throws Never.
+   */
+  private mapChatAction(
+    update: Api.TypeUpdate,
+  ): GramChatActionEvent | undefined {
+    // ── Private chat: the acting user is also the peer. ──────────────────────
+    if (update instanceof Api.UpdateUserTyping)
+      return {
+        peerId: update.userId.toString(),
+        userId: update.userId.toString(),
+        action: this.mapSendMessageAction(update.action),
+      };
+
+    // ── Basic group: peer is the chat; the actor is `fromId`. ────────────────
+    if (update instanceof Api.UpdateChatUserTyping)
+      return {
+        peerId: update.chatId.toString(),
+        userId: this.peerToString(update.fromId) || undefined,
+        action: this.mapSendMessageAction(update.action),
+      };
+
+    // ── Channel/supergroup: peer is the channel; the actor is `fromId`. ──────
+    if (update instanceof Api.UpdateChannelUserTyping)
+      return {
+        peerId: update.channelId.toString(),
+        userId: this.peerToString(update.fromId) || undefined,
+        action: this.mapSendMessageAction(update.action),
+      };
+
+    // ── Presence: only the explicit online/offline transitions are surfaced;
+    //    the coarse "last seen recently/week/month" statuses are dropped. ─────
+    if (update instanceof Api.UpdateUserStatus) {
+      const action = this.mapUserStatus(update.status);
+      if (!action) return undefined;
+      return {
+        peerId: update.userId.toString(),
+        userId: update.userId.toString(),
+        action,
+      };
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Maps a GramJS `SendMessageAction` into a {@link GramChatAction}.
+   *
+   * @param action - The action carried by a typing update.
+   * @returns The matching action kind, or {@link GRAM_CHAT_ACTIONS.UNKNOWN}.
+   * @throws Never.
+   */
+  private mapSendMessageAction(
+    action: Api.TypeSendMessageAction,
+  ): GramChatAction {
+    if (action instanceof Api.SendMessageTypingAction)
+      return GRAM_CHAT_ACTIONS.TYPING;
+    if (action instanceof Api.SendMessageCancelAction)
+      return GRAM_CHAT_ACTIONS.CANCEL;
+    if (action instanceof Api.SendMessageRecordVideoAction)
+      return GRAM_CHAT_ACTIONS.RECORDING_VIDEO;
+    if (action instanceof Api.SendMessageUploadVideoAction)
+      return GRAM_CHAT_ACTIONS.UPLOADING_VIDEO;
+    if (action instanceof Api.SendMessageRecordAudioAction)
+      return GRAM_CHAT_ACTIONS.RECORDING_VOICE;
+    if (action instanceof Api.SendMessageUploadAudioAction)
+      return GRAM_CHAT_ACTIONS.UPLOADING_AUDIO;
+    if (action instanceof Api.SendMessageUploadPhotoAction)
+      return GRAM_CHAT_ACTIONS.UPLOADING_PHOTO;
+    if (action instanceof Api.SendMessageUploadDocumentAction)
+      return GRAM_CHAT_ACTIONS.UPLOADING_DOCUMENT;
+    if (action instanceof Api.SendMessageRecordRoundAction)
+      return GRAM_CHAT_ACTIONS.RECORDING_ROUND;
+    if (action instanceof Api.SendMessageUploadRoundAction)
+      return GRAM_CHAT_ACTIONS.UPLOADING_ROUND;
+    if (action instanceof Api.SendMessageGeoLocationAction)
+      return GRAM_CHAT_ACTIONS.PICKING_LOCATION;
+    if (action instanceof Api.SendMessageChooseContactAction)
+      return GRAM_CHAT_ACTIONS.CHOOSING_CONTACT;
+    if (action instanceof Api.SendMessageChooseStickerAction)
+      return GRAM_CHAT_ACTIONS.CHOOSING_STICKER;
+    if (action instanceof Api.SendMessageGamePlayAction)
+      return GRAM_CHAT_ACTIONS.PLAYING_GAME;
+    return GRAM_CHAT_ACTIONS.UNKNOWN;
+  }
+
+  /**
+   * Maps a GramJS `UserStatus` into the matching presence
+   * {@link GramChatAction}, or `undefined` for the coarse "last seen" statuses
+   * that carry no precise online/offline edge.
+   *
+   * @param status - The user status from an `UpdateUserStatus`.
+   * @returns `ONLINE` / `OFFLINE`, or `undefined` to drop the update.
+   * @throws Never.
+   */
+  private mapUserStatus(
+    status: Api.TypeUserStatus,
+  ): GramChatAction | undefined {
+    if (status instanceof Api.UserStatusOnline) return GRAM_CHAT_ACTIONS.ONLINE;
+    if (status instanceof Api.UserStatusOffline)
+      return GRAM_CHAT_ACTIONS.OFFLINE;
+    return undefined;
   }
 
   // ── Error mapping ──────────────────────────────────────────────────────────

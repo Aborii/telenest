@@ -57,6 +57,9 @@ function fakeClient(
     pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue(''),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
+    onEditedMessage: jest.fn().mockReturnValue(() => undefined),
+    onDeletedMessages: jest.fn().mockReturnValue(() => undefined),
+    onChatAction: jest.fn().mockReturnValue(() => undefined),
   };
 }
 

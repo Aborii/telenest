@@ -72,10 +72,14 @@ export class KeyValueSessionStore implements SessionStore {
    * @param store - The async KV backend exposing {@link AsyncKeyValueStore}.
    * @param key - The key to store the session under. Defaults to
    *   {@link DEFAULT_KEY_VALUE_SESSION_KEY}.
+   * @param backendLabel - Human-readable backend name used in error messages, so
+   *   a subclass (e.g. an ORM store) surfaces failures with its own wording.
+   *   Defaults to `'key/value store'`.
    */
   public constructor(
     private readonly store: AsyncKeyValueStore,
     private readonly key: string = DEFAULT_KEY_VALUE_SESSION_KEY,
+    private readonly backendLabel: string = 'key/value store',
   ) {}
 
   /**
@@ -92,7 +96,7 @@ export class KeyValueSessionStore implements SessionStore {
         : undefined;
     } catch (error) {
       throw new TelegramSessionError(
-        `Failed to read session from key/value store key "${this.key}".`,
+        `Failed to read session from ${this.backendLabel} key "${this.key}".`,
         error,
       );
     }
@@ -110,7 +114,7 @@ export class KeyValueSessionStore implements SessionStore {
       await this.store.set(this.key, session);
     } catch (error) {
       throw new TelegramSessionError(
-        `Failed to write session to key/value store key "${this.key}".`,
+        `Failed to write session to ${this.backendLabel} key "${this.key}".`,
         error,
       );
     }
@@ -127,7 +131,7 @@ export class KeyValueSessionStore implements SessionStore {
       await this.store.delete(this.key);
     } catch (error) {
       throw new TelegramSessionError(
-        `Failed to delete session from key/value store key "${this.key}".`,
+        `Failed to delete session from ${this.backendLabel} key "${this.key}".`,
         error,
       );
     }

@@ -42,6 +42,7 @@ export * from './session/encrypted-session-store';
 export * from './session/file-session-store';
 export * from './session/key-value-session-store';
 export * from './session/memory-session-store';
+export * from './session/orm-session-store';
 export * from './session/redis-session-store';
 export * from './session/session-store.interface';
 export * from './updates';

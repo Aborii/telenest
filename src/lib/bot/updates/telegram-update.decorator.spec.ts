@@ -19,7 +19,10 @@ import {
   Help,
   InlineQuery,
   On,
+  PreCheckoutQuery,
+  ShippingQuery,
   Start,
+  SuccessfulPayment,
   TelegramUpdate,
   Use,
 } from './telegram-update.decorator';
@@ -130,6 +133,25 @@ describe('method decorators', () => {
     ]);
     expect(bindingsOf(p, 'onChosen')).toEqual([
       { kind: BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT },
+    ]);
+  });
+
+  it('records the payment update decorators with no trigger', () => {
+    class Payments {
+      @PreCheckoutQuery() onPreCheckout(): void {}
+      @ShippingQuery() onShipping(): void {}
+      @SuccessfulPayment() onPaid(): void {}
+    }
+    const p = Payments.prototype;
+
+    expect(bindingsOf(p, 'onPreCheckout')).toEqual([
+      { kind: BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY },
+    ]);
+    expect(bindingsOf(p, 'onShipping')).toEqual([
+      { kind: BOT_UPDATE_KINDS.SHIPPING_QUERY },
+    ]);
+    expect(bindingsOf(p, 'onPaid')).toEqual([
+      { kind: BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT },
     ]);
   });
 

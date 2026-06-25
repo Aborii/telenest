@@ -95,6 +95,26 @@ export const BOT_UPDATE_KINDS = {
    * enabled via @BotFather).
    */
   CHOSEN_INLINE_RESULT: 'chosenInlineResult',
+  /**
+   * Binds to `bot.on('pre_checkout_query', ...)` — the final confirmation a bot
+   * must answer (within 10s, via `answerPreCheckoutQuery`) before a payment is
+   * charged. See {@link import('../telegram-update.decorator').PreCheckoutQuery}.
+   */
+  PRE_CHECKOUT_QUERY: 'preCheckoutQuery',
+  /**
+   * Binds to `bot.on('shipping_query', ...)` — only delivered for invoices sent
+   * with `is_flexible: true`; the bot replies with shipping options via
+   * `answerShippingQuery`. See
+   * {@link import('../telegram-update.decorator').ShippingQuery}.
+   */
+  SHIPPING_QUERY: 'shippingQuery',
+  /**
+   * Binds to the `successful_payment` **message subtype** (via Telegraf's
+   * `message('successful_payment')` filter) — the post-payment confirmation
+   * carrying the charge ids used for fulfilment and refunds. See
+   * {@link import('../telegram-update.decorator').SuccessfulPayment}.
+   */
+  SUCCESSFUL_PAYMENT: 'successfulPayment',
 } as const;
 
 /** A single update-binding kind (the value side of {@link BOT_UPDATE_KINDS}). */
@@ -176,7 +196,10 @@ export type UpdateBinding =
        */
       readonly trigger?: Parameters<Telegraf['inlineQuery']>[0];
     }
-  | { readonly kind: typeof BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT };
+  | { readonly kind: typeof BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT }
+  | { readonly kind: typeof BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY }
+  | { readonly kind: typeof BOT_UPDATE_KINDS.SHIPPING_QUERY }
+  | { readonly kind: typeof BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT };
 
 // ── Parameter injection ─────────────────────────────────────────────────────
 
@@ -210,6 +233,21 @@ export const PARAM_KINDS = {
    * `undefined` when the update is not an inline query (`@InlineQueryOffset()`).
    */
   INLINE_QUERY_OFFSET: 'inline_query_offset',
+  /**
+   * Injects the pre-checkout query (`ctx.preCheckoutQuery`), or `undefined` when
+   * the update is not a pre-checkout query (`@PreCheckoutData()`).
+   */
+  PRE_CHECKOUT_QUERY: 'pre_checkout_query',
+  /**
+   * Injects the shipping query (`ctx.shippingQuery`), or `undefined` when the
+   * update is not a shipping query (`@ShippingData()`).
+   */
+  SHIPPING_QUERY: 'shipping_query',
+  /**
+   * Injects the successful-payment payload (`ctx.message.successful_payment`), or
+   * `undefined` when the message carries none (`@SuccessfulPaymentData()`).
+   */
+  SUCCESSFUL_PAYMENT: 'successful_payment',
 } as const;
 
 /** A single parameter-injection kind (the value side of {@link PARAM_KINDS}). */

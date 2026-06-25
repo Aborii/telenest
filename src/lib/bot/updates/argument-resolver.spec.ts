@@ -19,6 +19,9 @@ function fakeContext(partial: {
   from?: { id: number };
   callbackQuery?: { data: string } | { game_short_name: string };
   inlineQuery?: { query: string; offset: string };
+  preCheckoutQuery?: { id: string; invoice_payload: string };
+  shippingQuery?: { id: string; invoice_payload: string };
+  message?: { successful_payment?: { invoice_payload: string } };
 }): Context {
   return partial as unknown as Context;
 }
@@ -120,6 +123,45 @@ describe('resolveHandlerArguments', () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it('injects the pre-checkout and shipping queries, undefined when absent', () => {
+    const pre = fakeContext({
+      preCheckoutQuery: { id: 'pcq', invoice_payload: 'sku-1' },
+    });
+    const ship = fakeContext({
+      shippingQuery: { id: 'shq', invoice_payload: 'sku-1' },
+    });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.PRE_CHECKOUT_QUERY },
+      { index: 1, kind: PARAM_KINDS.SHIPPING_QUERY },
+    ];
+
+    expect(resolveHandlerArguments(pre, params)).toEqual([
+      { id: 'pcq', invoice_payload: 'sku-1' },
+      undefined,
+    ]);
+    expect(resolveHandlerArguments(ship, params)).toEqual([
+      undefined,
+      { id: 'shq', invoice_payload: 'sku-1' },
+    ]);
+  });
+
+  it('injects the successful_payment payload, undefined off non-payment messages', () => {
+    const paid = fakeContext({
+      message: { successful_payment: { invoice_payload: 'sku-1' } },
+    });
+    const plainMessage = fakeContext({ message: {} });
+    const notMessage = fakeContext({ text: 'hi' });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.SUCCESSFUL_PAYMENT },
+    ];
+
+    expect(resolveHandlerArguments(paid, params)).toEqual([
+      { invoice_payload: 'sku-1' },
+    ]);
+    expect(resolveHandlerArguments(plainMessage, params)).toEqual([undefined]);
+    expect(resolveHandlerArguments(notMessage, params)).toEqual([undefined]);
   });
 
   it('yields undefined for absent text/sender', () => {

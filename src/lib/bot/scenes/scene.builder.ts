@@ -27,6 +27,7 @@
  */
 
 import { Composer, Scenes, type Context } from 'telegraf';
+import { message } from 'telegraf/filters';
 
 import { TelegramConfigError } from '../../common';
 import {
@@ -95,24 +96,46 @@ interface WizardStepEntry {
 }
 
 /**
+ * Decorator display names for the chatless update kinds that cannot be bound
+ * inside a scene, keyed by their {@link BOT_UPDATE_KINDS} value. Used to build a
+ * precise `@CallbackAction`-style error message without a nested ternary.
+ */
+const SCENE_UNSUPPORTED_DECORATOR_NAMES: Readonly<
+  Record<
+    | typeof BOT_UPDATE_KINDS.INLINE_QUERY
+    | typeof BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT
+    | typeof BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY
+    | typeof BOT_UPDATE_KINDS.SHIPPING_QUERY,
+    string
+  >
+> = {
+  [BOT_UPDATE_KINDS.INLINE_QUERY]: 'InlineQuery',
+  [BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT]: 'ChosenInlineResult',
+  [BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY]: 'PreCheckoutQuery',
+  [BOT_UPDATE_KINDS.SHIPPING_QUERY]: 'ShippingQuery',
+};
+
+/**
  * Binds one reused message {@link UpdateBinding} onto a scene's `Composer`. Both
  * `Telegraf` and `Scenes.BaseScene` extend `Composer`, so the same `kind →
  * method` mapping the top-level registrar uses applies verbatim inside a scene.
  * Matched handlers are terminal; `@Use()` continues the chain with `next`.
  *
- * Inline-mode bindings (`@InlineQuery`/`@ChosenInlineResult`) are rejected: an
- * inline update is not tied to a chat session, so the scene `Stage` never routes
- * it to an active scene — binding one here would be dead code. `@CallbackAction`
- * is rejected too: its payload-schema validation lives in the top-level
- * registrar's dispatch, which a scene runner cannot reach. Declare those on a
- * top-level `@TelegramUpdate` provider instead.
+ * A `@SuccessfulPayment` handler is supported — its update is a chat-bound
+ * service message that can reach an active scene. Chatless updates are rejected:
+ * inline-mode bindings (`@InlineQuery`/`@ChosenInlineResult`) and the payment
+ * queries (`@PreCheckoutQuery`/`@ShippingQuery`) are not tied to a chat session,
+ * so the scene `Stage` never routes them to an active scene — binding one here
+ * would be dead code. `@CallbackAction` is rejected too: its payload-schema
+ * validation lives in the top-level registrar's dispatch, which a scene runner
+ * cannot reach. Declare those on a top-level `@TelegramUpdate` provider instead.
  *
  * @param composer - The scene (a `Composer`) to register the handler on.
  * @param binding - The message binding to apply.
  * @param run - The resolved runner to invoke when the binding fires.
  * @param label - The decorated method's identifier, for error messages.
  * @returns Nothing.
- * @throws {TelegramConfigError} If `binding` is an inline-mode or
+ * @throws {TelegramConfigError} If `binding` is an inline-mode, payment-query, or
  *   `@CallbackAction` kind (unsupported inside a scene).
  */
 function bindMessageHandler(
@@ -158,17 +181,22 @@ function bindMessageHandler(
           '@TelegramUpdate provider, or use @Action(trigger) with ' +
           'decodeCallbackAction inside the scene.',
       );
+    case BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT:
+      // ── A successful_payment is a chat-bound service message, so it can reach
+      //    an active scene — bind it via the non-deprecated message() filter. ──
+      composer.on(message('successful_payment'), (ctx: Context) => run(ctx));
+      break;
     case BOT_UPDATE_KINDS.INLINE_QUERY:
     case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
-      // ── Inline updates carry no chat, so they never reach an active scene. ──
+    case BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY:
+    case BOT_UPDATE_KINDS.SHIPPING_QUERY:
+      // ── Inline updates and pre-checkout/shipping queries carry no chat, so
+      //    they never reach an active (chat-keyed) scene. ──────────────────────
       throw new TelegramConfigError(
-        `@${
-          binding.kind === BOT_UPDATE_KINDS.INLINE_QUERY
-            ? 'InlineQuery'
-            : 'ChosenInlineResult'
-        } at ${label} is not supported inside a scene — inline updates are not ` +
-          'tied to a chat session, so a scene never receives them. Declare it on ' +
-          'a top-level @TelegramUpdate provider instead.',
+        `@${SCENE_UNSUPPORTED_DECORATOR_NAMES[binding.kind]} at ${label} is not ` +
+          'supported inside a scene — that update is not tied to a chat session, ' +
+          'so a scene never receives it. Declare it on a top-level ' +
+          '@TelegramUpdate provider instead.',
       );
     default: {
       // ── Exhaustiveness guard: an unhandled kind fails to compile. ───────────

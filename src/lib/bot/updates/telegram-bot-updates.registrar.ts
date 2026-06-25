@@ -38,6 +38,7 @@ import {
 } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
+import { message } from 'telegraf/filters';
 
 import { TelegramConfigError } from '../../common';
 import { decodeCallbackAction } from '../callback-action.codec';
@@ -472,6 +473,18 @@ export class TelegramBotUpdatesRegistrar
         break;
       case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
         this.bot.on('chosen_inline_result', terminal);
+        break;
+      case BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY:
+        this.bot.on('pre_checkout_query', terminal);
+        break;
+      case BOT_UPDATE_KINDS.SHIPPING_QUERY:
+        this.bot.on('shipping_query', terminal);
+        break;
+      case BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT:
+        // ── `successful_payment` is a message subtype, not a top-level update
+        //    type — match it via the `message(...)` filter (the non-deprecated
+        //    path that survives Telegraf v5) rather than a raw string on(). ─────
+        this.bot.on(message('successful_payment'), terminal);
         break;
       case BOT_UPDATE_KINDS.USE:
         this.bot.use(async (ctx: Context, next: () => Promise<void>) => {

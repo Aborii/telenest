@@ -188,7 +188,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 1. Guide: [TESTING.md](./TESTING.md)
 2. Examples: [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)
-3. Patterns: [TESTING.md](./TESTING.md)
+3. Patterns: [TESTING.md § Do's and don'ts](./TESTING.md#4-dos-and-donts)
 
 ### I want to deploy to production
 
@@ -254,7 +254,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | ------------- | ------------------------------------------------------------------------- |
 | Unit tests    | [TESTING.md § Unit Testing](./TESTING.md#2-testing-your-application-code) |
 | Mocking       | [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)                   |
-| Test patterns | [TESTING.md](./TESTING.md)                                               |
+| Test patterns | [TESTING.md § Do's and don'ts](./TESTING.md#4-dos-and-donts)              |
 
 ### Advanced
 

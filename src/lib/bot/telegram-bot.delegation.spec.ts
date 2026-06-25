@@ -60,6 +60,7 @@ const DELEGATIONS: ReadonlyArray<{ method: string; args: unknown[] }> = [
   // ── Payments ──
   { method: 'sendInvoice', args: [1, { title: 'X' }] },
   { method: 'createInvoiceLink', args: [{ title: 'X' }] },
+  { method: 'answerShippingQuery', args: ['shq-id', true, [], undefined] },
   { method: 'answerPreCheckoutQuery', args: ['pcq-id', true] },
   // ── Bot profile & menu button ──
   { method: 'setChatMenuButton', args: [{ chatId: 1 }] },

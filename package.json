@@ -59,7 +59,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "nestjs",
@@ -72,7 +73,8 @@
     "telegram-client"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start:dev": "ts-node -P tsconfig.json src/main.ts",
     "login": "ts-node -P tsconfig.json examples/login-cli.ts",
@@ -85,7 +87,7 @@
     "test:cov": "jest --coverage",
     "git:release": "node scripts/release.mts",
     "prepare": "npm run build",
-    "prepublishOnly": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+    "prepublishOnly": "npm run clean"
   },
   "peerDependencies": {
     "@nestjs/common": "^10.0.0 || ^11.0.0",

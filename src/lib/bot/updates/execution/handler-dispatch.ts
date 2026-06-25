@@ -63,14 +63,16 @@ export interface DispatchTarget {
  * @param target - The resolved handler, its params, and its enhancers.
  * @param ctx - The Telegraf context for the current update.
  * @param logger - Logger used for the denial/error diagnostics.
- * @returns Resolves once the handler (and any enhancers) settle.
+ * @returns `true` if the handler completed (or a filter handled its error) so a
+ *   `@Use` middleware chain may proceed; `false` if a guard denied it or it threw
+ *   uncaught. Terminal handlers ignore this value.
  * @throws Never (handler/guard/interceptor errors are routed to filters, else logged).
  */
 export async function dispatchToHandler(
   target: DispatchTarget,
   ctx: Context,
   logger: Logger,
-): Promise<void> {
+): Promise<boolean> {
   const { instance, metatype, handler, params, enhancers, label } = target;
 
   // ── Fast path: nothing to wrap, behave exactly like a plain invoke. ─────────
@@ -81,11 +83,12 @@ export async function dispatchToHandler(
   ) {
     try {
       await handler.apply(instance, resolveHandlerArguments(ctx, params));
+      return true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.error(`Telegram handler ${label} threw: ${reason}`);
+      return false;
     }
-    return;
   }
 
   const context = new TelegramExecutionContext(ctx, metatype, handler);
@@ -96,11 +99,16 @@ export async function dispatchToHandler(
       handler: () =>
         handler.apply(instance, resolveHandlerArguments(ctx, params)),
     });
-    if (outcome === RUN_OUTCOMES.DENIED)
+    if (outcome === RUN_OUTCOMES.DENIED) {
       logger.debug(`Telegram handler ${label} was blocked by a guard`);
+      return false;
+    }
+    return true;
   } catch (error) {
-    // ── No filter handled it: preserve the isolate-and-log guarantee. ─────────
+    // ── No filter handled it: preserve the isolate-and-log guarantee. The
+    //    update's @Use chain stops (returns false), but the process lives on. ──
     const reason = error instanceof Error ? error.message : String(error);
     logger.error(`Telegram handler ${label} threw: ${reason}`);
+    return false;
   }
 }

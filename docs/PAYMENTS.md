@@ -105,7 +105,9 @@ sequenceDiagram
 Step by step:
 
 1. **Send the invoice** with `sendInvoice` (to a chat) or `createInvoiceLink` (a
-   shareable URL). Set `is_flexible: true` only when you need a shipping address.
+   shareable URL). For physical goods set `need_shipping_address: true` (collect
+   an address) and `is_flexible: true` (price depends on shipping) to receive a
+   `shipping_query`; omit both for digital goods.
 2. **Shipping** — *flexible invoices only*. Telegram sends a `shipping_query`;
    reply with `answerShippingQuery(ok, options, errorMessage)`.
 3. **Pre-checkout** — Telegram **always** sends a `pre_checkout_query` before

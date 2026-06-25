@@ -83,9 +83,9 @@ export class PaymentsUpdate {
   ) {}
 
   /**
-   * `/buy` — sends the Pro-plan invoice. `is_flexible: true` asks Telegram to
-   * collect a shipping address (so a `shipping_query` will follow); drop it for
-   * purely digital goods.
+   * `/buy` — sends the Pro-plan invoice. `need_shipping_address` collects an
+   * address and `is_flexible` makes the price depend on shipping, so a
+   * `shipping_query` follows; drop both for purely digital goods.
    *
    * @param ctx - The raw Telegraf context (for the target chat id).
    * @returns Resolves once the invoice is sent.
@@ -104,6 +104,9 @@ export class PaymentsUpdate {
       currency: 'USD',
       // ── Amounts are in the currency's smallest unit (cents → $9.99). ──────────
       prices: [{ label: 'Pro plan (1 month)', amount: 999 }],
+      // ── need_shipping_address makes Telegram collect an address, and
+      //    is_flexible makes it raise a shipping_query (see onShipping). ─────────
+      need_shipping_address: true,
       is_flexible: true,
     });
   }

@@ -464,6 +464,7 @@ installed Telegraf version.
 |                     | `deleteForumTopic`        | Delete a topic and its messages |
 | **Payments**        | `sendInvoice`             | Send an invoice to a chat |
 |                     | `createInvoiceLink`       | Create a shareable invoice link |
+|                     | `answerShippingQuery`     | Reply with shipping options for a flexible invoice |
 |                     | `answerPreCheckoutQuery`  | Confirm/reject a pre-checkout query |
 | **Commands**        | `setMyCommands`           | Set the bot's command list (shown in the UI) |
 |                     | `getMyCommands`           | Read the current command list |

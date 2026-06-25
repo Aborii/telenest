@@ -181,6 +181,28 @@ class InlineUpdate {
 }
 
 /** Compiles the bot module over the mock and runs the registrar once. */
+/** Base provider declaring a decorated handler. */
+@TelegramUpdate()
+@Injectable()
+class BasePingUpdate {
+  /** Records which implementation ran. */
+  public readonly events: string[] = [];
+
+  @Command('ping')
+  public onPing(@Ctx() _ctx: Context): void {
+    this.events.push('base-ping');
+  }
+}
+
+/** Subclass overriding the decorated method WITHOUT re-decorating it. */
+@TelegramUpdate()
+@Injectable()
+class OverridingPingUpdate extends BasePingUpdate {
+  public override onPing(_ctx: Context): void {
+    this.events.push('override-ping');
+  }
+}
+
 async function bootstrap(providers: ReadonlyArray<new () => object>): Promise<{
   regs: Registration[];
   get: <T>(token: new () => T) => T;
@@ -309,6 +331,20 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
     const { regs, get } = await bootstrap([UnmarkedUpdate]);
     expect(regs).toHaveLength(0);
     expect(get(UnmarkedUpdate).called).toBe(false);
+  });
+
+  it('binds a decorated handler inherited from a base class, running the override', async () => {
+    const { regs, get } = await bootstrap([OverridingPingUpdate]);
+    const update = get(OverridingPingUpdate);
+
+    // ── The inherited @Command('ping') binding is not dropped. ────────────────
+    const command = regs.find((r) => r.method === 'command');
+    expect(command?.trigger).toBe('ping');
+
+    // ── Dispatching runs the SUBCLASS override (with inherited @Ctx injection). ─
+    const next = jest.fn().mockResolvedValue(undefined);
+    await command?.middleware(fakeContext({ text: 'ping' }), next);
+    expect(update.events).toEqual(['override-ping']);
   });
 
   describe('inline mode', () => {

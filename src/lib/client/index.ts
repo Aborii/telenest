@@ -21,6 +21,7 @@ export {
   type TelegramClientModuleAsyncOptions,
   type TelegramClientModuleForRootOptions,
 } from './telegram-client.module-definition';
+export * from './retry';
 export * from './telegram-client.options';
 export {
   getClientHealthToken,

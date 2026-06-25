@@ -184,6 +184,7 @@ The factory must return a `TelegramClientModuleOptions` object:
 | `floodSleepThreshold` | `number` | no | GramJS default | `FLOOD_WAIT` threshold in **seconds** below which GramJS waits and retries transparently instead of throwing. |
 | `autoConnect` | `boolean` | no | `true` | Whether to connect on module initialization. Set `false` to connect lazily/manually (e.g. in tests or CLI login scripts). |
 | `replayBufferSize` | `number` | no | `0` | Catch-up depth for the inbound update streams. When `> 0`, each stream replays up to this many recent events to a subscriber added after bootstrap. See [Receiving inbound updates](#receiving-inbound-updates). |
+| `retry` | `TelegramClientRetryDefaults` | no | `{ retries: 2 }` | Module-level defaults for the opt-in `FLOOD_WAIT` retry helper `user.withRetry(...)`. `{ retries?: number; maxDelayMs?: number }`; per-call options always win. See [Automatic FLOOD_WAIT retry](#automatic-flood_wait-retry-withretry). |
 | `clientFactory` | `GramClientFactory` | no | builds a real GramJS client | Override client construction. Primarily a **test seam** — see [section 8](#8-the-igramclient-abstraction-and-clientfactory-seam). |
 
 > [!NOTE]
@@ -1000,7 +1001,8 @@ try {
   await this.user.sendMessage('@somebody', 'hi');
 } catch (error) {
   if (error instanceof TelegramClientError) {
-    // error.operation === 'sendMessage', error.cause holds the underlying GramJS error
+    // error.operation === 'sendMessage', error.cause holds the underlying GramJS error.
+    // On a rate-limit, error.retryAfterSeconds holds the FLOOD_WAIT delay (seconds).
     this.logger.error(`MTProto ${error.operation ?? 'op'} failed: ${error.message}`);
   } else if (isTelegramError(error)) {
     this.logger.error(`Telegram error [${error.kind}]: ${error.message}`);
@@ -1009,6 +1011,40 @@ try {
   }
 }
 ```
+
+### Automatic `FLOOD_WAIT` retry (`withRetry`)
+
+Rather than hand-rolling the wait/retry loop, wrap a rate-limit-prone operation in
+`user.withRetry(...)`. It mirrors the Bot side's `withRetry`: when Telegram throttles the call
+with a `FLOOD_WAIT`, it sleeps **exactly** the number of seconds Telegram asked for and retries,
+up to a bounded attempt budget. Anything that is **not** a flood-wait propagates immediately —
+it never retries arbitrary failures.
+
+```ts
+// Retry a rate-limited send up to 5 times (overrides the module default of 2).
+const sent = await this.user.withRetry(
+  () => this.user.sendMessage('@channel', text),
+  { retries: 5, maxDelayMs: 60_000 },
+);
+```
+
+Key points:
+
+- **Opt-in, per operation.** Only the call you wrap participates, so non-idempotent operations
+  are never retried behind your back. Wrap reads/sends you want backed off; leave the rest raw.
+- **Configurable.** Module-level defaults come from `options.retry`
+  (`{ retries?: number; maxDelayMs?: number }`); per-call options passed to `withRetry` always
+  take precedence. `retries` is the number of retries **after** the first attempt (default `2`);
+  `maxDelayMs` caps a single back-off so a pathological `FLOOD_WAIT` cannot hang a call for
+  minutes.
+- **Observable.** Every flood-wait it observes — each retry *and* the final give-up — increments
+  the account's `FLOOD_WAITS` metric (see [Observability](./OBSERVABILITY.md)). Pass an
+  `onFloodWait` hook to additionally log or react.
+- **Complements `floodSleepThreshold`.** GramJS still auto-sleeps *small* waits below
+  `floodSleepThreshold` transparently; `withRetry` handles the larger ones that surface as a
+  `TelegramClientError` (with `retryAfterSeconds`).
+
+The standalone `withClientRetry(fn, options)` is also exported for use outside the service.
 
 ### Handling auth failures (and flood waits)
 
@@ -1041,9 +1077,11 @@ try {
 
 > [!TIP]
 > Respect `FLOOD_WAIT`. When `error.code === 'FLOOD_WAIT'`, wait at least
-> `error.retryAfterSeconds` before retrying. For low thresholds you can let GramJS handle it
-> transparently by setting `floodSleepThreshold`. Hammering through rate limits is exactly the
-> kind of behavior that gets accounts restricted — see the warning at the top of this guide.
+> `error.retryAfterSeconds` before retrying. For user operations, prefer
+> [`user.withRetry(...)`](#automatic-flood_wait-retry-withretry), which does this back-off for
+> you. For low thresholds you can let GramJS handle it transparently by setting
+> `floodSleepThreshold`. Hammering through rate limits is exactly the kind of behavior that gets
+> accounts restricted — see the warning at the top of this guide.
 
 ---
 

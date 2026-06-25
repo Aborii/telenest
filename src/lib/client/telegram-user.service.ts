@@ -41,6 +41,11 @@ import {
   type TelegramMetricsRecorder,
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
+import {
+  withClientRetry,
+  type WithClientRetryOptions,
+} from './retry';
+import type { TelegramClientRetryDefaults } from './telegram-client.options';
 import type {
   GramChatActionEvent,
   GramChatInfo,
@@ -111,6 +116,9 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    */
   private readonly _replayBufferSize: number;
 
+  /** Module-level defaults applied by {@link withRetry} (per-call overridable). */
+  private readonly _retryDefaults: TelegramClientRetryDefaults;
+
   /**
    * Multicast stream of inbound **new** messages received by the account.
    * Hot by default; replays recent messages to late subscribers when the
@@ -146,6 +154,8 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    * @param replayBufferSize - Optional catch-up depth: when greater than zero,
    *   each update stream replays up to this many recent events to subscribers
    *   added after bootstrap. Defaults to `0` (hot streams, no replay).
+   * @param retryDefaults - Optional module-level `FLOOD_WAIT` retry defaults
+   *   applied by {@link withRetry}; per-call options always take precedence.
    */
   public constructor(
     @Inject(TELEGRAM_GRAM_CLIENT) private readonly client: IGramClient,
@@ -156,8 +166,10 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
     //    factory that passes the size explicitly) resolves it to `undefined`
     //    rather than failing to find a `Number` provider; the default applies. ─
     @Optional() replayBufferSize = 0,
+    @Optional() retryDefaults?: TelegramClientRetryDefaults,
   ) {
     this._metrics = metrics ?? NOOP_TELEGRAM_METRICS;
+    this._retryDefaults = retryDefaults ?? {};
     // ── Clamp to a non-negative integer: a bad value disables replay rather
     //    than corrupting the ReplaySubject's buffer size. ─────────────────────
     this._replayBufferSize =
@@ -224,6 +236,48 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
     this._edited.complete();
     this._deleted.complete();
     this._chatActions.complete();
+  }
+
+  /**
+   * Runs a client operation with automatic, opt-in `FLOOD_WAIT` back-off.
+   *
+   * When Telegram rate-limits the wrapped operation it reports the seconds to
+   * wait; this sleeps exactly that long and retries, up to the configured
+   * attempt budget (module {@link import('./telegram-client.options').TelegramClientModuleOptions.retry}
+   * defaults, overridable per call). Every flood-wait it observes — retried or
+   * terminal — increments this account's `FLOOD_WAITS` metric. Errors that are
+   * not flood-waits propagate immediately, untouched.
+   *
+   * Retry is **opt-in**: only operations you wrap participate, so non-idempotent
+   * calls are never retried behind your back. Wrap whichever operation you want
+   * the back-off applied to.
+   *
+   * @typeParam T - The resolved result type of `operation`.
+   * @param operation - The async client call to run (e.g. a `sendMessage`).
+   * @param options - Per-call retry overrides; merged over the module defaults.
+   * @returns The resolved value of `operation`.
+   * @throws The original error if it is not a flood-wait, or the last flood-wait
+   *   once retries are exhausted.
+   *
+   * @example
+   * ```ts
+   * await user.withRetry(() => user.sendMessage('@channel', text), { retries: 5 });
+   * ```
+   */
+  public withRetry<T>(
+    operation: () => Promise<T>,
+    options?: WithClientRetryOptions,
+  ): Promise<T> {
+    return withClientRetry(operation, {
+      retries: this._retryDefaults.retries,
+      maxDelayMs: this._retryDefaults.maxDelayMs,
+      ...options,
+      // ── Always record the flood-wait, then chain any caller-supplied hook. ───
+      onFloodWait: (info) => {
+        this._metrics.increment(TELEGRAM_COUNTERS.FLOOD_WAITS);
+        options?.onFloodWait?.(info);
+      },
+    });
   }
 
   /**

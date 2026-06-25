@@ -275,6 +275,50 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('FLOOD_WAIT on user operations', () => {
+    it('surfaces the delay on TelegramClientError from a typed FloodWaitError', async () => {
+      const flood = new errors.FloodWaitError({
+        request: new Api.messages.GetHistory({ peer: 'me' }),
+        capture: 22,
+      });
+      const mock = createMockClient({
+        getMe: jest.fn().mockRejectedValue(flood),
+      });
+
+      const error = (await createAdapter(mock)
+        .getMe()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.operation).toBe('getMe');
+      expect(error.retryAfterSeconds).toBe(22);
+    });
+
+    it('parses the delay from a plain FLOOD_WAIT_<n> message', async () => {
+      const mock = createMockClient({
+        sendMessage: jest.fn().mockRejectedValue(new Error('FLOOD_WAIT_17')),
+      });
+
+      const error = (await createAdapter(mock)
+        .sendMessage('me', { message: 'hi' })
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.operation).toBe('sendMessage');
+      expect(error.retryAfterSeconds).toBe(17);
+    });
+
+    it('leaves retryAfterSeconds undefined for a non-flood failure', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(new Error('CHANNEL_PRIVATE')),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.retryAfterSeconds).toBeUndefined();
+    });
+  });
+
   describe('signInWithCode', () => {
     it('returns authorized with a mapped user', async () => {
       const mock = createMockClient({

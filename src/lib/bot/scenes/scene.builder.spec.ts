@@ -250,6 +250,21 @@ describe('buildScene — validation', () => {
     }
   });
 
+  it('rejects @CallbackAction inside a scene', () => {
+    expect(() =>
+      buildScene({
+        definition: sceneDef('cb'),
+        methods: [
+          methodSpec({
+            updateBindings: [
+              { kind: BOT_UPDATE_KINDS.CALLBACK_ACTION, key: 'buy' },
+            ],
+          }),
+        ],
+      }),
+    ).toThrow(/not supported inside a scene/);
+  });
+
   it('rejects a non-positive or non-integer step position', () => {
     expect(() =>
       buildScene({

@@ -102,7 +102,9 @@ interface WizardStepEntry {
  *
  * Inline-mode bindings (`@InlineQuery`/`@ChosenInlineResult`) are rejected: an
  * inline update is not tied to a chat session, so the scene `Stage` never routes
- * it to an active scene — binding one here would be dead code. Declare those on a
+ * it to an active scene — binding one here would be dead code. `@CallbackAction`
+ * is rejected too: its payload-schema validation lives in the top-level
+ * registrar's dispatch, which a scene runner cannot reach. Declare those on a
  * top-level `@TelegramUpdate` provider instead.
  *
  * @param composer - The scene (a `Composer`) to register the handler on.
@@ -110,7 +112,8 @@ interface WizardStepEntry {
  * @param run - The resolved runner to invoke when the binding fires.
  * @param label - The decorated method's identifier, for error messages.
  * @returns Nothing.
- * @throws {TelegramConfigError} If `binding` is an inline-mode kind.
+ * @throws {TelegramConfigError} If `binding` is an inline-mode or
+ *   `@CallbackAction` kind (unsupported inside a scene).
  */
 function bindMessageHandler(
   composer: Composer<Context>,
@@ -143,6 +146,18 @@ function bindMessageHandler(
         await next();
       });
       break;
+    case BOT_UPDATE_KINDS.CALLBACK_ACTION:
+      // ── The typed router validates a @CallbackPayload through the schema during
+      //    the top-level registrar's dispatch; a scene runner has no schema seam,
+      //    so a declared schema would be silently ignored here. Reject it rather
+      //    than honour the routing but drop the validation. Inside a scene, use a
+      //    plain @Action(trigger) with manual decodeCallbackAction instead. ──────
+      throw new TelegramConfigError(
+        `@CallbackAction at ${label} is not supported inside a scene — the typed ` +
+          'callback-action router runs at the top level. Declare it on a top-level ' +
+          '@TelegramUpdate provider, or use @Action(trigger) with ' +
+          'decodeCallbackAction inside the scene.',
+      );
     case BOT_UPDATE_KINDS.INLINE_QUERY:
     case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
       // ── Inline updates carry no chat, so they never reach an active scene. ──

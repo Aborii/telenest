@@ -28,6 +28,8 @@
 
 import type { Telegraf, Telegram } from 'telegraf';
 
+import type { CallbackActionSchema } from '../callback-action.codec';
+
 // ── Command-menu types (derived from Telegraf, never imported from typegram) ──
 
 /**
@@ -70,6 +72,13 @@ export const BOT_UPDATE_KINDS = {
   HEARS: 'hears',
   /** Binds to `bot.action(trigger, ...)` — callback-query (button) matching. */
   ACTION: 'action',
+  /**
+   * Binds to `bot.action(predicate, ...)` via the typed callback-action router —
+   * a callback query whose `callback_data` envelope (`{ a, d? }`) carries a
+   * matching action key. Layered over the callback-data codec; see
+   * {@link import('../callback-action.codec').decodeCallbackAction}.
+   */
+  CALLBACK_ACTION: 'callbackAction',
   /** Binds to `bot.on(updateType, ...)` — a raw update/message type filter. */
   ON: 'on',
   /** Binds to `bot.use(...)` — global middleware run for every update. */
@@ -139,6 +148,21 @@ export type UpdateBinding =
       readonly trigger: Parameters<Telegraf['action']>[0];
     }
   | {
+      readonly kind: typeof BOT_UPDATE_KINDS.CALLBACK_ACTION;
+      /**
+       * The action key this handler claims. The router decodes each callback
+       * query's `{ a, d? }` envelope and dispatches here when `a` equals this key.
+       */
+      readonly key: string;
+      /**
+       * Optional runtime validator for the decoded payload (`d`). When present, a
+       * {@link import('../param.decorators').CallbackPayload} parameter is parsed
+       * through it; a thrown validation error is routed to the handler's exception
+       * filters. Omit to inject the payload untyped (`unknown`).
+       */
+      readonly schema?: CallbackActionSchema<unknown>;
+    }
+  | {
       readonly kind: typeof BOT_UPDATE_KINDS.ON;
       /** Update-type filter(s) forwarded to `Telegraf.on`. */
       readonly trigger: Parameters<Telegraf['on']>[0];
@@ -169,6 +193,13 @@ export const PARAM_KINDS = {
   SENDER: 'sender',
   /** Injects a callback query's `data` string, or `undefined` (`@CallbackData()`). */
   CALLBACK_DATA: 'callback_data',
+  /**
+   * Injects the decoded (and, when a schema is set, validated) callback-action
+   * payload — the envelope's `d` field — or `undefined` when absent
+   * (`@CallbackPayload()`). See
+   * {@link import('../callback-action.codec').decodeCallbackAction}.
+   */
+  CALLBACK_PAYLOAD: 'callback_payload',
   /**
    * Injects the inline query's text (`ctx.inlineQuery.query`), or `undefined`
    * when the update is not an inline query (`@InlineQueryText()`).

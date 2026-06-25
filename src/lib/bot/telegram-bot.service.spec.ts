@@ -145,6 +145,20 @@ describe('TelegramBotService', () => {
     });
   });
 
+  describe('callback-data codec wrappers', () => {
+    it('encodes/decodes structured callback data round-trip', () => {
+      const { service } = createService();
+      const encoded = service.encodeCallbackData({ a: 'page', n: 3 });
+      expect(service.decodeCallbackData(encoded)).toEqual({ a: 'page', n: 3 });
+    });
+
+    it('encodes a callback-action envelope via encodeCallbackAction', () => {
+      const { service } = createService();
+      const encoded = service.encodeCallbackAction('buy', { id: 42 });
+      expect(JSON.parse(encoded)).toEqual({ a: 'buy', d: { id: 42 } });
+    });
+  });
+
   describe('lifecycle', () => {
     it('does not launch when options.launch === false', async () => {
       const { service, launch } = createService({ launch: false });

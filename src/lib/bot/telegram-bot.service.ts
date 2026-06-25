@@ -46,6 +46,7 @@ import {
   type TelegramMetricsRecorder,
   type TelegramTracer,
 } from '../common';
+import { encodeCallbackAction as encodeCallbackActionFn } from './callback-action.codec';
 import {
   decodeCallbackData as decodeCallbackDataFn,
   encodeCallbackData as encodeCallbackDataFn,
@@ -1167,6 +1168,23 @@ export class TelegramBotService
    */
   public encodeCallbackData<T>(payload: T): string {
     return encodeCallbackDataFn(payload);
+  }
+
+  /**
+   * Encodes an action key and optional payload into a 64-byte-safe `callback_data`
+   * envelope (`{ a, d? }`) for the typed callback-action router. Thin instance
+   * wrapper around the standalone {@link encodeCallbackActionFn}; pair with a
+   * `@CallbackAction(key)` handler.
+   *
+   * @typeParam P - The (JSON-serializable) payload shape.
+   * @param key - The non-empty action key the router dispatches on.
+   * @param payload - The optional structured payload; omit for a key-only action.
+   * @returns The encoded `callback_data` string (≤ 64 bytes).
+   * @throws {TypeError} If `key` is empty or the payload is not JSON-serializable.
+   * @throws {RangeError} If the encoded envelope exceeds 64 bytes.
+   */
+  public encodeCallbackAction<P>(key: string, payload?: P): string {
+    return encodeCallbackActionFn(key, payload);
   }
 
   /**

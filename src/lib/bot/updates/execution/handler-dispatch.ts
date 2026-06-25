@@ -28,6 +28,7 @@
 import { type Logger, type Type } from '@nestjs/common';
 import type { Context } from 'telegraf';
 
+import type { CallbackActionSchema } from '../../callback-action.codec';
 import { resolveHandlerArguments } from '../argument-resolver';
 import type {
   ParamMetadata,
@@ -54,6 +55,12 @@ export interface DispatchTarget {
   readonly decorated?: TelegramUpdateHandler;
   /** The method's parameter descriptors (drives argument resolution). */
   readonly params: readonly ParamMetadata[];
+  /**
+   * The matched `@CallbackAction`'s payload validator, when this dispatch is for a
+   * callback-action binding that declared one. Applied to any `@CallbackPayload()`
+   * parameter during argument resolution; `undefined` for every other binding.
+   */
+  readonly callbackActionSchema?: CallbackActionSchema<unknown>;
   /** The handler's resolved guards / interceptors / filters. */
   readonly enhancers: ResolvedEnhancers;
   /** Human-readable identifier (`Class.method`) for diagnostics. */
@@ -80,8 +87,16 @@ export async function dispatchToHandler(
   ctx: Context,
   logger: Logger,
 ): Promise<boolean> {
-  const { instance, metatype, handler, decorated, params, enhancers, label } =
-    target;
+  const {
+    instance,
+    metatype,
+    handler,
+    decorated,
+    params,
+    callbackActionSchema,
+    enhancers,
+    label,
+  } = target;
 
   // ── Fast path: nothing to wrap, behave exactly like a plain invoke. ─────────
   if (
@@ -90,7 +105,10 @@ export async function dispatchToHandler(
     enhancers.filters.length === 0
   ) {
     try {
-      await handler.apply(instance, resolveHandlerArguments(ctx, params));
+      await handler.apply(
+        instance,
+        resolveHandlerArguments(ctx, params, callbackActionSchema),
+      );
       return true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -107,7 +125,10 @@ export async function dispatchToHandler(
       context,
       enhancers,
       handler: () =>
-        handler.apply(instance, resolveHandlerArguments(ctx, params)),
+        handler.apply(
+          instance,
+          resolveHandlerArguments(ctx, params, callbackActionSchema),
+        ),
     });
     if (outcome === RUN_OUTCOMES.DENIED) {
       logger.debug(`Telegram handler ${label} was blocked by a guard`);

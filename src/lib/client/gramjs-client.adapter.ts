@@ -149,7 +149,11 @@ export class GramJsClientAdapter implements IGramClient {
       await this.client.connect();
       this._connected = true;
     } catch (error) {
-      throw this.toClientError(error, 'Failed to connect to Telegram.', 'connect');
+      throw this.toClientError(
+        error,
+        'Failed to connect to Telegram.',
+        'connect',
+      );
     }
   }
 
@@ -174,7 +178,11 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       return await this.client.checkAuthorization();
     } catch (error) {
-      throw this.toClientError(error, 'Failed to check authorization state.', 'isAuthorized');
+      throw this.toClientError(
+        error,
+        'Failed to check authorization state.',
+        'isAuthorized',
+      );
     }
   }
 
@@ -335,7 +343,11 @@ export class GramJsClientAdapter implements IGramClient {
       const me = await this.client.getMe();
       return this.mapUser(me);
     } catch (error) {
-      throw this.toClientError(error, 'Failed to fetch own account info.', 'getMe');
+      throw this.toClientError(
+        error,
+        'Failed to fetch own account info.',
+        'getMe',
+      );
     }
   }
 
@@ -367,7 +379,11 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
-      throw this.toClientError(error, 'Failed to fetch messages.', 'getMessages');
+      throw this.toClientError(
+        error,
+        'Failed to fetch messages.',
+        'getMessages',
+      );
     }
   }
 
@@ -433,7 +449,11 @@ export class GramJsClientAdapter implements IGramClient {
       //    would only appear if a file path were requested. ───────────────────
       return Buffer.isBuffer(data) ? data : undefined;
     } catch (error) {
-      throw this.toClientError(error, 'Failed to download media.', 'downloadMedia');
+      throw this.toClientError(
+        error,
+        'Failed to download media.',
+        'downloadMedia',
+      );
     }
   }
 
@@ -445,7 +465,11 @@ export class GramJsClientAdapter implements IGramClient {
       const data = await this.client.downloadProfilePhoto(peer);
       return Buffer.isBuffer(data) ? data : undefined;
     } catch (error) {
-      throw this.toClientError(error, 'Failed to download profile photo.', 'downloadProfilePhoto');
+      throw this.toClientError(
+        error,
+        'Failed to download profile photo.',
+        'downloadProfilePhoto',
+      );
     }
   }
 
@@ -459,7 +483,11 @@ export class GramJsClientAdapter implements IGramClient {
       if (!message) return undefined;
       return this.mapMediaInfo(message.media);
     } catch (error) {
-      throw this.toClientError(error, 'Failed to read media info.', 'getMediaInfo');
+      throw this.toClientError(
+        error,
+        'Failed to read media info.',
+        'getMediaInfo',
+      );
     }
   }
 
@@ -497,7 +525,11 @@ export class GramJsClientAdapter implements IGramClient {
 
       return Buffer.concat(buffers).subarray(skip, skip + range.limit);
     } catch (error) {
-      throw this.toClientError(error, 'Failed to download media range.', 'downloadMediaRange');
+      throw this.toClientError(
+        error,
+        'Failed to download media range.',
+        'downloadMediaRange',
+      );
     }
   }
 
@@ -588,7 +620,11 @@ export class GramJsClientAdapter implements IGramClient {
         new Api.channels.LeaveChannel({ channel: peer }),
       );
     } catch (error) {
-      throw this.toClientError(error, 'Failed to leave channel.', 'leaveChannel');
+      throw this.toClientError(
+        error,
+        'Failed to leave channel.',
+        'leaveChannel',
+      );
     }
   }
 
@@ -604,7 +640,11 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return participants.map((user) => this.mapUser(user));
     } catch (error) {
-      throw this.toClientError(error, 'Failed to list participants.', 'getParticipants');
+      throw this.toClientError(
+        error,
+        'Failed to list participants.',
+        'getParticipants',
+      );
     }
   }
 
@@ -621,7 +661,11 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
-      throw this.toClientError(error, 'Failed to search messages.', 'searchMessages');
+      throw this.toClientError(
+        error,
+        'Failed to search messages.',
+        'searchMessages',
+      );
     }
   }
 
@@ -669,7 +713,11 @@ export class GramJsClientAdapter implements IGramClient {
         { operation: 'getFullChat' },
       );
     } catch (error) {
-      throw this.toClientError(error, 'Failed to fetch chat info.', 'getFullChat');
+      throw this.toClientError(
+        error,
+        'Failed to fetch chat info.',
+        'getFullChat',
+      );
     }
   }
 
@@ -705,7 +753,11 @@ export class GramJsClientAdapter implements IGramClient {
         revoke: params.revoke ?? true,
       });
     } catch (error) {
-      throw this.toClientError(error, 'Failed to delete messages.', 'deleteMessages');
+      throw this.toClientError(
+        error,
+        'Failed to delete messages.',
+        'deleteMessages',
+      );
     }
   }
 
@@ -726,7 +778,11 @@ export class GramJsClientAdapter implements IGramClient {
         .filter((message): message is Api.Message => Boolean(message))
         .map((message) => this.mapMessage(message));
     } catch (error) {
-      throw this.toClientError(error, 'Failed to forward messages.', 'forwardMessages');
+      throw this.toClientError(
+        error,
+        'Failed to forward messages.',
+        'forwardMessages',
+      );
     }
   }
 

@@ -32,7 +32,8 @@
  *   scoped to a named bot).
  * - TelegramUpdateOptions: options accepted by `@TelegramUpdate`.
  * - Start / Help / Command / Hears / Action / CallbackAction / On / Use /
- *   InlineQuery / ChosenInlineResult: method decorators.
+ *   InlineQuery / ChosenInlineResult / PreCheckoutQuery / ShippingQuery /
+ *   SuccessfulPayment: method decorators.
  */
 
 import 'reflect-metadata';
@@ -399,5 +400,86 @@ export function ChosenInlineResult(): MethodDecorator {
   return (target, propertyKey) =>
     appendBinding(target, propertyKey, {
       kind: BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT,
+    });
+}
+
+/**
+ * Handles the `pre_checkout_query` update — Telegram's final confirmation before
+ * a payment is charged (binds to `Telegraf.on('pre_checkout_query', …)`). The
+ * bot **must** answer within 10 seconds with
+ * {@link import('../telegram-bot.service').TelegramBotService.answerPreCheckoutQuery}
+ * (or `ctx.answerPreCheckoutQuery`) or the payment is cancelled. Read the query
+ * with {@link import('../param.decorators').PreCheckoutData}.
+ *
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @PreCheckoutQuery()
+ * onPreCheckout(@Ctx() ctx: Context) {
+ *   return ctx.answerPreCheckoutQuery(true);
+ * }
+ * ```
+ */
+export function PreCheckoutQuery(): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY,
+    });
+}
+
+/**
+ * Handles the `shipping_query` update — fired only for invoices sent with
+ * `is_flexible: true`, when the user supplies a shipping address (binds to
+ * `Telegraf.on('shipping_query', …)`). Reply with the available options via
+ * {@link import('../telegram-bot.service').TelegramBotService.answerShippingQuery}
+ * (or `ctx.answerShippingQuery`). Read the query with
+ * {@link import('../param.decorators').ShippingData}.
+ *
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @ShippingQuery()
+ * onShipping(@Ctx() ctx: Context) {
+ *   return ctx.answerShippingQuery(true, [
+ *     { id: 'std', title: 'Standard', prices: [{ label: 'Shipping', amount: 500 }] },
+ *   ]);
+ * }
+ * ```
+ */
+export function ShippingQuery(): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.SHIPPING_QUERY,
+    });
+}
+
+/**
+ * Handles a successful payment — the `successful_payment` service message
+ * delivered after the charge clears (binds to the `successful_payment` message
+ * subtype via Telegraf's `message('successful_payment')` filter, the
+ * non-deprecated path that survives Telegraf v5). This is where fulfilment
+ * happens; the payload carries the `telegram_payment_charge_id` /
+ * `provider_payment_charge_id` (never log them). Read it with
+ * {@link import('../param.decorators').SuccessfulPaymentData}.
+ *
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * @SuccessfulPayment()
+ * onPaid(@SuccessfulPaymentData() payment: Message.SuccessfulPaymentMessage['successful_payment']) {
+ *   this.orders.fulfil(payment.invoice_payload);
+ * }
+ * ```
+ */
+export function SuccessfulPayment(): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT,
     });
 }

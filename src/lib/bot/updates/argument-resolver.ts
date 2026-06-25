@@ -75,6 +75,20 @@ function resolveParam(
       return ctx.inlineQuery?.query;
     case PARAM_KINDS.INLINE_QUERY_OFFSET:
       return ctx.inlineQuery?.offset;
+    case PARAM_KINDS.PRE_CHECKOUT_QUERY:
+      // ── `preCheckoutQuery` is undefined on non-pre-checkout updates. ─────────
+      return ctx.preCheckoutQuery;
+    case PARAM_KINDS.SHIPPING_QUERY:
+      // ── `shippingQuery` is undefined on non-shipping updates. ───────────────
+      return ctx.shippingQuery;
+    case PARAM_KINDS.SUCCESSFUL_PAYMENT: {
+      // ── `successful_payment` rides on the message; narrow before reading so a
+      //    non-payment (or non-message) update injects `undefined`. ────────────
+      const message = ctx.message;
+      return message && 'successful_payment' in message
+        ? message.successful_payment
+        : undefined;
+    }
     default: {
       // ── Exhaustiveness guard: a new ParamKind without a case fails to build. ─
       const exhaustive: never = kind;

@@ -16,7 +16,10 @@ import {
   InlineQueryOffset,
   InlineQueryText,
   MessageText,
+  PreCheckoutData,
   Sender,
+  ShippingData,
+  SuccessfulPaymentData,
 } from './param.decorators';
 import {
   PARAM_KINDS,
@@ -45,6 +48,12 @@ describe('parameter decorators', () => {
     inline(
       @InlineQueryText() _text: unknown,
       @InlineQueryOffset() _offset: unknown,
+    ): void {}
+
+    payments(
+      @PreCheckoutData() _pre: unknown,
+      @ShippingData() _ship: unknown,
+      @SuccessfulPaymentData() _paid: unknown,
     ): void {}
   }
 
@@ -75,6 +84,17 @@ describe('parameter decorators', () => {
     expect(sorted).toEqual([
       { index: 0, kind: PARAM_KINDS.INLINE_QUERY_TEXT },
       { index: 1, kind: PARAM_KINDS.INLINE_QUERY_OFFSET },
+    ]);
+  });
+
+  it('records the payment parameter kinds', () => {
+    const sorted = [...paramsOf(proto, 'payments')].sort(
+      (a, b) => a.index - b.index,
+    );
+    expect(sorted).toEqual([
+      { index: 0, kind: PARAM_KINDS.PRE_CHECKOUT_QUERY },
+      { index: 1, kind: PARAM_KINDS.SHIPPING_QUERY },
+      { index: 2, kind: PARAM_KINDS.SUCCESSFUL_PAYMENT },
     ]);
   });
 });

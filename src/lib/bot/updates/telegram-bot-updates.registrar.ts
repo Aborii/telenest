@@ -311,9 +311,14 @@ export class TelegramBotUpdatesRegistrar
    * Binds a single pending binding onto the matching `Telegraf` method, wrapping
    * dispatch with the handler's resolved enhancers.
    *
-   * Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`) are
-   * terminal — they do not call `next`. `@Use()` middleware calls `next` after
-   * the handler so the middleware chain continues.
+   * Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`,
+   * inline-query/chosen-result) are terminal — they do not call `next`, and the
+   * dispatch's proceed signal is ignored. `@Use()` middleware calls `next` **only**
+   * when dispatch reports the handler should proceed: a guard denial or an uncaught
+   * error in the middleware blocks the rest of the chain for that update, mirroring
+   * how a thrown Telegraf middleware stops propagation. Use a guard to conditionally
+   * block; an exception is isolated (logged, never rethrown) but still halts the
+   * current update's chain.
    *
    * @param entry - The pending binding to apply.
    * @returns Nothing.
@@ -325,46 +330,53 @@ export class TelegramBotUpdatesRegistrar
 
     // ── Resolve enhancers once per binding (metadata is fixed at bootstrap). ──
     const enhancers = this.enhancers.resolve(metatype, handler);
-    const run = (ctx: Context): Promise<void> =>
+    // ── Returns whether the middleware chain should proceed: true on success,
+    //    false when a guard denied the update or the handler threw uncaught. ───
+    const proceed = (ctx: Context): Promise<boolean> =>
       dispatchToHandler(
         { instance, metatype, handler, params, enhancers, label },
         ctx,
         this._logger,
       );
+    // ── Terminal handlers never continue a chain — run and resolve void. ──────
+    const terminal = async (ctx: Context): Promise<void> => {
+      await proceed(ctx);
+    };
 
     switch (binding.kind) {
       case BOT_UPDATE_KINDS.START:
-        this.bot.start((ctx: Context) => run(ctx));
+        this.bot.start(terminal);
         break;
       case BOT_UPDATE_KINDS.HELP:
-        this.bot.help((ctx: Context) => run(ctx));
+        this.bot.help(terminal);
         break;
       case BOT_UPDATE_KINDS.COMMAND:
-        this.bot.command(binding.trigger, (ctx: Context) => run(ctx));
+        this.bot.command(binding.trigger, terminal);
         break;
       case BOT_UPDATE_KINDS.HEARS:
-        this.bot.hears(binding.trigger, (ctx: Context) => run(ctx));
+        this.bot.hears(binding.trigger, terminal);
         break;
       case BOT_UPDATE_KINDS.ACTION:
-        this.bot.action(binding.trigger, (ctx: Context) => run(ctx));
+        this.bot.action(binding.trigger, terminal);
         break;
       case BOT_UPDATE_KINDS.ON:
-        this.bot.on(binding.trigger, (ctx: Context) => run(ctx));
+        this.bot.on(binding.trigger, terminal);
         break;
       case BOT_UPDATE_KINDS.INLINE_QUERY:
         // ── With a pattern, use the dedicated matcher; without one, fall back
         //    to a raw `on('inline_query')` so every query is handled. ─────────
         if (binding.trigger !== undefined)
-          this.bot.inlineQuery(binding.trigger, (ctx: Context) => run(ctx));
-        else this.bot.on('inline_query', (ctx: Context) => run(ctx));
+          this.bot.inlineQuery(binding.trigger, terminal);
+        else this.bot.on('inline_query', terminal);
         break;
       case BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT:
-        this.bot.on('chosen_inline_result', (ctx: Context) => run(ctx));
+        this.bot.on('chosen_inline_result', terminal);
         break;
       case BOT_UPDATE_KINDS.USE:
         this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
-          await run(ctx);
-          await next();
+          // ── Only advance the chain when the handler completed without a guard
+          //    denial or an uncaught error; a denied/failed @Use blocks it. ────
+          if (await proceed(ctx)) await next();
         });
         break;
       default: {

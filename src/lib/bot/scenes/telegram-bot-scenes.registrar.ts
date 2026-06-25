@@ -219,12 +219,14 @@ export class TelegramBotScenesRegistrar {
         sceneBindings,
         updateBindings,
         label,
-        run: (ctx: Context): Promise<void> =>
-          dispatchToHandler(
+        run: async (ctx: Context): Promise<void> => {
+          // ── Scene handlers are terminal here; ignore the proceed signal. ────
+          await dispatchToHandler(
             { instance, metatype, handler, params, enhancers, label },
             ctx,
             this._logger,
-          ),
+          );
+        },
       });
     }
     return specs;

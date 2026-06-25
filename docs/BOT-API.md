@@ -485,6 +485,10 @@ installed Telegraf version.
 | **Lifecycle**       | `launch` / `stop`         | Start / stop the bot manually (idempotent) |
 | **Raw accessors**   | `instance` / `telegram`   | Raw `Telegraf` / raw `Telegram` client |
 
+> **Payments.** The invoice/checkout methods above pair with the
+> `@PreCheckoutQuery` / `@ShippingQuery` / `@SuccessfulPayment` update decorators.
+> See the end-to-end guide in [PAYMENTS.md](./PAYMENTS.md).
+
 A few runnable examples:
 
 ```ts

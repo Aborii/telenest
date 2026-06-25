@@ -176,6 +176,47 @@ describe('TelegramBotService convenience helpers', () => {
       expect(sent).toHaveLength(2);
     });
 
+    it('applies reply_markup to the last chunk only when splitting', async () => {
+      const { service, telegram } = createService();
+      telegram.sendMessage.mockImplementation((_chat, text: string) =>
+        Promise.resolve({ text }),
+      );
+      const reply_markup = {
+        inline_keyboard: [[{ text: 'ok', callback_data: 'ok' }]],
+      };
+      const extra = { parse_mode: 'HTML' as const, reply_markup };
+      const text = `${'a'.repeat(4096)}\n${'b'.repeat(10)}`;
+
+      await service.sendLongMessage(42, text, extra);
+
+      // ── First chunk: parse_mode kept, keyboard dropped. ─────────────────────
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(1, 42, 'a'.repeat(4096), {
+        parse_mode: 'HTML',
+      });
+      // ── Last chunk: keyboard appears once, at the end. ──────────────────────
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(2, 42, 'b'.repeat(10), {
+        parse_mode: 'HTML',
+        reply_markup,
+      });
+    });
+
+    it('applies reply_parameters to the first chunk only when splitting', async () => {
+      const { service, telegram } = createService();
+      telegram.sendMessage.mockImplementation((_chat, text: string) =>
+        Promise.resolve({ text }),
+      );
+      const extra = { reply_parameters: { message_id: 7 } };
+      const text = `${'a'.repeat(4096)}\n${'b'.repeat(10)}`;
+
+      await service.sendLongMessage(42, text, extra);
+
+      // ── Reply target on the first chunk; dropped on the rest. ───────────────
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(1, 42, 'a'.repeat(4096), {
+        reply_parameters: { message_id: 7 },
+      });
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(2, 42, 'b'.repeat(10), {});
+    });
+
     it('sends nothing for empty text', async () => {
       const { service, telegram } = createService();
       const sent = await service.sendLongMessage(42, '');

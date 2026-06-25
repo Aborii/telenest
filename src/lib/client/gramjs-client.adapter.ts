@@ -149,10 +149,7 @@ export class GramJsClientAdapter implements IGramClient {
       await this.client.connect();
       this._connected = true;
     } catch (error) {
-      throw new TelegramClientError('Failed to connect to Telegram.', {
-        operation: 'connect',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to connect to Telegram.', 'connect');
     }
   }
 
@@ -177,10 +174,7 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       return await this.client.checkAuthorization();
     } catch (error) {
-      throw new TelegramClientError('Failed to check authorization state.', {
-        operation: 'isAuthorized',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to check authorization state.', 'isAuthorized');
     }
   }
 
@@ -331,10 +325,7 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       await this.client.invoke(new Api.auth.LogOut());
     } catch (error) {
-      throw new TelegramClientError('Failed to log out.', {
-        operation: 'logOut',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to log out.', 'logOut');
     }
   }
 
@@ -344,10 +335,7 @@ export class GramJsClientAdapter implements IGramClient {
       const me = await this.client.getMe();
       return this.mapUser(me);
     } catch (error) {
-      throw new TelegramClientError('Failed to fetch own account info.', {
-        operation: 'getMe',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to fetch own account info.', 'getMe');
     }
   }
 
@@ -362,10 +350,7 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return dialogs.map((dialog) => this.mapDialog(dialog));
     } catch (error) {
-      throw new TelegramClientError('Failed to list dialogs.', {
-        operation: 'getDialogs',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to list dialogs.', 'getDialogs');
     }
   }
 
@@ -382,10 +367,7 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
-      throw new TelegramClientError('Failed to fetch messages.', {
-        operation: 'getMessages',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to fetch messages.', 'getMessages');
     }
   }
 
@@ -405,10 +387,7 @@ export class GramJsClientAdapter implements IGramClient {
     } catch (error) {
       // ── Surface the precise "no message" error instead of re-wrapping it. ────
       if (error instanceof TelegramClientError) throw error;
-      throw new TelegramClientError('Failed to send message.', {
-        operation: 'sendMessage',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to send message.', 'sendMessage');
     }
   }
 
@@ -435,10 +414,7 @@ export class GramJsClientAdapter implements IGramClient {
     } catch (error) {
       // ── Surface the precise "no message" error instead of re-wrapping it. ────
       if (error instanceof TelegramClientError) throw error;
-      throw new TelegramClientError('Failed to send file.', {
-        operation: 'sendFile',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to send file.', 'sendFile');
     }
   }
 
@@ -457,10 +433,7 @@ export class GramJsClientAdapter implements IGramClient {
       //    would only appear if a file path were requested. ───────────────────
       return Buffer.isBuffer(data) ? data : undefined;
     } catch (error) {
-      throw new TelegramClientError('Failed to download media.', {
-        operation: 'downloadMedia',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to download media.', 'downloadMedia');
     }
   }
 
@@ -472,10 +445,7 @@ export class GramJsClientAdapter implements IGramClient {
       const data = await this.client.downloadProfilePhoto(peer);
       return Buffer.isBuffer(data) ? data : undefined;
     } catch (error) {
-      throw new TelegramClientError('Failed to download profile photo.', {
-        operation: 'downloadProfilePhoto',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to download profile photo.', 'downloadProfilePhoto');
     }
   }
 
@@ -489,10 +459,7 @@ export class GramJsClientAdapter implements IGramClient {
       if (!message) return undefined;
       return this.mapMediaInfo(message.media);
     } catch (error) {
-      throw new TelegramClientError('Failed to read media info.', {
-        operation: 'getMediaInfo',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to read media info.', 'getMediaInfo');
     }
   }
 
@@ -530,10 +497,7 @@ export class GramJsClientAdapter implements IGramClient {
 
       return Buffer.concat(buffers).subarray(skip, skip + range.limit);
     } catch (error) {
-      throw new TelegramClientError('Failed to download media range.', {
-        operation: 'downloadMediaRange',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to download media range.', 'downloadMediaRange');
     }
   }
 
@@ -547,10 +511,7 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       message = await this.fetchMediaMessage(peer, messageId);
     } catch (error) {
-      throw new TelegramClientError('Failed to stream media.', {
-        operation: 'streamMedia',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to stream media.', 'streamMedia');
     }
     if (!message)
       throw new TelegramClientError(
@@ -560,6 +521,9 @@ export class GramJsClientAdapter implements IGramClient {
 
     const media = message.media;
     const client = this.client;
+    // ── Bound so the lazy generator below (where `this` is undefined) can still
+    //    produce flood-aware client errors via the shared mapper. ──────────────
+    const toClientError = this.toClientError.bind(this);
     const offset = options.offset ?? 0;
     const limit = options.limit;
     // ── Reject a negative offset/limit before the aligned-slice math runs. ─────
@@ -601,10 +565,7 @@ export class GramJsClientAdapter implements IGramClient {
           remaining -= chunk.length;
         }
       } catch (error) {
-        throw new TelegramClientError('Failed to stream media.', {
-          operation: 'streamMedia',
-          cause: error,
-        });
+        throw toClientError(error, 'Failed to stream media.', 'streamMedia');
       }
     })();
   }
@@ -616,10 +577,7 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       await this.client.invoke(new Api.channels.JoinChannel({ channel: peer }));
     } catch (error) {
-      throw new TelegramClientError('Failed to join channel.', {
-        operation: 'joinChannel',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to join channel.', 'joinChannel');
     }
   }
 
@@ -630,10 +588,7 @@ export class GramJsClientAdapter implements IGramClient {
         new Api.channels.LeaveChannel({ channel: peer }),
       );
     } catch (error) {
-      throw new TelegramClientError('Failed to leave channel.', {
-        operation: 'leaveChannel',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to leave channel.', 'leaveChannel');
     }
   }
 
@@ -649,10 +604,7 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return participants.map((user) => this.mapUser(user));
     } catch (error) {
-      throw new TelegramClientError('Failed to list participants.', {
-        operation: 'getParticipants',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to list participants.', 'getParticipants');
     }
   }
 
@@ -669,10 +621,7 @@ export class GramJsClientAdapter implements IGramClient {
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
-      throw new TelegramClientError('Failed to search messages.', {
-        operation: 'searchMessages',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to search messages.', 'searchMessages');
     }
   }
 
@@ -741,10 +690,7 @@ export class GramJsClientAdapter implements IGramClient {
     } catch (error) {
       // ── Surface the precise "no message" error instead of re-wrapping it. ────
       if (error instanceof TelegramClientError) throw error;
-      throw new TelegramClientError('Failed to edit message.', {
-        operation: 'editMessage',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to edit message.', 'editMessage');
     }
   }
 
@@ -759,10 +705,7 @@ export class GramJsClientAdapter implements IGramClient {
         revoke: params.revoke ?? true,
       });
     } catch (error) {
-      throw new TelegramClientError('Failed to delete messages.', {
-        operation: 'deleteMessages',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to delete messages.', 'deleteMessages');
     }
   }
 
@@ -783,10 +726,7 @@ export class GramJsClientAdapter implements IGramClient {
         .filter((message): message is Api.Message => Boolean(message))
         .map((message) => this.mapMessage(message));
     } catch (error) {
-      throw new TelegramClientError('Failed to forward messages.', {
-        operation: 'forwardMessages',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to forward messages.', 'forwardMessages');
     }
   }
 
@@ -795,10 +735,7 @@ export class GramJsClientAdapter implements IGramClient {
     try {
       await this.client.markAsRead(peer);
     } catch (error) {
-      throw new TelegramClientError('Failed to mark as read.', {
-        operation: 'markAsRead',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to mark as read.', 'markAsRead');
     }
   }
 
@@ -813,10 +750,7 @@ export class GramJsClientAdapter implements IGramClient {
         notify: params.notify ?? false,
       });
     } catch (error) {
-      throw new TelegramClientError('Failed to pin message.', {
-        operation: 'pinMessage',
-        cause: error,
-      });
+      throw this.toClientError(error, 'Failed to pin message.', 'pinMessage');
     }
   }
 
@@ -1331,7 +1265,33 @@ export class GramJsClientAdapter implements IGramClient {
     operation: string,
   ): TelegramClientError {
     if (error instanceof TelegramClientError) return error;
-    return new TelegramClientError(message, { operation, cause: error });
+    // ── Surface Telegram's FLOOD_WAIT delay (seconds) on the typed error so the
+    //    client retry helper can back off for exactly the requested interval.
+    //    Reading the GramJS error shape stays confined to this adapter. ────────
+    return new TelegramClientError(message, {
+      operation,
+      retryAfterSeconds: this.floodWaitSeconds(error),
+      cause: error,
+    });
+  }
+
+  /**
+   * Extracts the FLOOD_WAIT delay (seconds) from a GramJS error, or `undefined`
+   * when the error is not a rate-limit. Recognizes both the typed
+   * `FloodWaitError` (delay on `.seconds`) and the plain `FLOOD_WAIT_<n>`
+   * message shape; any other error yields `undefined` so non-rate-limit
+   * failures are never treated as retryable.
+   *
+   * @param error - The caught value (typically a raw GramJS error).
+   * @returns The flood-wait delay in seconds, or `undefined`.
+   * @throws Never.
+   */
+  private floodWaitSeconds(error: unknown): number | undefined {
+    if (error instanceof errors.FloodWaitError) return error.seconds;
+    const message = this.readErrorMessage(error);
+    return message.startsWith('FLOOD_WAIT')
+      ? this.readFloodSeconds(error, message)
+      : undefined;
   }
 
   /**

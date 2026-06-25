@@ -43,6 +43,20 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 - `TelegramModule.forRoot({ bot?, client?, isGlobal? })` — an umbrella module that composes both sides from a single synchronous options object.
 - Strict TypeScript throughout (no `any`, no `enum` — `as const` unions only), and every export documented with JSDoc.
 
+### Bot extras
+
+- **Decorator handler system** — `@TelegramUpdate` classes with `@Command`/`@Hears`/`@Action`/`@On`/`@Use` and `@Ctx`/`@Sender`/… param decorators; optional auto-registration of the Telegram command menu from `@Command` descriptions.
+- **Nest-style enhancers** — `@UseTelegramGuards`/`Interceptors`/`Filters`, with built-in allowlist and (memory-bounded) rate-limit guards.
+- **Built-in webhook controller** — secret-token-verified `POST` route (`generateWebhookSecret()` helper; a secret is required by default).
+- **Mini App init-data validation** — `validateWebAppInitData()` (HMAC-SHA256, constant-time, 24h freshness by default).
+- **Helpers** — `callback-data` codec (64-byte limit), `splitMessageText` (4096-char chunking, used by `sendLongMessage`), and `withRetry` (429 `retry_after` back-off).
+
+### Production
+
+- **Observability** — health indicators, update metrics, and an OpenTelemetry tracer bridge.
+- **Five session stores** — in-memory, file (`0o600`, atomic), key-value, Redis, and an AES-256-GCM **encrypted** wrapper.
+- **`nestjs-telegram/testing`** — ready-made mocks (`createMockGramClient`, `createMockBotContext`) and DTO builders, pulling in no SDK and no test runner.
+
 ---
 
 ## Install
@@ -73,8 +87,8 @@ npm i telegraf telegram
 
 ### Import only the side you need (subpath exports)
 
-The package exposes three independent entry points so a bot-only app never pulls
-in GramJS, and a user-account-only app never pulls in Telegraf:
+The package exposes four subpath entry points (plus the root) so a bot-only app
+never pulls in GramJS, and a user-account-only app never pulls in Telegraf:
 
 | Import                    | Pulls in                 | Use when                          |
 | ------------------------- | ------------------------ | --------------------------------- |
@@ -295,7 +309,7 @@ TelegramModule.forRoot({
 
 ## Testing
 
-The library ships with **290+ tests** and is built to keep network I/O out of your suite:
+The library ships with **740+ tests** and is built to keep network I/O out of your suite:
 
 - **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md).
 - The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).

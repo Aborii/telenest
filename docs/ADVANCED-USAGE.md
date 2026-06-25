@@ -419,6 +419,24 @@ export class BulkMessagingService {
 
 ---
 
+## Built-in helpers
+
+Three exported helpers cover common Bot-API foot-guns; all are importable from
+`nestjs-telegram` (or `nestjs-telegram/bot`).
+
+- **`withRetry(fn, options?)`** — runs `fn`, retrying only on Telegram's
+  `429 Too Many Requests` by waiting the reported `retry_after`. Non-rate-limit
+  errors propagate immediately. `TelegramBotService.withRetry(...)` is the instance
+  wrapper. Cap a single wait with `maxDelayMs` (omit for none).
+
+- **`splitMessageText(text, limit?)`** — splits text into ≤4096-char chunks on
+  line boundaries (never emitting an over-limit chunk). `TelegramBotService.sendLongMessage(chatId, text, extra?)` uses it and sends the chunks in order; when it splits, `reply_markup` is applied to the **last** chunk and `reply_parameters` to the **first** only. The splitter is **not** formatting-entity-aware, so a `parse_mode` entity that straddles a boundary can break — pre-split formatted output yourself.
+
+- **`encodeCallbackData(value)` / `decodeCallbackData<T>(data)`** — JSON-encode a
+  payload into a button's `callback_data`, enforcing Telegram's 64-byte limit on
+  encode. **Decoded callback_data is not authenticated** — never trust it for
+  authorization; re-derive the user from `ctx.from` and re-check server-side.
+
 ## Error Handling & Resilience
 
 ### Graceful Degradation

@@ -116,14 +116,27 @@ The `webhook` object on `TelegramBotModule.forRoot` / `forRootAsync`:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `path` | `string` | ✅ | HTTP route the controller listens on (e.g. `/telegram/webhook`). Leading slash optional. |
+| `path` | `string` | ✅ | HTTP route the controller listens on (e.g. `/telegram/webhook`). It is canonicalized (leading slash added, trailing/duplicate slashes collapsed) so the mounted route and the URL registered with Telegram always match. |
 | `domain` | `string` | only with `registerOnBootstrap` | Public HTTPS origin (e.g. `https://bot.example.com`); joined with `path` for `setWebhook`. |
-| `secretToken` | `string` | recommended | Verified against the `X-Telegram-Bot-Api-Secret-Token` header on every request. Omit → route is **unauthenticated** (a warning is logged). |
+| `secretToken` | `string` | ✅ (unless `allowInsecure`) | Verified against the `X-Telegram-Bot-Api-Secret-Token` header on every request. **Required by default** — generate one with `generateWebhookSecret()`. Must be 1–256 chars of `A-Z a-z 0-9 _ -`. |
+| `allowInsecure` | `boolean` | — | Opt in to running **without** a `secretToken` (an unauthenticated route). Required when `secretToken` is omitted; otherwise registration throws. Only use behind another auth layer (private network, upstream proxy). |
 | `registerOnBootstrap` | `boolean` | — | When `true`, call `setWebhook(domain + path, { secret_token })` on bootstrap. Defaults to `false`. Requires `domain`. |
 
-Invalid config (empty `path`, or `registerOnBootstrap` without a valid `http(s)`
-`domain`) throws a `TelegramConfigError` **synchronously at registration**, so
-mistakes surface immediately rather than as a confusing runtime failure.
+> **Fail-closed default:** a webhook with **no `secretToken`** and **no
+> `allowInsecure: true`** throws a `TelegramConfigError` at registration, so an
+> unauthenticated endpoint is never stood up by accident. Mint a secret with the
+> exported `generateWebhookSecret()` helper:
+>
+> ```ts
+> import { generateWebhookSecret } from 'nestjs-telegram';
+> webhook: { path: '/telegram/webhook', secretToken: generateWebhookSecret() }
+> ```
+
+Invalid config (empty `path`, a `path` with internal whitespace, a `secretToken`
+outside the allowed charset, a missing secret without `allowInsecure`, or
+`registerOnBootstrap` without a valid `http(s)` `domain`) throws a
+`TelegramConfigError` **synchronously at registration**, so mistakes surface
+immediately rather than as a confusing runtime failure.
 
 ### Environment variables
 

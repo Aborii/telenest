@@ -214,7 +214,7 @@ The library declares its heavy integrations as **peer dependencies** (its own `d
 | `telegraf` | `^4.16.0` | Bot API client — only used by the `bot` layer. |
 | `telegram` | `^2.26.0` | GramJS MTProto client — only imported by `gramjs-client.adapter.ts`. |
 
-Because `telegraf` powers only the `bot` layer and `telegram` is touched only by the single GramJS adapter, a consumer who needs **just one** side still installs both peers today (they are not declared `optional`), but the design keeps each integration confined to its layer. The typed facades derive their signatures from the installed peer versions (`Parameters<>` / `ReturnType<>` over Telegraf's `Telegram` type for the bot facade; library DTOs for the GramJS adapter), so upgrading a peer within its range never silently breaks the public surface.
+Because `telegraf` powers only the `bot` layer and `telegram` is touched only by the single GramJS adapter, a consumer who needs **just one** side installs only that SDK: both `telegraf` and `telegram` are declared **optional** peer dependencies (`peerDependenciesMeta`), and the subpath exports (`nestjs-telegram/bot`, `/client`) let each side be imported without pulling in the other's SDK. The typed facades derive their signatures from the installed peer versions (`Parameters<>` / `ReturnType<>` over Telegraf's `Telegram` type for the bot facade; library DTOs for the GramJS adapter), so upgrading a peer within its range never silently breaks the public surface.
 
 ---
 
@@ -224,43 +224,62 @@ Because `telegraf` powers only the `bot` layer and `telegram` is touched only by
 src/
   index.ts                              # public barrel → re-exports src/lib
   lib/
-    index.ts                            # aggregated barrel (common + bot + client + umbrella)
+    index.ts                            # aggregated barrel (common + bot + client + testing + umbrella)
     telegram.module.ts                  # TelegramModule umbrella (forRoot composer)
     common/                             # ── shared, dependency-free layer ──
-      index.ts
-      telegram.errors.ts                # TelegramError base + 5 subclasses + isTelegramError
+      telegram.errors.ts                # TelegramError base + subclasses + isTelegramError
       telegram.types.ts                 # PARSE_MODES/ParseMode, ChatId, Awaitable
+      observability/                    # health indicators, metrics counters, OTel tracer bridge
     bot/                                # ── Bot API layer (Telegraf) ──
-      index.ts
       telegram-bot.module.ts            # extends generated ConfigurableModuleClass
-      telegram-bot.module-definition.ts # ConfigurableModuleBuilder + TELEGRAM_BOT_OPTIONS
-      telegram-bot.options.ts           # TelegramBotModuleOptions
-      telegram-bot.factory.ts           # createTelegrafInstance + telegramBotProvider
       telegram-bot.service.ts           # TelegramBotService (typed facade + lifecycle)
-      telegram-bot.constants.ts         # TELEGRAM_BOT token (raw Telegraf)
+      telegram-bot.health.ts            # bot health indicator
+      telegram-bot.metrics-middleware.ts# update metrics middleware
       keyboard.builder.ts               # Inline/Reply keyboard builders, removeKeyboard, forceReply
+      callback-data.codec.ts            # encode/decode JSON callback_data (64-byte limit)
+      message-splitter.ts               # splitMessageText (4096-char chunking)
+      retry.ts                          # withRetry — 429 retry_after back-off
+      updates/                          # @TelegramUpdate decorator runtime
+        telegram-update.decorator.ts    # @TelegramUpdate/@Command/@Hears/@Action/@On/@Use
+        param.decorators.ts             # @Ctx/@Sender/@MessageText/@CallbackData
+        telegram-bot-updates.registrar.ts # discovers + binds handlers onto Telegraf
+        command-registry.ts             # @Command → setMyCommands menu payloads
+        argument-resolver.ts            # resolves handler params from the update
+        execution/                      # enhancer pipeline (guards/interceptors/filters)
+        guards/                         # chat-/user-allowlist + rate-limit guards
+        filters/                        # default exception filter
+      web-app/                          # validateWebAppInitData (Mini App init-data)
+      webhook/                          # webhook controller, guard, registrar, secret-token
     client/                             # ── MTProto / user-account layer (GramJS) ──
-      index.ts
       telegram-client.module.ts         # extends generated ConfigurableModuleClass
-      telegram-client.module-definition.ts # ConfigurableModuleBuilder + TELEGRAM_CLIENT_OPTIONS
-      telegram-client.options.ts        # TelegramClientModuleOptions + GramClientFactory
-      telegram-client.factory.ts        # sessionStoreProvider + gramClientProvider
-      telegram-client.constants.ts      # TELEGRAM_GRAM_CLIENT, TELEGRAM_SESSION_STORE tokens
-      telegram-auth.service.ts          # TelegramAuthService (login state machine)
-      telegram-user.service.ts          # TelegramUserService (act as the account)
+      telegram-client.lifecycle.ts      # connect/disconnect lifecycle
+      telegram-client.health.ts         # client health indicator
+      telegram-auth.service.ts          # TelegramAuthService (login state machine, incl. QR)
+      telegram-user.service.ts          # TelegramUserService (account operations: messages/media/chats)
       gram-client.interface.ts          # IGramClient — the abstraction boundary
       gram-client.types.ts              # GramUser/GramDialog/GramMessage/… DTOs + unions
-      gramjs-client.adapter.ts          # GramJsClientAdapter + createGramJsClient (ONLY file importing 'telegram')
-      session/
-        session-store.interface.ts      # SessionStore contract
+      gramjs-client.adapter.ts          # GramJsClientAdapter (ONLY file importing 'telegram')
+      updates/                          # @OnUserMessage inbound dispatch + match-user-message
+      session/                          # SessionStore contract + 5 implementations
         memory-session-store.ts         # InMemorySessionStore (volatile)
-        file-session-store.ts           # FileSessionStore (durable, 0o600)
+        file-session-store.ts           # FileSessionStore (durable, 0o600, atomic)
+        key-value-session-store.ts      # KeyValueSessionStore (bring-your-own KV)
+        redis-session-store.ts          # RedisSessionStore
+        encrypted-session-store.ts      # EncryptedSessionStore (AES-256-GCM wrapper)
+    testing/                            # ── nestjs-telegram/testing utilities ──
+      mock-gram-client.ts               # createMockGramClient / provideMockGramClient
+      mock-bot-context.ts               # createMockBotContext (spyable Telegraf Context)
+      dto-builders.ts                   # aGramUser / aGramMessage / aGramDialog
 examples/
   login-cli.ts                          # interactive MTProto login → string session
+  qr-login.example.ts                   # QR-code login flow
+  decorator-bot.example.ts              # @TelegramUpdate handler classes
+  bot-enhancers.example.ts             # guards/filters/interceptors
   example-app.module.ts                 # reference wiring of both modules (forRootAsync)
-docs/
-  TELEGRAM-MODULE.md                    # this document
 ```
+
+> Trees in the docs are intentionally abbreviated to the key files per subsystem;
+> see `src/lib/**` for the full listing and each feature's own doc for details.
 
 ---
 

@@ -1,6 +1,8 @@
 # GitHub Copilot Instructions
 
-See also: [AGENTS.md](AGENTS.md) for Next.js-specific rules.
+`nestjs-telegram` is a reusable, fully-typed **NestJS library** (Bot API via
+Telegraf + MTProto user account via GramJS) — not a Next.js app. See `CLAUDE.md`
+for the authoritative project rules.
 
 ## Documentation & Comments — Required for Everything
 
@@ -71,7 +73,8 @@ Every class must have a JSDoc block describing:
 
 ### Interfaces & Types
 
-Every exported `interface`, `type`, and `enum` must have a JSDoc block
+Every exported `interface` and `type` (this repo uses no `enum`s — see below)
+must have a JSDoc block
 summarising its purpose, plus an inline comment on **every member** that is not
 self-evident from its name alone.
 
@@ -290,7 +293,7 @@ before reading any files directly.
 - ALWAYS ALWAYS ALWAYS Be type-Safe.
 - DON'T use enums in TypeScript; prefer union types or `as const` objects.
 - Use `camelCase` for variables, functions, and methods.
-- Use `PascalCase` for classes, interfaces, types, and enums.
+- Use `PascalCase` for classes, interfaces, and types.
 - Use `SCREAMING_SNAKE_CASE` for constants and environment variables.
 - Always prefer `const` over `let`; never use `var`.
 - Never use `any` in TypeScript; prefer precise types or `unknown` if necessary.

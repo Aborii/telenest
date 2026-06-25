@@ -26,7 +26,9 @@ without either installed.
 - [Metrics](#metrics)
   - [What is counted, and where](#what-is-counted-and-where)
   - [Reading counters](#reading-counters)
+  - [Swapping the recorder](#swapping-the-recorder)
   - [Bridging to Prometheus](#bridging-to-prometheus)
+  - [Bridging to OpenTelemetry metrics](#bridging-to-opentelemetry-metrics)
 - [Tracing (OpenTelemetry)](#tracing-opentelemetry)
 - [DI Tokens (default & named)](#di-tokens-default--named)
 - [Security Notes](#security-notes)
@@ -54,6 +56,7 @@ them.
 src/lib/
 ├── common/observability/
 │   ├── telegram-metrics.ts     # counters, recorder/readable interfaces, InMemory + Noop
+│   ├── telegram-metrics-exporter.ts # createOpenTelemetryMetrics + toPrometheusMetrics
 │   ├── telegram-tracer.ts      # TelegramTracer, Noop, createOpenTelemetryTracer (OTel bridge)
 │   ├── telegram-health.ts      # HealthStatus, result shape, runHealthCheck helper
 │   └── index.ts
@@ -185,25 +188,77 @@ stats() {
 `snapshot()` returns a defensive copy; `reset()` zeroes every counter. Counters
 are **totals**, not rates — sample `snapshot()` over time to derive rates.
 
-### Bridging to Prometheus
+### Swapping the recorder
 
-The in-memory sink is the source of truth; export it on your own schedule. With
-`prom-client`:
+Both modules accept a `metrics` option to replace the default
+`InMemoryTelegramMetrics` for that bot/account — supply any
+`TelegramMetricsRecorder` (e.g. an OpenTelemetry bridge, below). It defaults to a
+fresh in-memory sink, so there is **zero cost** when you leave it unset.
 
 ```ts
-import { Gauge } from 'prom-client';
-
-const gauges = {
-  sent: new Gauge({ name: 'telegram_messages_sent', help: 'Sent' }),
-  errors: new Gauge({ name: 'telegram_api_errors', help: 'Errors' }),
-};
-
-setInterval(() => {
-  const s = metrics.snapshot();
-  gauges.sent.set(s.messagesSent);
-  gauges.errors.set(s.apiErrors);
-}, 15_000);
+TelegramBotModule.forRoot({ token, metrics: myRecorder });
+TelegramClientModule.forRoot({ apiId, apiHash, metrics: myRecorder });
 ```
+
+> A swapped-in write-only recorder (like the OTel bridge) has no `.snapshot()`.
+> Keep the default in-memory sink if you also want to read counters / serve the
+> Prometheus snapshot below.
+
+### Bridging to Prometheus
+
+Render the in-memory snapshot as Prometheus text-exposition format with the
+built-in `toPrometheusMetrics` helper, and serve it from a `/metrics` route:
+
+```ts
+import { Controller, Get, Header, Inject } from '@nestjs/common';
+import {
+  TELEGRAM_BOT_METRICS,
+  toPrometheusMetrics,
+  type TelegramMetrics,
+} from 'nestjs-telegram';
+
+@Controller()
+export class MetricsController {
+  constructor(
+    @Inject(TELEGRAM_BOT_METRICS) private readonly metrics: TelegramMetrics,
+  ) {}
+
+  @Get('metrics')
+  @Header('Content-Type', 'text/plain; version=0.0.4')
+  metrics(): string {
+    // telegram_messages_sent 12
+    return toPrometheusMetrics(this.metrics.snapshot(), {
+      labels: { bot: 'main' },
+    });
+  }
+}
+```
+
+Every counter is emitted (zeros included) with `# HELP`/`# TYPE` lines; pass
+`prefix` to change the `telegram_` namespace and `labels` to tag the series.
+
+### Bridging to OpenTelemetry metrics
+
+To push counters into an existing OpenTelemetry pipeline instead, wrap an OTel
+`Meter` with `createOpenTelemetryMetrics` and pass it as the module's `metrics`
+recorder. Like the tracer bridge, the library never imports `@opentelemetry/api`
+— it accepts the meter structurally, so OTel stays an optional peer.
+
+```ts
+import { metrics } from '@opentelemetry/api';
+import { createOpenTelemetryMetrics, TelegramBotModule } from 'nestjs-telegram';
+
+TelegramBotModule.forRoot({
+  token: process.env.BOT_TOKEN!,
+  // Each increment becomes an OTel counter `add` (telegram.messagesSent, …).
+  metrics: createOpenTelemetryMetrics(metrics.getMeter('telegram'), {
+    attributes: { bot: 'main' }, // tag measurements (e.g. per bot/account)
+  }),
+});
+```
+
+`prefix` (default `telegram.`) controls the instrument names. Use `attributes`
+to distinguish multiple bots/accounts forwarding to the same meter.
 
 ## Tracing (OpenTelemetry)
 

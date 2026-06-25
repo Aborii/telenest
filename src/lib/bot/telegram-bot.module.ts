@@ -62,7 +62,6 @@ import type { Telegraf } from 'telegraf';
 import {
   InMemoryTelegramMetrics,
   NOOP_TELEGRAM_TRACER,
-  type TelegramMetrics,
   type TelegramMetricsRecorder,
   type TelegramTracer,
 } from '../common';
@@ -133,10 +132,15 @@ function createBotProviders(name: string): Provider[] {
         createTelegrafInstance(options),
       inject: [TELEGRAM_BOT_OPTIONS],
     },
-    // ── Per-bot metrics sink (in-memory by default; readable via .snapshot()). ─
+    // ── Per-bot metrics sink: the configured recorder, else an in-memory one
+    //    (readable via .snapshot()). Swap it (e.g. an OTel bridge) via options. ─
     {
       provide: metricsToken,
-      useFactory: (): TelegramMetrics => new InMemoryTelegramMetrics(),
+      useFactory: (
+        options: TelegramBotModuleOptions,
+      ): TelegramMetricsRecorder =>
+        options.metrics ?? new InMemoryTelegramMetrics(),
+      inject: [TELEGRAM_BOT_OPTIONS],
     },
     // ── Per-bot tracer; no-op by default (override to emit OpenTelemetry spans). ─
     { provide: tracerToken, useValue: NOOP_TELEGRAM_TRACER },

@@ -155,6 +155,30 @@ describe('TelegramClientModule', () => {
       });
     });
 
+    it('uses a custom metrics recorder supplied via options', async () => {
+      const fake = createFakeClient();
+      (fake.sendMessage as jest.Mock).mockResolvedValue({ id: 1 });
+      const increments: string[] = [];
+      const custom = { increment: (counter: string) => increments.push(counter) };
+
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramClientModule.forRoot({
+            apiId: 1,
+            apiHash: 'hash',
+            autoConnect: false,
+            clientFactory: () => fake,
+            metrics: custom,
+          }),
+        ],
+      }).compile();
+
+      // The token resolves to the supplied recorder, and the facade records into it.
+      expect(moduleRef.get(TELEGRAM_CLIENT_METRICS)).toBe(custom);
+      await moduleRef.get(TelegramUserService).sendMessage('me', 'hi');
+      expect(increments).toContain('messagesSent');
+    });
+
     it('records sends into the user facade through DI', async () => {
       const fake = createFakeClient();
       (fake.sendMessage as jest.Mock).mockResolvedValue({ id: 1 });

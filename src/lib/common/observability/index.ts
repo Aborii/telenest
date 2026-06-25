@@ -13,4 +13,5 @@
 
 export * from './telegram-health';
 export * from './telegram-metrics';
+export * from './telegram-metrics-exporter';
 export * from './telegram-tracer';

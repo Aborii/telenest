@@ -31,8 +31,8 @@
  * - TelegramUpdate: class decorator marking an update provider (optionally
  *   scoped to a named bot).
  * - TelegramUpdateOptions: options accepted by `@TelegramUpdate`.
- * - Start / Help / Command / Hears / Action / On / Use / InlineQuery /
- *   ChosenInlineResult: method decorators.
+ * - Start / Help / Command / Hears / Action / CallbackAction / On / Use /
+ *   InlineQuery / ChosenInlineResult: method decorators.
  */
 
 import 'reflect-metadata';
@@ -40,6 +40,7 @@ import 'reflect-metadata';
 import { SetMetadata } from '@nestjs/common';
 import type { Telegraf } from 'telegraf';
 
+import type { CallbackActionSchema } from '../callback-action.codec';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import {
   BOT_UPDATE_KINDS,
@@ -249,6 +250,63 @@ export function Action(
     appendBinding(target, propertyKey, {
       kind: BOT_UPDATE_KINDS.ACTION,
       trigger,
+    });
+}
+
+/**
+ * Routes a callback query to this handler by **action key**, using the typed
+ * callback-action router layered over the callback-data codec. Build the matching
+ * button data with
+ * {@link import('../callback-action.codec').encodeCallbackAction}; the registrar
+ * decodes each query's `{ a, d? }` envelope and dispatches here when `a` equals
+ * `key`. Unknown, oversized, or legacy callback data simply does not match, so a
+ * stray button press is ignored rather than throwing.
+ *
+ * Pass `schema` to validate the decoded payload (`d`): a
+ * {@link import('../param.decorators').CallbackPayload} parameter is parsed
+ * through it, and a thrown validation error is routed to the handler's exception
+ * filters. Omit it to inject the payload untyped (`unknown`). The decorator
+ * composes with `@UseTelegramGuards`/`Interceptors`/`Filters` like any other
+ * handler.
+ *
+ * @typeParam P - The validated payload shape, inferred from `schema`.
+ * @param key - The non-empty action key this handler claims.
+ * @param schema - Optional runtime validator/parser for the decoded payload.
+ * @returns A method decorator recording the binding.
+ * @throws Never.
+ *
+ * @example
+ * ```ts
+ * // sender:
+ * const data = encodeCallbackAction('buy', { id: 42 });
+ * new InlineKeyboardBuilder().callback('Buy', data).build();
+ *
+ * // handler:
+ * type Buy = { id: number };
+ * @CallbackAction('buy', (v): Buy => {
+ *   if (typeof v === 'object' && v !== null && typeof (v as Buy).id === 'number')
+ *     return v as Buy;
+ *   throw new Error('invalid buy payload');
+ * })
+ * onBuy(@CallbackPayload() payload: Buy, @Ctx() ctx: Context) {
+ *   return ctx.answerCbQuery(`Buying #${payload.id}`);
+ * }
+ * ```
+ */
+export function CallbackAction<P = unknown>(
+  key: string,
+  schema?: CallbackActionSchema<P>,
+): MethodDecorator {
+  return (target, propertyKey) =>
+    appendBinding(target, propertyKey, {
+      kind: BOT_UPDATE_KINDS.CALLBACK_ACTION,
+      key,
+      // ── Store the schema only when supplied; the router validates the payload
+      //    on injection when present, and injects it untyped otherwise. The cast
+      //    widens the inferred parser to the metadata's `unknown` payload type. ─
+      ...(schema !== undefined && {
+        schema: schema as CallbackActionSchema<unknown>,
+      }),
     });
 }
 

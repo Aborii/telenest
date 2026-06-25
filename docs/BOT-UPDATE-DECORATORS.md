@@ -37,12 +37,12 @@ The system has four cooperating pieces, all under `src/lib/bot/updates`:
 1. **Decorators** record intent as reflect-metadata.
    - `@TelegramUpdate()` marks a class as a handler provider to scan.
    - Method decorators (`@Start`, `@Help`, `@Command`, `@Hears`, `@Action`,
-     `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`) append an
-     `UpdateBinding` describing which `Telegraf` method the handler binds to and
-     with what trigger.
+     `@CallbackAction`, `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`)
+     append an `UpdateBinding` describing which `Telegraf` method the handler binds
+     to and with what trigger.
    - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`,
-     `@InlineQueryText`, `@InlineQueryOffset`) append a `ParamMetadata` describing
-     what to inject at each argument slot.
+     `@CallbackPayload`, `@InlineQueryText`, `@InlineQueryOffset`) append a
+     `ParamMetadata` describing what to inject at each argument slot.
 2. **The argument resolver** (`resolveHandlerArguments`) is a pure function that
    turns a Telegraf `Context` + the method's `ParamMetadata[]` into the positional
    argument array passed to the handler.
@@ -140,6 +140,7 @@ on one method (e.g. `@Command('a') @Command('b')`).
 | `@Command(name)` | `bot.command` | command name(s) |
 | `@Hears(trigger)` | `bot.hears` | string / RegExp / predicate / array |
 | `@Action(trigger)` | `bot.action` | callback-data string / RegExp / array |
+| `@CallbackAction(key, schema?)` | `bot.action` (key-matching predicate) | action key + optional payload validator |
 | `@On(updateType)` | `bot.on` | update-type filter(s), e.g. `'text'` |
 | `@Use()` | `bot.use` | — (global middleware) |
 | `@InlineQuery(pattern?)` | `bot.inlineQuery` (or `bot.on('inline_query')`) | optional string / RegExp / array |
@@ -153,6 +154,15 @@ after it so the chain continues.
 > **Inline mode** (`@InlineQuery` / `@ChosenInlineResult`, the
 > `InlineQueryResultBuilder`, and `answerInlineQuery`) has its own guide:
 > [BOT-INLINE-MODE.md](./BOT-INLINE-MODE.md).
+
+> **Typed callback-action router.** `@CallbackAction(key, schema?)` routes a
+> callback query by the action key of its `{ a, d? }` `callback_data` envelope
+> (built with `encodeCallbackAction`), and `@CallbackPayload()` injects the
+> decoded, optionally schema-validated payload — so you dispatch by key instead of
+> decoding by hand in a `@Action(/.*/)` catch-all. Unknown/oversized/legacy data
+> simply doesn't match (no throw). Declare it on a top-level provider, not inside a
+> scene. Full guide + example:
+> [BOT-API.md → Typed callback-action router](./BOT-API.md#typed-callback-action-router-callbackaction--callbackpayload).
 
 ## Auto-registering the command menu
 
@@ -227,6 +237,7 @@ not thrown, so it never takes down an otherwise-healthy app.
 | `@MessageText()` | `ctx.text` | `string \| undefined` | `undefined` |
 | `@Sender()` | `ctx.from` | `User \| undefined` | `undefined` |
 | `@CallbackData()` | callback query `data` | `string \| undefined` | `undefined` |
+| `@CallbackPayload()` | decoded callback-action payload (`d`), validated if `@CallbackAction` has a schema | your payload type / `unknown` | `undefined` |
 | `@InlineQueryText()` | `ctx.inlineQuery.query` | `string \| undefined` | `undefined` |
 | `@InlineQueryOffset()` | `ctx.inlineQuery.offset` | `string \| undefined` | `undefined` |
 

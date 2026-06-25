@@ -56,6 +56,57 @@ describe('resolveHandlerArguments', () => {
     expect(resolveHandlerArguments(withoutData, params)).toEqual([undefined]);
   });
 
+  it('decodes the callback-action payload for @CallbackPayload', () => {
+    const ctx = fakeContext({
+      callbackQuery: { data: '{"a":"buy","d":{"id":7}}' },
+    });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.CALLBACK_PAYLOAD },
+    ];
+    expect(resolveHandlerArguments(ctx, params)).toEqual([{ id: 7 }]);
+  });
+
+  it('injects undefined payload for a key-only / non-envelope callback', () => {
+    const keyOnly = fakeContext({ callbackQuery: { data: '{"a":"cancel"}' } });
+    const legacy = fakeContext({ callbackQuery: { data: 'legacy:1' } });
+    const notCallback = fakeContext({ text: 'hi' });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.CALLBACK_PAYLOAD },
+    ];
+    expect(resolveHandlerArguments(keyOnly, params)).toEqual([undefined]);
+    expect(resolveHandlerArguments(legacy, params)).toEqual([undefined]);
+    expect(resolveHandlerArguments(notCallback, params)).toEqual([undefined]);
+  });
+
+  it('validates the payload through the action schema when one is supplied', () => {
+    const ctx = fakeContext({
+      callbackQuery: { data: '{"a":"buy","d":{"id":7}}' },
+    });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.CALLBACK_PAYLOAD },
+    ];
+    const schema = jest.fn((value: unknown) => ({
+      validated: value as { id: number },
+    }));
+    expect(resolveHandlerArguments(ctx, params, schema)).toEqual([
+      { validated: { id: 7 } },
+    ]);
+    expect(schema).toHaveBeenCalledWith({ id: 7 });
+  });
+
+  it('propagates a schema validation error (routed to filters by dispatch)', () => {
+    const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy"}' } });
+    const params: ParamMetadata[] = [
+      { index: 0, kind: PARAM_KINDS.CALLBACK_PAYLOAD },
+    ];
+    const schema = (): never => {
+      throw new Error('invalid payload');
+    };
+    expect(() => resolveHandlerArguments(ctx, params, schema)).toThrow(
+      'invalid payload',
+    );
+  });
+
   it('injects inline query text and offset, undefined off inline updates', () => {
     const inline = fakeContext({ inlineQuery: { query: 'wx', offset: '10' } });
     const notInline = fakeContext({ text: 'hi' });

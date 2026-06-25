@@ -18,6 +18,7 @@ import { TELEGRAM_BOT } from '../telegram-bot.constants';
 import { TelegramBotModule } from '../telegram-bot.module';
 import {
   CallbackData,
+  CallbackPayload,
   Ctx,
   InlineQueryOffset,
   InlineQueryText,
@@ -27,6 +28,7 @@ import {
 import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 import {
   Action,
+  CallbackAction,
   ChosenInlineResult,
   Command,
   Hears,
@@ -177,6 +179,42 @@ class InlineUpdate {
   @ChosenInlineResult()
   public onChosen(@Ctx() _ctx: Context): void {
     this.events.push('chosen');
+  }
+}
+
+/** Payload shape carried by the `buy` callback action. */
+interface BuyPayload {
+  /** The product id the user chose to buy. */
+  readonly id: number;
+}
+
+/** Provider exercising the typed callback-action router and payload injection. */
+@TelegramUpdate()
+@Injectable()
+class CallbackActionUpdate {
+  /** Ordered record of which callback actions fired. */
+  public readonly events: string[] = [];
+  /** Last payload injected via `@CallbackPayload()`. */
+  public lastPayload: unknown;
+
+  @CallbackAction('buy', (value): BuyPayload => {
+    // ── Validate the decoded payload; a throw is routed to filters / logged. ────
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { id: unknown }).id === 'number'
+    )
+      return value as BuyPayload;
+    throw new Error('invalid buy payload');
+  })
+  public onBuy(@CallbackPayload() payload: BuyPayload): void {
+    this.events.push('buy');
+    this.lastPayload = payload;
+  }
+
+  @CallbackAction('cancel')
+  public onCancel(@Ctx() _ctx: Context): void {
+    this.events.push('cancel');
   }
 }
 
@@ -381,6 +419,82 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       ]);
       expect(inline.lastQuery).toBe('sun');
       expect(inline.lastOffset).toBe('20');
+    });
+  });
+
+  describe('callback-action router', () => {
+    /** Invokes a recorded action trigger predicate with raw callback data. */
+    const fireTrigger = (reg: Registration, data: string): unknown =>
+      (reg.trigger as (value: string) => unknown)(data);
+
+    it('binds @CallbackAction onto action with a key-matching function trigger', async () => {
+      const { regs } = await bootstrap([CallbackActionUpdate]);
+      const actions = regs.filter((r) => r.method === 'action');
+      expect(actions).toHaveLength(2);
+
+      // ── Every callback-action trigger is a predicate, not a string/RegExp. ────
+      for (const action of actions)
+        expect(typeof action.trigger).toBe('function');
+
+      // ── The 'buy' predicate matches its envelope and rejects others / legacy. ─
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":1}}') !== null,
+      );
+      expect(buy).toBeDefined();
+      expect(fireTrigger(buy as Registration, '{"a":"cancel"}')).toBeNull();
+      expect(fireTrigger(buy as Registration, 'legacy:1')).toBeNull();
+      expect(fireTrigger(buy as Registration, 'not json')).toBeNull();
+    });
+
+    it('dispatches the matching action with a decoded, validated payload', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":9}}' } });
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":9}}') !== null,
+      );
+      await (buy as Registration).middleware(ctx, next);
+
+      expect(update.events).toEqual(['buy']);
+      expect(update.lastPayload).toEqual({ id: 9 });
+    });
+
+    it('injects no payload for a key-only callback action', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"cancel"}' } });
+      const cancel = actions.find(
+        (a) => fireTrigger(a, '{"a":"cancel"}') !== null,
+      );
+      await (cancel as Registration).middleware(ctx, next);
+
+      expect(update.events).toEqual(['cancel']);
+    });
+
+    it('isolates a payload-schema validation failure (logs, does not rethrow)', async () => {
+      const { regs, get } = await bootstrap([CallbackActionUpdate]);
+      const update = get(CallbackActionUpdate);
+      const actions = regs.filter((r) => r.method === 'action');
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      // ── A 'buy' envelope whose payload fails the schema (id is not a number). ─
+      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":"x"}}' } });
+      const buy = actions.find(
+        (a) => fireTrigger(a, '{"a":"buy","d":{"id":"x"}}') !== null,
+      );
+
+      await expect(
+        (buy as Registration).middleware(ctx, next),
+      ).resolves.toBeUndefined();
+      // The handler never ran (validation threw during argument resolution).
+      expect(update.events).toEqual([]);
+      expect(errorSpy).toHaveBeenCalled();
     });
   });
 });

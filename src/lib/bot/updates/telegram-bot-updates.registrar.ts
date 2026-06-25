@@ -40,6 +40,7 @@ import { DiscoveryService, MetadataScanner, Reflector } from '@nestjs/core';
 import { Telegraf, type Context } from 'telegraf';
 
 import { TelegramConfigError } from '../../common';
+import { decodeCallbackAction } from '../callback-action.codec';
 import { TelegramBotScenesRegistrar } from '../scenes/telegram-bot-scenes.registrar';
 import { DEFAULT_BOT_NAME } from '../telegram-bot.constants';
 import type { TelegramBotModuleOptions } from '../telegram-bot.options';
@@ -61,6 +62,34 @@ import {
   type TelegramUpdateHandler,
   type UpdateBinding,
 } from './telegram-update.types';
+
+/**
+ * Builds a Telegraf action **trigger function** that matches a callback query iff
+ * its `{ a, d? }` envelope decodes to the given action key. Returning a synthetic
+ * `RegExpExecArray` (carrying the raw data) signals a match the way a `RegExp`
+ * trigger would; returning `null` is a non-match, so unknown/oversized/legacy
+ * callback data falls through to other handlers (or is simply ignored) instead of
+ * throwing — the graceful-handling requirement of the router.
+ *
+ * @param key - The action key this handler claims.
+ * @returns A `(value) => RegExpExecArray | null` predicate for `Telegraf.action`.
+ * @throws Never.
+ */
+function makeCallbackActionTrigger(
+  key: string,
+): (value: string) => RegExpExecArray | null {
+  return (value: string): RegExpExecArray | null => {
+    const decoded = decodeCallbackAction(value);
+    if (decoded === null || decoded.key !== key) return null;
+    // ── Telegraf assigns the returned array to `ctx.match`; mirror a RegExp
+    //    match shape so the raw data is available there. The cast is safe: we
+    //    construct exactly the array-plus-index/input the type describes. ───────
+    const match = [value] as unknown as RegExpExecArray;
+    match.index = 0;
+    match.input = value;
+    return match;
+  };
+}
 
 /** A discovered handler binding, queued before it is applied to Telegraf. */
 interface PendingBinding {
@@ -382,11 +411,26 @@ export class TelegramBotUpdatesRegistrar
     //    Read off `decorated` so inherited guards/filters/interceptors on an
     //    overridden handler are not lost. ──────────────────────────────────────
     const enhancers = this.enhancers.resolve(metatype, decorated);
+    // ── A callback-action binding may carry a payload schema; thread it so the
+    //    resolver validates any @CallbackPayload() arg. Undefined otherwise. ────
+    const callbackActionSchema =
+      binding.kind === BOT_UPDATE_KINDS.CALLBACK_ACTION
+        ? binding.schema
+        : undefined;
     // ── Returns whether the middleware chain should proceed: true on success,
     //    false when a guard denied the update or the handler threw uncaught. ───
     const proceed = (ctx: Context): Promise<boolean> =>
       dispatchToHandler(
-        { instance, metatype, handler, decorated, params, enhancers, label },
+        {
+          instance,
+          metatype,
+          handler,
+          decorated,
+          params,
+          callbackActionSchema,
+          enhancers,
+          label,
+        },
         ctx,
         this._logger,
       );
@@ -410,6 +454,11 @@ export class TelegramBotUpdatesRegistrar
         break;
       case BOT_UPDATE_KINDS.ACTION:
         this.bot.action(binding.trigger, terminal);
+        break;
+      case BOT_UPDATE_KINDS.CALLBACK_ACTION:
+        // ── Route by decoded action key via a trigger predicate; the schema (if
+        //    any) is applied during argument resolution, not here. ──────────────
+        this.bot.action(makeCallbackActionTrigger(binding.key), terminal);
         break;
       case BOT_UPDATE_KINDS.ON:
         this.bot.on(binding.trigger, terminal);

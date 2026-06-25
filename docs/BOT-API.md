@@ -424,7 +424,7 @@ wherever the module is imported, or anywhere if `isGlobal: true`).
 ## 7. `TelegramBotService` method reference
 
 The facade wraps the most common Bot API calls so that **every failure is normalized into
-a `TelegramBotApiError`** (see [§9](#9-error-handling-with-telegrambotapierror)). Each
+a `TelegramBotApiError`** (see [§10](#10-error-handling-with-telegrambotapierror)). Each
 method keeps Telegraf's own argument and return types, so they never drift from the
 installed Telegraf version.
 

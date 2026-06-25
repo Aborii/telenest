@@ -27,18 +27,6 @@ Advanced patterns, performance tips, and production-ready practices for `nestjs-
   - [Health Checks](#health-checks)
   - [Graceful Shutdown](#graceful-shutdown)
   - [Monitoring & Logging](#monitoring--logging)
-- [Advanced Bot Patterns](#advanced-bot-patterns)
-  - [Conversation State Management](#conversation-state-management)
-  - [Multi-language Support](#multi-language-support)
-  - [Plugin Architecture](#plugin-architecture)
-- [Advanced MTProto Patterns](#advanced-mtproto-patterns)
-  - [Session Management](#session-management)
-  - [Flood Wait Handling](#flood-wait-handling)
-  - [Multi-Account Management](#multi-account-management)
-- [Testing Strategies](#testing-strategies)
-  - [Integration Testing](#integration-testing)
-  - [E2E Testing](#e2e-testing)
-  - [Test Coverage Best Practices](#test-coverage-best-practices)
 
 ---
 

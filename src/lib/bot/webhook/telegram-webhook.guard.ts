@@ -49,8 +49,10 @@ interface RequestWithHeaders {
  * Guard that rejects webhook deliveries whose secret token is missing or wrong.
  *
  * When no `secretToken` is configured the guard allows the request (verification
- * is impossible) — the {@link import('./telegram-webhook.registrar').TelegramWebhookRegistrar}
- * logs a warning at bootstrap in that case so the open endpoint is not silent.
+ * is impossible). That state is only reachable via an explicit `allowInsecure`
+ * opt-in — registration otherwise throws — and the
+ * {@link import('./telegram-webhook.registrar').TelegramWebhookRegistrar} still
+ * logs a warning at bootstrap so the open endpoint is not silent.
  */
 @Injectable()
 export class TelegramWebhookGuard implements CanActivate {

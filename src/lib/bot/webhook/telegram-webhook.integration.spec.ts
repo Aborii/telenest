@@ -159,14 +159,14 @@ describe('webhook controller (e2e)', () => {
     expect(fake.handleUpdate).not.toHaveBeenCalled();
   });
 
-  it('accepts any request when no secret token is configured', async () => {
+  it('accepts any request when allowInsecure is set (no secret token)', async () => {
     const fake = createFakeBot();
     const port = await listen(
       [
         TelegramBotModule.forRoot({
           token: '123:abc',
           launch: false,
-          webhook: { path },
+          webhook: { path, allowInsecure: true },
         }),
       ],
       [{ token: TELEGRAM_BOT, bot: fake.bot }],

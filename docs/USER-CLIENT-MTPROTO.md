@@ -183,6 +183,7 @@ The factory must return a `TelegramClientModuleOptions` object:
 | `useWSS` | `boolean` | no | `false` | Use WebSocket transport (required in browsers). |
 | `floodSleepThreshold` | `number` | no | GramJS default | `FLOOD_WAIT` threshold in **seconds** below which GramJS waits and retries transparently instead of throwing. |
 | `autoConnect` | `boolean` | no | `true` | Whether to connect on module initialization. Set `false` to connect lazily/manually (e.g. in tests or CLI login scripts). |
+| `replayBufferSize` | `number` | no | `0` | Catch-up depth for the inbound update streams. When `> 0`, each stream replays up to this many recent events to a subscriber added after bootstrap. See [Receiving inbound updates](#receiving-inbound-updates). |
 | `clientFactory` | `GramClientFactory` | no | builds a real GramJS client | Override client construction. Primarily a **test seam** — see [section 8](#8-the-igramclient-abstraction-and-clientfactory-seam). |
 
 > [!NOTE]
@@ -663,11 +664,18 @@ Point a player at it and seeking just works:
 > Non-streamable containers (some MKV/AVI) won't play inline in browsers regardless — that's a
 > format concern, not a library limit.
 
-### Receiving inbound messages
+### Receiving inbound updates
 
-The user account can **react** to incoming messages, not just send them. There are two ways
-to consume the inbound stream — both fed by the same underlying GramJS event and both
-returning plain `GramMessage` DTOs (no GramJS imported in your code).
+The user account can **react** to inbound activity, not just send it. Four kinds of update are
+surfaced, each as a multicast RxJS stream on `TelegramUserService` **and** a matching method
+decorator. All map raw GramJS events to plain DTOs (no GramJS imported in your code):
+
+| Kind | Stream | Decorator | Payload |
+|---|---|---|---|
+| New message | `updates$` | `@OnUserMessage` | `GramMessage` |
+| Edited message | `editedMessages$` | `@OnUserEdited` | `GramMessage` (edited content) |
+| Deleted message(s) | `deletedMessages$` | `@OnUserDeleted` | `GramDeletedMessages` |
+| Chat action | `chatActions$` | `@OnChatAction` | `GramChatActionEvent` |
 
 **1. The `updates$` observable** — a hot, multicast RxJS stream on `TelegramUserService`:
 
@@ -708,9 +716,38 @@ The second argument is a `GramUserMessageContext`: `{ message, reply(text) }`, w
 sends back to the chat the message came from. A handler that throws is logged and isolated —
 it never breaks delivery for the other handlers.
 
-#### `OnUserMessageFilter`
+**3. Edited, deleted, and chat-action handlers** — the same discovery/teardown, on the other
+three streams:
 
-All present fields must match (logical AND); omit a field to ignore it.
+```ts
+import {
+  OnUserEdited, OnUserDeleted, OnChatAction,
+  GramMessage, GramDeletedMessages, GramChatActionEvent, GramUserMessageContext,
+} from 'nestjs-telegram';
+
+@Injectable()
+export class ActivityWatcher {
+  // Edited messages share GramMessage + the reply context (message.text is the new content).
+  @OnUserEdited({ incoming: true })
+  onEdit(message: GramMessage, ctx: GramUserMessageContext) { /* ... */ }
+
+  // Deletions carry the ids (and, for channels/supergroups only, the peer).
+  @OnUserDeleted()
+  onDelete(event: GramDeletedMessages) { /* event.messageIds, event.peerId */ }
+
+  // Typing / recording / online-offline signals.
+  @OnChatAction({ actions: ['online', 'offline'] })
+  onPresence(event: GramChatActionEvent) { /* event.userId, event.action */ }
+}
+```
+
+All four decorators take the same optional second `{ client }` argument to scope a handler to a
+named account in a multi-account app (see [§3](#3-configuring-telegramclientmodule)).
+
+#### Filters
+
+All present fields must match (logical AND); omit a field to ignore it. `@OnUserMessage` and
+`@OnUserEdited` share `OnUserMessageFilter`:
 
 | Field | Type | Matches |
 |---|---|---|
@@ -719,8 +756,26 @@ All present fields must match (logical AND); omit a field to ignore it.
 | `pattern` | `RegExp \| string` | `RegExp` is tested against the text; a `string` must equal it exactly. |
 | `chatId` | `GramPeer \| GramPeer[]` | One or more chat/peer ids (matched against `message.peerId`). |
 
+A deletion and a chat action carry no message body or direction, so their filters are narrower:
+
+- **`OnUserDeletedFilter`** — `{ chatId? }` only. Telegram reports the originating chat for
+  channel/supergroup deletions only, so a `chatId` filter never matches a deletion that arrived
+  without a peer.
+- **`OnChatActionFilter`** — `{ chatId?, actions? }`, where `actions` is one or more
+  `GramChatAction` kinds (e.g. `'typing'`, `'online'`).
+
+#### Catch-up (replay) buffer
+
+By default the streams are **hot**: a subscriber added after an event has already fired misses
+it. Set `replayBufferSize` on the module options to give late subscribers a bounded backlog —
+each stream then replays up to that many of its most recent events on subscription:
+
+```ts
+TelegramClientModule.forRoot({ apiId, apiHash, replayBufferSize: 50 });
+```
+
 > Note: events only flow while the client is connected (the default). With `autoConnect: false`
-> you manage the connection yourself, and the stream stays idle until you connect.
+> you manage the connection yourself, and the streams stay idle until you connect.
 
 ---
 
@@ -778,6 +833,36 @@ interface GramMessage {
 hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
 `downloadMedia(message.peerId, message.id)`.
 
+### `GramDeletedMessages`
+
+```ts
+interface GramDeletedMessages {
+  messageIds: number[];  // ids of the deleted messages
+  peerId?: string;       // originating chat (decimal string) — channels/supergroups only
+}
+```
+
+Telegram omits the peer for private chats and small groups (message ids are globally unique
+there), so `peerId` is present only for channel/supergroup deletions.
+
+### `GramChatActionEvent`
+
+```ts
+interface GramChatActionEvent {
+  peerId: string;   // chat/user the action occurred in, as a decimal string
+  userId?: string;  // id of the acting user, when known
+  action: GramChatAction;
+}
+```
+
+`GramChatAction` is a string union covering the transient typing/recording signals plus the
+two presence transitions: `'typing'`, `'cancel'`, `'recording-video'`, `'uploading-video'`,
+`'recording-voice'`, `'uploading-audio'`, `'uploading-photo'`, `'uploading-document'`,
+`'recording-round'`, `'uploading-round'`, `'picking-location'`, `'choosing-contact'`,
+`'choosing-sticker'`, `'playing-game'`, `'online'`, `'offline'`, and `'unknown'` for any action
+the library does not model individually. (Use the exported `GRAM_CHAT_ACTIONS` record for the
+named constants.)
+
 ### `GramChatInfo`
 
 ```ts
@@ -825,8 +910,9 @@ operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendC
 `downloadMediaRange`, `streamMedia`, `joinChannel`,
 `leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,
 `deleteMessages`, `forwardMessages`, `markAsRead`, `pinMessage`, `exportSession`,
-`onNewMessage`). The concrete `GramJsClientAdapter` — created by `createGramJsClient` — is the
-**only** implementation that touches the `telegram` package.
+`onNewMessage`, `onEditedMessage`, `onDeletedMessages`, `onChatAction`). The concrete
+`GramJsClientAdapter` — created by `createGramJsClient` — is the **only** implementation that
+touches the `telegram` package.
 
 This boundary makes the services unit-testable with a trivial fake and keeps GramJS out of
 consumer compilation units. There are two ways to substitute a fake:

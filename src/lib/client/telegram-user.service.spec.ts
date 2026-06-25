@@ -7,7 +7,13 @@
  */
 
 import type { IGramClient } from './gram-client.interface';
-import type { GramMessage, GramUser } from './gram-client.types';
+import {
+  GRAM_CHAT_ACTIONS,
+  type GramChatActionEvent,
+  type GramDeletedMessages,
+  type GramMessage,
+  type GramUser,
+} from './gram-client.types';
 import { TelegramUserService } from './telegram-user.service';
 
 /** A representative user DTO. */
@@ -65,6 +71,9 @@ function createFakeClient(
     pinMessage: jest.fn(),
     exportSession: jest.fn().mockReturnValue(''),
     onNewMessage: jest.fn().mockReturnValue(() => undefined),
+    onEditedMessage: jest.fn().mockReturnValue(() => undefined),
+    onDeletedMessages: jest.fn().mockReturnValue(() => undefined),
+    onChatAction: jest.fn().mockReturnValue(() => undefined),
   } as jest.Mocked<IGramClient>;
   return Object.assign(base, overrides);
 }
@@ -279,21 +288,150 @@ describe('TelegramUserService', () => {
       expect(received).toEqual([FAKE_MESSAGE]);
     });
 
-    it('unsubscribes and completes the stream on destroy', () => {
-      const unsubscribe = jest.fn();
+    it('unsubscribes and completes every stream on destroy', () => {
+      const unsubscribers = [jest.fn(), jest.fn(), jest.fn(), jest.fn()];
       const client = createFakeClient({
-        onNewMessage: jest.fn().mockReturnValue(unsubscribe),
+        onNewMessage: jest.fn().mockReturnValue(unsubscribers[0]),
+        onEditedMessage: jest.fn().mockReturnValue(unsubscribers[1]),
+        onDeletedMessages: jest.fn().mockReturnValue(unsubscribers[2]),
+        onChatAction: jest.fn().mockReturnValue(unsubscribers[3]),
       });
       const service = new TelegramUserService(client);
 
-      let completed = false;
-      service.updates$.subscribe({ complete: () => (completed = true) });
+      const completed = { updates: false, edited: false, deleted: false, actions: false };
+      service.updates$.subscribe({ complete: () => (completed.updates = true) });
+      service.editedMessages$.subscribe({ complete: () => (completed.edited = true) });
+      service.deletedMessages$.subscribe({ complete: () => (completed.deleted = true) });
+      service.chatActions$.subscribe({ complete: () => (completed.actions = true) });
 
       service.onModuleInit();
       service.onModuleDestroy();
 
-      expect(unsubscribe).toHaveBeenCalledTimes(1);
-      expect(completed).toBe(true);
+      for (const unsubscribe of unsubscribers)
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+      expect(completed).toEqual({
+        updates: true,
+        edited: true,
+        deleted: true,
+        actions: true,
+      });
+    });
+  });
+
+  describe('edited / deleted / chat-action streams', () => {
+    it('forwards edited messages to editedMessages$', () => {
+      let emit: ((m: GramMessage) => void) | undefined;
+      const client = createFakeClient({
+        onEditedMessage: jest.fn((h: (m: GramMessage) => void) => {
+          emit = h;
+          return () => undefined;
+        }),
+      });
+      const service = new TelegramUserService(client);
+      const received: GramMessage[] = [];
+      service.editedMessages$.subscribe((m) => received.push(m));
+
+      service.onModuleInit();
+      emit?.({ ...FAKE_MESSAGE, text: 'edited' });
+
+      expect(received).toEqual([{ ...FAKE_MESSAGE, text: 'edited' }]);
+    });
+
+    it('forwards deletion events to deletedMessages$', () => {
+      let emit: ((e: GramDeletedMessages) => void) | undefined;
+      const client = createFakeClient({
+        onDeletedMessages: jest.fn((h: (e: GramDeletedMessages) => void) => {
+          emit = h;
+          return () => undefined;
+        }),
+      });
+      const service = new TelegramUserService(client);
+      const received: GramDeletedMessages[] = [];
+      service.deletedMessages$.subscribe((e) => received.push(e));
+
+      service.onModuleInit();
+      emit?.({ messageIds: [1, 2], peerId: '999' });
+
+      expect(received).toEqual([{ messageIds: [1, 2], peerId: '999' }]);
+    });
+
+    it('forwards chat actions to chatActions$', () => {
+      let emit: ((e: GramChatActionEvent) => void) | undefined;
+      const client = createFakeClient({
+        onChatAction: jest.fn((h: (e: GramChatActionEvent) => void) => {
+          emit = h;
+          return () => undefined;
+        }),
+      });
+      const service = new TelegramUserService(client);
+      const received: GramChatActionEvent[] = [];
+      service.chatActions$.subscribe((e) => received.push(e));
+
+      service.onModuleInit();
+      const event: GramChatActionEvent = {
+        peerId: '7',
+        userId: '7',
+        action: GRAM_CHAT_ACTIONS.TYPING,
+      };
+      emit?.(event);
+
+      expect(received).toEqual([event]);
+    });
+  });
+
+  describe('catch-up (replay) buffer', () => {
+    /** Wires a fake whose new-message emit handle the test captures. */
+    function emittableClient(): {
+      client: jest.Mocked<IGramClient>;
+      emit: (m: GramMessage) => void;
+    } {
+      let emit: ((m: GramMessage) => void) | undefined;
+      const client = createFakeClient({
+        onNewMessage: jest.fn((h: (m: GramMessage) => void) => {
+          emit = h;
+          return () => undefined;
+        }),
+      });
+      return { client, emit: (m) => emit?.(m) };
+    }
+
+    it('replays recent events to a late subscriber when configured', () => {
+      const { client, emit } = emittableClient();
+      const service = new TelegramUserService(client, undefined, 2);
+
+      service.onModuleInit();
+      emit({ ...FAKE_MESSAGE, id: 1 });
+      emit({ ...FAKE_MESSAGE, id: 2 });
+      emit({ ...FAKE_MESSAGE, id: 3 });
+
+      // ── Subscriber added AFTER the emissions still sees the last 2. ──────────
+      const received: number[] = [];
+      service.updates$.subscribe((m) => received.push(m.id));
+      expect(received).toEqual([2, 3]);
+    });
+
+    it('does not replay to a late subscriber by default (hot stream)', () => {
+      const { client, emit } = emittableClient();
+      const service = new TelegramUserService(client);
+
+      service.onModuleInit();
+      emit({ ...FAKE_MESSAGE, id: 1 });
+
+      const received: number[] = [];
+      service.updates$.subscribe((m) => received.push(m.id));
+      expect(received).toEqual([]);
+    });
+
+    it('treats a non-positive buffer size as no replay', () => {
+      const { client, emit } = emittableClient();
+      const service = new TelegramUserService(client, undefined, -5);
+
+      service.onModuleInit();
+      emit({ ...FAKE_MESSAGE, id: 1 });
+
+      const received: number[] = [];
+      service.updates$.subscribe((m) => received.push(m.id));
+      expect(received).toEqual([]);
     });
   });
 });

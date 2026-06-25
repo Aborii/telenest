@@ -95,6 +95,16 @@ export interface TelegramClientModuleOptions {
   autoConnect?: boolean;
 
   /**
+   * Catch-up buffer depth for the inbound update streams
+   * ({@link import('./telegram-user.service').TelegramUserService.updates$} and
+   * its edited/deleted/chat-action siblings). When greater than zero, each
+   * stream replays up to this many of its most recent events to a subscriber
+   * added *after* bootstrap, so a late `@OnUserMessage` (or manual `subscribe`)
+   * still sees the recent backlog. Defaults to `0` — hot streams with no replay.
+   */
+  replayBufferSize?: number;
+
+  /**
    * Override the client construction. Primarily a test seam; when omitted the
    * module builds a real GramJS-backed client.
    */

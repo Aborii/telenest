@@ -428,3 +428,106 @@ export interface GramStreamMediaOptions {
   /** Maximum number of bytes to stream. Defaults to "until end-of-file". */
   limit?: number;
 }
+
+// ── Inbound update events ────────────────────────────────────────────────────
+
+/**
+ * Normalized "messages were deleted" event, delivered to
+ * {@link import('./gram-client.interface').IGramClient.onDeletedMessages}
+ * subscribers (and `@OnUserDeleted` handlers).
+ *
+ * Telegram only reports *where* a deletion happened for channels and
+ * supergroups; for private chats and small groups it omits the peer (message
+ * ids are globally unique there, so the chat can be recovered from a saved id
+ * alone). Hence {@link GramDeletedMessages.peerId} is optional — expect it to be
+ * present only for channel/supergroup deletions.
+ */
+export interface GramDeletedMessages {
+  /** Ids of the messages that were deleted. */
+  messageIds: number[];
+  /**
+   * Peer id (decimal string) the deletion occurred in, when Telegram reports
+   * it — present only for channels/supergroups, `undefined` otherwise.
+   */
+  peerId?: string;
+}
+
+/**
+ * Closed set of chat-action kinds surfaced by
+ * {@link import('./gram-client.interface').IGramClient.onChatAction} (and
+ * `@OnChatAction` handlers). Declared as an `as const` record (never an `enum`,
+ * per repo conventions) so {@link GramChatAction} and
+ * {@link GRAM_CHAT_ACTION_VALUES} derive from it.
+ *
+ * The members cover Telegram's transient "user is doing X" signals
+ * (`SendMessageAction`) plus the two coarse online/offline presence
+ * transitions. Any action this library does not model maps to
+ * {@link GRAM_CHAT_ACTIONS.UNKNOWN}.
+ */
+export const GRAM_CHAT_ACTIONS = {
+  /** The user is typing a text message. */
+  TYPING: 'typing',
+  /** The user explicitly cleared their action (stopped typing/recording). */
+  CANCEL: 'cancel',
+  /** The user is recording a video. */
+  RECORDING_VIDEO: 'recording-video',
+  /** The user is uploading a video. */
+  UPLOADING_VIDEO: 'uploading-video',
+  /** The user is recording a voice note. */
+  RECORDING_VOICE: 'recording-voice',
+  /** The user is uploading a voice/audio file. */
+  UPLOADING_AUDIO: 'uploading-audio',
+  /** The user is uploading a photo. */
+  UPLOADING_PHOTO: 'uploading-photo',
+  /** The user is uploading a document/file. */
+  UPLOADING_DOCUMENT: 'uploading-document',
+  /** The user is recording a round (video-note) message. */
+  RECORDING_ROUND: 'recording-round',
+  /** The user is uploading a round (video-note) message. */
+  UPLOADING_ROUND: 'uploading-round',
+  /** The user is picking a geo location to share. */
+  PICKING_LOCATION: 'picking-location',
+  /** The user is choosing a contact to share. */
+  CHOOSING_CONTACT: 'choosing-contact',
+  /** The user is choosing a sticker. */
+  CHOOSING_STICKER: 'choosing-sticker',
+  /** The user is playing an embedded game. */
+  PLAYING_GAME: 'playing-game',
+  /** The user just came online. */
+  ONLINE: 'online',
+  /** The user just went offline. */
+  OFFLINE: 'offline',
+  /** An action this library does not model individually. */
+  UNKNOWN: 'unknown',
+} as const;
+
+/** Union of the chat-action kinds in {@link GRAM_CHAT_ACTIONS}. */
+export type GramChatAction =
+  (typeof GRAM_CHAT_ACTIONS)[keyof typeof GRAM_CHAT_ACTIONS];
+
+/** Readonly array form of {@link GRAM_CHAT_ACTIONS} for iteration/validation. */
+export const GRAM_CHAT_ACTION_VALUES = Object.values(
+  GRAM_CHAT_ACTIONS,
+) as readonly GramChatAction[];
+
+/**
+ * Normalized chat-action event, delivered to
+ * {@link import('./gram-client.interface').IGramClient.onChatAction}
+ * subscribers (and `@OnChatAction` handlers). Models both the transient
+ * "user is typing / recording / …" signals and online/offline presence changes.
+ */
+export interface GramChatActionEvent {
+  /**
+   * Peer id (decimal string) the action occurred in. For a one-to-one typing /
+   * presence update this is the user's own id; for a group/channel it is the
+   * chat id.
+   */
+  peerId: string;
+  /**
+   * Id (decimal string) of the user performing the action, when known. Omitted
+   * only when Telegram does not attribute the action to a resolvable user.
+   */
+  userId?: string;
+  /** Which action the user is performing. */
+  action: GramChatAction;
+}

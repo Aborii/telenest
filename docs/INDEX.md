@@ -188,7 +188,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 1. Guide: [TESTING.md](./TESTING.md)
 2. Examples: [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)
-3. Patterns: [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies)
+3. Patterns: [TESTING.md](./TESTING.md)
 
 ### I want to deploy to production
 
@@ -207,7 +207,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Bot module setup      | [BOT-API.md § Registering the module](./BOT-API.md#2-registering-the-module)                                           |
 | Client module setup   | [USER-CLIENT-MTPROTO.md § Configuring](./USER-CLIENT-MTPROTO.md#3-configuring-telegramclientmodule)                    |
 | Environment variables | [GETTING-STARTED.md § Environment](./GETTING-STARTED.md#common-patterns)                                               |
-| Async configuration   | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasync-options-telegrambotmoduleasyncoptions-dynamicmodule) |
+| Async configuration   | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasyncoptions-telegrambotmoduleasyncoptions-dynamicmodule) |
 
 ### Messaging
 
@@ -236,7 +236,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Topic              | Document                                                                                  |
 | ------------------ | ----------------------------------------------------------------------------------------- |
 | Bot token          | [GETTING-STARTED.md § Get Token](./GETTING-STARTED.md#1-get-your-bot-token)               |
-| MTProto login      | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#4-authentication-flow)                     |
+| MTProto login      | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#the-login-state-machine)                    |
 | Session management | [USER-CLIENT-MTPROTO.md § Sessions](./USER-CLIENT-MTPROTO.md#5-sessions-and-sessionstore) |
 | 2FA                | [AUTHENTICATION.md](./AUTHENTICATION.md)                                                  |
 
@@ -254,7 +254,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | ------------- | ------------------------------------------------------------------------- |
 | Unit tests    | [TESTING.md § Unit Testing](./TESTING.md#2-testing-your-application-code) |
 | Mocking       | [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)                   |
-| Test patterns | [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies)     |
+| Test patterns | [TESTING.md](./TESTING.md)                                               |
 
 ### Advanced
 

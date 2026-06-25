@@ -57,7 +57,7 @@ npm i telegram
 npm i telegraf telegram
 ```
 
-> **Tip:** Use [subpath imports](#subpath-imports) to load only what you need:
+> **Tip:** Use subpath imports to load only what you need:
 >
 > - `nestjs-telegram/bot` — Bot API only (no GramJS)
 > - `nestjs-telegram/client` — MTProto only (no Telegraf)

@@ -177,6 +177,27 @@ describe('validateWebAppInitData', () => {
     ).toBeNull();
   });
 
+  it('returns null for data older than the default 24h window (no maxAgeSeconds)', () => {
+    const initData = signInitData({
+      auth_date: String(nowSeconds() - 90_000), // > 24h
+      user: USER_JSON,
+    });
+
+    expect(validateWebAppInitData(initData, BOT_TOKEN)).toBeNull();
+  });
+
+  it('disables the freshness check when maxAgeSeconds is 0', () => {
+    const initData = signInitData({
+      auth_date: String(nowSeconds() - 90_000), // > 24h, but check disabled
+      user: USER_JSON,
+    });
+
+    const data = validateWebAppInitData(initData, BOT_TOKEN, {
+      maxAgeSeconds: 0,
+    });
+    expect(data?.user?.id).toBe(123456789);
+  });
+
   it('returns data when within maxAgeSeconds', () => {
     const initData = signInitData({
       auth_date: String(nowSeconds() - 60),

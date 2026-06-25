@@ -1620,6 +1620,20 @@ describe('GramJsClientAdapter', () => {
           createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
         ).rejects.toBeInstanceOf(TelegramClientError);
       });
+
+      it('rejects a negative offset with a TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+        });
+        await expect(
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: -1,
+            limit: 4,
+          }),
+        ).rejects.toBeInstanceOf(TelegramClientError);
+      });
     });
 
     describe('streamMedia', () => {
@@ -1638,6 +1652,17 @@ describe('GramJsClientAdapter', () => {
         for await (const chunk of await createAdapter(mock).streamMedia('me', 1))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('helloworld'));
+      });
+
+      it('rejects a negative offset with a TelegramClientError', async () => {
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ media: documentMedia() })]),
+        });
+        await expect(
+          createAdapter(mock).streamMedia('me', 1, { offset: -5 }),
+        ).rejects.toBeInstanceOf(TelegramClientError);
       });
 
       it('trims the leading surplus and honours the byte limit', async () => {

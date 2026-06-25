@@ -57,13 +57,13 @@ describe('createOpenTelemetryMetrics', () => {
 
     expect([...counters.keys()].sort()).toEqual(
       [
-        'telegram.apiErrors',
-        'telegram.floodWaits',
-        'telegram.messagesReceived',
-        'telegram.messagesSent',
+        'telegram.api_errors',
+        'telegram.flood_waits',
+        'telegram.messages_received',
+        'telegram.messages_sent',
       ].sort(),
     );
-    expect(descriptions.get('telegram.messagesSent')).toBe(
+    expect(descriptions.get('telegram.messages_sent')).toBe(
       TELEGRAM_COUNTER_DESCRIPTIONS.messagesSent,
     );
   });
@@ -75,7 +75,7 @@ describe('createOpenTelemetryMetrics', () => {
     recorder.increment(TELEGRAM_COUNTERS.MESSAGES_SENT);
     recorder.increment(TELEGRAM_COUNTERS.MESSAGES_SENT, 3);
 
-    const counter = counters.get('telegram.messagesSent');
+    const counter = counters.get('telegram.messages_sent');
     expect(counter?.adds.map((a) => a.value)).toEqual([1, 3]);
   });
 
@@ -87,7 +87,7 @@ describe('createOpenTelemetryMetrics', () => {
     recorder.increment(TELEGRAM_COUNTERS.API_ERRORS, -2);
     recorder.increment(TELEGRAM_COUNTERS.API_ERRORS, Number.NaN);
 
-    expect(counters.get('telegram.apiErrors')?.adds).toHaveLength(0);
+    expect(counters.get('telegram.api_errors')?.adds).toHaveLength(0);
   });
 
   it('honors a custom prefix and static attributes', () => {
@@ -99,7 +99,7 @@ describe('createOpenTelemetryMetrics', () => {
 
     recorder.increment(TELEGRAM_COUNTERS.FLOOD_WAITS);
 
-    const counter = counters.get('tg_floodWaits');
+    const counter = counters.get('tg_flood_waits');
     expect(counter?.adds[0]).toEqual({
       value: 1,
       attributes: { account: 'ops' },

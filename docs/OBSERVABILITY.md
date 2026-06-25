@@ -250,7 +250,7 @@ import { createOpenTelemetryMetrics, TelegramBotModule } from 'nestjs-telegram';
 
 TelegramBotModule.forRoot({
   token: process.env.BOT_TOKEN!,
-  // Each increment becomes an OTel counter `add` (telegram.messagesSent, …).
+  // Each increment becomes an OTel counter `add` (telegram.messages_sent, …).
   metrics: createOpenTelemetryMetrics(metrics.getMeter('telegram'), {
     attributes: { bot: 'main' }, // tag measurements (e.g. per bot/account)
   }),

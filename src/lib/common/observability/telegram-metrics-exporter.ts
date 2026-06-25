@@ -105,7 +105,7 @@ export interface OtelMeterLike {
 export interface OpenTelemetryMetricsOptions {
   /**
    * Prefix prepended to each counter instrument name. Defaults to `'telegram.'`,
-   * yielding instruments like `telegram.messagesSent`.
+   * yielding instruments like `telegram.messages_sent`.
    */
   prefix?: string;
   /**
@@ -150,10 +150,11 @@ export function createOpenTelemetryMetrics(
   const attributes = options?.attributes;
 
   // ── Pre-create one counter instrument per known counter so each increment is
-  //    a cheap `add` with no per-call instrument lookup. ──────────────────────
+  //    a cheap `add` with no per-call instrument lookup. Names are snake_cased so
+  //    they read idiomatically and match the Prometheus exporter's series. ──────
   const counters = {} as Record<TelegramCounter, OtelCounterLike>;
   for (const counter of TELEGRAM_COUNTER_VALUES)
-    counters[counter] = meter.createCounter(`${prefix}${counter}`, {
+    counters[counter] = meter.createCounter(`${prefix}${toSnakeCase(counter)}`, {
       description: TELEGRAM_COUNTER_DESCRIPTIONS[counter],
     });
 

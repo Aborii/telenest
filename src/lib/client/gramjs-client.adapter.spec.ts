@@ -1255,6 +1255,15 @@ describe('GramJsClientAdapter', () => {
       });
     });
 
+    it('editMessage throws a precise TelegramClientError when GramJS returns no message', async () => {
+      const mock = createMockClient({
+        editMessage: jest.fn().mockResolvedValue(undefined),
+      });
+      await expect(
+        createAdapter(mock).editMessage('me', 12, 'edited'),
+      ).rejects.toBeInstanceOf(TelegramClientError);
+    });
+
     it('deleteMessages revokes by default and respects an explicit flag', async () => {
       const mock = createMockClient({
         deleteMessages: jest.fn().mockResolvedValue([]),
@@ -1288,6 +1297,21 @@ describe('GramJsClientAdapter', () => {
         messages: [21, 22],
         fromPeer: '@from',
       });
+    });
+
+    it('forwardMessages skips entries GramJS returns as undefined', async () => {
+      const mock = createMockClient({
+        forwardMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 21 }), undefined]),
+      });
+      const forwarded = await createAdapter(mock).forwardMessages(
+        '@to',
+        '@from',
+        [21, 22],
+      );
+      // ── Only the message that was actually forwarded is mapped. ──────────────
+      expect(forwarded.map((m) => m.id)).toEqual([21]);
     });
 
     it('markAsRead delegates to the client', async () => {

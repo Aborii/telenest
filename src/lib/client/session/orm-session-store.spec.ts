@@ -138,6 +138,11 @@ describe('OrmSessionStore', () => {
       const store = new OrmSessionStore(new FakeOrmRepository(true));
       await expect(store.clear()).rejects.toBeInstanceOf(TelegramSessionError);
     });
+
+    it('labels the error as an ORM session store (not "key/value store")', async () => {
+      const store = new OrmSessionStore(new FakeOrmRepository(true));
+      await expect(store.load()).rejects.toThrow(/ORM session store/);
+    });
   });
 
   describe('ormRepositoryToKeyValueStore', () => {

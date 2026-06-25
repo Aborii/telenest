@@ -146,6 +146,6 @@ export class OrmSessionStore extends KeyValueSessionStore {
     repository: OrmSessionRepository,
     key: string = DEFAULT_KEY_VALUE_SESSION_KEY,
   ) {
-    super(ormRepositoryToKeyValueStore(repository), key);
+    super(ormRepositoryToKeyValueStore(repository), key, 'ORM session store');
   }
 }

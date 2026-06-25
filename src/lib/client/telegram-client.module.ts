@@ -64,7 +64,6 @@ import {
 
 import {
   InMemoryTelegramMetrics,
-  type TelegramMetrics,
   type TelegramMetricsRecorder,
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
@@ -115,10 +114,15 @@ function createClientProviders(name: string): Provider[] {
   const userToken = getTelegramUserToken(name);
   const metricsToken = getClientMetricsToken(name);
   return [
-    // ── Per-account metrics sink (in-memory; readable via .snapshot()). ───────
+    // ── Per-account metrics sink: the configured recorder, else an in-memory
+    //    one (readable via .snapshot()). Swap it (e.g. an OTel bridge) via opts. ─
     {
       provide: metricsToken,
-      useFactory: (): TelegramMetrics => new InMemoryTelegramMetrics(),
+      useFactory: (
+        options: TelegramClientModuleOptions,
+      ): TelegramMetricsRecorder =>
+        options.metrics ?? new InMemoryTelegramMetrics(),
+      inject: [TELEGRAM_CLIENT_OPTIONS],
     },
     // ── Configured session store (or undefined) for this account. ─────────────
     {

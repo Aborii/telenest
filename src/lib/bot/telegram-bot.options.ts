@@ -20,6 +20,8 @@
 
 import type { Context, Telegraf } from 'telegraf';
 
+import type { TelegramMetricsRecorder } from '../common';
+
 /**
  * Settings controlling automatic registration of the bot's command menu
  * (`setMyCommands`) from `@Command` metadata. Opt-in: nothing is sent unless
@@ -101,4 +103,14 @@ export interface TelegramBotModuleOptions {
    * the auto-registered session middleware (`scenes: { session: false }`).
    */
   scenes?: TelegramBotScenesOptions;
+
+  /**
+   * Metrics recorder for this bot's counters, resolved as the
+   * {@link import('../common').TELEGRAM_BOT_METRICS} token. Defaults to a fresh
+   * {@link import('../common').InMemoryTelegramMetrics} (readable via
+   * `.snapshot()`). Supply a custom recorder — e.g.
+   * {@link import('../common').createOpenTelemetryMetrics} — to export the
+   * counters to your own observability backend instead.
+   */
+  metrics?: TelegramMetricsRecorder;
 }

@@ -70,6 +70,22 @@ describe('TelegramBotModule', () => {
       );
     });
 
+    it('uses a custom metrics recorder supplied via options', async () => {
+      const custom = { increment: jest.fn() };
+
+      const moduleRef = await Test.createTestingModule({
+        imports: [
+          TelegramBotModule.forRoot({
+            token: '123:abc',
+            launch: false,
+            metrics: custom,
+          }),
+        ],
+      }).compile();
+
+      expect(moduleRef.get(TELEGRAM_BOT_METRICS)).toBe(custom);
+    });
+
     it('records sends into the bot facade through DI', async () => {
       const moduleRef = await Test.createTestingModule({
         imports: [

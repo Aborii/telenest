@@ -25,6 +25,7 @@
  * - GramClientFactory: Seam for injecting a custom/fake client (tests).
  */
 
+import type { TelegramMetricsRecorder } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type { SessionStore } from './session/session-store.interface';
 
@@ -133,6 +134,16 @@ export interface TelegramClientModuleOptions {
    * Per-call options always take precedence. Omit to use the built-in defaults.
    */
   retry?: TelegramClientRetryDefaults;
+
+  /**
+   * Metrics recorder for this account's counters, resolved as the
+   * {@link import('../common').TELEGRAM_CLIENT_METRICS} token. Defaults to a
+   * fresh {@link import('../common').InMemoryTelegramMetrics} (readable via
+   * `.snapshot()`). Supply a custom recorder — e.g.
+   * {@link import('../common').createOpenTelemetryMetrics} — to export the
+   * counters to your own observability backend instead.
+   */
+  metrics?: TelegramMetricsRecorder;
 
   /**
    * Override the client construction. Primarily a test seam; when omitted the

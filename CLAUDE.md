@@ -131,8 +131,12 @@ This repo uses a `dev`-based flow:
 - **`main` is release-only.** It receives `dev` *only* via a release merge, so it
   always reflects the latest released version.
 - **Cutting a release:** merge `dev` → `main`, then tag `vX.Y.Z` and create a
-  GitHub release from `main`. Releases are **GitHub-only (never npm)** and the repo
-  stays **private**.
+  GitHub release from `main`. Pushing the `vX.Y.Z` tag triggers the
+  `Release (npm publish)` workflow, which publishes `telenest` to the **public
+  npm registry** with provenance via **npm Trusted Publishing (OIDC)** — there is
+  **no `NPM_TOKEN` secret**. Auth is a short-lived OIDC token tied to this repo +
+  `release.yml`; the Trusted Publisher must stay configured for the package on
+  npmjs.com (org `Aborii`, repo `telenest`, workflow `release.yml`).
 - For any feature/fix, follow the feature-from-issue flow in the global
   `~/.claude/CLAUDE.md` (branch off `dev` → implement → verify → commit → PR into
   `dev` → self-review → fix → resolve).

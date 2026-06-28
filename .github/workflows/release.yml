@@ -2,7 +2,8 @@
 # PURPOSE
 #   Tag-driven npm publish pipeline. When a `v*` tag is pushed (e.g. by the
 #   interactive `npm run git:release` script), this workflow rebuilds and
-#   verifies the library and publishes it to the npm registry.
+#   verifies the library and publishes it to the public npm registry using
+#   npm Trusted Publishing (OIDC) — no long-lived npm token is involved.
 #
 # USAGE
 #   Pushing a tag matching `v*` (for example `v1.2.0`) triggers the run. The
@@ -10,20 +11,25 @@
 #   release and pushes the tag, so this workflow is scoped to the npm publish
 #   step only — it does NOT create a GitHub release (that would duplicate it).
 #
-# REQUIRED SECRET
-#   NPM_TOKEN  An npm automation token with publish rights to this package.
+# AUTHENTICATION — npm Trusted Publishing (OIDC)
+#   This workflow authenticates to npm via a short-lived OIDC token minted by
+#   GitHub Actions, not a stored secret. For it to work, a Trusted Publisher
+#   must be configured for the `telenest` package on npmjs.com pointing at:
+#     organization/user : Aborii
+#     repository        : telenest
+#     workflow filename : release.yml      (this file's name; case-sensitive)
+#   See https://docs.npmjs.com/trusted-publishers. There is NO NPM_TOKEN secret.
 #
-#   The token is checked FIRST, in a tiny standalone `check` job (no checkout,
-#   no install). If NPM_TOKEN is NOT configured, that job emits a warning and
-#   the heavy `publish` job is SKIPPED entirely — so a tokenless tag spends a
-#   few seconds, not minutes of runner time on an install/build/test it would
-#   only throw away. Add the secret under Settings → Secrets and variables →
-#   Actions to enable the actual publish.
+# REQUIREMENTS (enforced by npm Trusted Publishing)
+#   - `id-token: write` permission on the publish job (minted OIDC token).
+#   - npm CLI >= 11.5.1 and Node.js >= 22.14.0 — older toolchains cannot use
+#     OIDC, so the job upgrades npm to the latest before publishing.
+#   - GitHub-hosted runner (self-hosted runners are not supported).
 #
-# NOTE
-#   This repository is currently private and released via GitHub only; the
-#   npm publish path stays dormant until an NPM_TOKEN is provided, matching
-#   the project's "GitHub-only unless a token is supplied" release policy.
+# PROVENANCE
+#   Publishing via OIDC from this public repo attaches a signed provenance
+#   attestation automatically — no `--provenance` flag is needed. Package
+#   access (`public`) comes from `publishConfig` in package.json.
 # ---------------------------------------------------------------------------
 name: Release (npm publish)
 
@@ -31,41 +37,18 @@ on:
   push:
     tags: ['v*']
 
-# Default to read-only; the publish job widens this to add `id-token: write`.
+# Default to read-only; the publish job adds `id-token: write` for OIDC.
 permissions:
   contents: read
 
 jobs:
-  # ── Gate: is NPM_TOKEN configured? ──────────────────────────────────────
-  # Runs first and cheap. The `secrets` context cannot be used directly in a
-  # job-level `if:`, so this job maps it to a step output that the publish job
-  # branches on via `needs`. No checkout/install here — it must stay fast.
-  check:
-    name: Check npm token
-    runs-on: ubuntu-latest
-    outputs:
-      has_token: ${{ steps.token.outputs.has_token }}
-    steps:
-      - name: Check for npm token
-        id: token
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "has_token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=npm publish skipped::NPM_TOKEN secret is not set — skipping the npm publish (the publish job did not run, so no runner time was spent on it). Add NPM_TOKEN under Settings → Secrets and variables → Actions to enable publishing."
-          fi
-
-  # ── Build, verify, and publish (only when a token exists) ───────────────
+  # ── Build, verify, and publish via Trusted Publishing (OIDC) ────────────
   publish:
     name: Build & publish to npm
-    needs: check
-    if: needs.check.outputs.has_token == 'true'
     runs-on: ubuntu-latest
-    # `id-token: write` is required so `npm publish --provenance` can mint a
-    # signed provenance attestation via OIDC; contents stay read-only.
+    # `id-token: write` lets npm mint the short-lived OIDC token that proves
+    # this run's identity to the registry and signs the provenance attestation;
+    # contents stay read-only.
     permissions:
       contents: read
       id-token: write
@@ -77,10 +60,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
+          # Trusted Publishing requires Node >= 22.14.0.
           node-version: '22.x'
           cache: npm
-          # Configures the registry + writes an .npmrc that reads NODE_AUTH_TOKEN.
+          # Point the CLI at the public registry (no auth token is written;
+          # publishing authenticates via OIDC instead).
           registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing requires npm >= 11.5.1, newer than the npm bundled
+      # with Node 22.x — upgrade the CLI before any publish-related step.
+      - name: Upgrade npm to latest (OIDC requires >= 11.5.1)
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -96,11 +86,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Default publishes with provenance to the public registry. Override via
-      # the optional `NPM_PUBLISH_ARGS` repo variable (Settings → Secrets and
-      # variables → Actions → Variables) to change the publish mode — e.g. drop
-      # `--provenance` — without editing this workflow.
+      # Authenticates via the OIDC token minted by `id-token: write`; provenance
+      # and `public` access are applied automatically (CI + publishConfig), so
+      # no flags, no NODE_AUTH_TOKEN, and no NPM_TOKEN secret are required.
       - name: Publish to npm
-        run: npm publish ${{ vars.NPM_PUBLISH_ARGS || '--provenance --access public' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish

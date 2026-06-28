@@ -8,7 +8,7 @@ constant-time comparison before handing you a typed payload.
 
 It is a **pure, dependency-free** function (Node's `crypto` only) — no network,
 no NestJS, no Telegraf. Import it from the package root or the
-`nestjs-telegram/bot` subpath.
+`telenest/bot` subpath.
 
 > **Bot API side.** This belongs to the Bot API surface because the signature is
 > keyed by your **bot token**. It is unrelated to the MTProto user-account side.
@@ -74,7 +74,7 @@ broken client or a programming error rather than an untrusted caller.
 ## Usage
 
 ```ts
-import { validateWebAppInitData } from 'nestjs-telegram';
+import { validateWebAppInitData } from 'telenest';
 
 // In a controller / guard handling the Mini App's authenticated request:
 const data = validateWebAppInitData(body.initData, process.env.BOT_TOKEN!, {

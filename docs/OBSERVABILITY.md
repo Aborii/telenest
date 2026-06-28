@@ -1,6 +1,6 @@
 # Observability — Health, Metrics & Tracing
 
-`nestjs-telegram` ships an opt-in, dependency-light observability layer so you can
+`telenest` ships an opt-in, dependency-light observability layer so you can
 answer three operational questions about each side of the library: **is it up?**
 (health indicators), **how much traffic / how many errors?** (metrics counters),
 and **where is the latency?** (tracing spans). Everything is wired with zero hard
@@ -91,7 +91,7 @@ import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
 import {
   TelegramBotHealthIndicator,
   TelegramClientHealthIndicator,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @Controller('health')
 export class HealthController {
@@ -158,7 +158,7 @@ import {
   TelegramBotService,
   telegramBotMetricsMiddleware,
   type TelegramMetricsRecorder,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 constructor(
   private readonly bot: TelegramBotService,
@@ -175,7 +175,7 @@ token and call `snapshot()`:
 
 ```ts
 import { Inject } from '@nestjs/common';
-import { TELEGRAM_BOT_METRICS, type TelegramMetrics } from 'nestjs-telegram';
+import { TELEGRAM_BOT_METRICS, type TelegramMetrics } from 'telenest';
 
 constructor(@Inject(TELEGRAM_BOT_METRICS) private readonly metrics: TelegramMetrics) {}
 
@@ -215,7 +215,7 @@ import {
   TELEGRAM_BOT_METRICS,
   toPrometheusMetrics,
   type TelegramMetrics,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @Controller()
 export class MetricsController {
@@ -246,7 +246,7 @@ recorder. Like the tracer bridge, the library never imports `@opentelemetry/api`
 
 ```ts
 import { metrics } from '@opentelemetry/api';
-import { createOpenTelemetryMetrics, TelegramBotModule } from 'nestjs-telegram';
+import { createOpenTelemetryMetrics, TelegramBotModule } from 'telenest';
 
 TelegramBotModule.forRoot({
   token: process.env.BOT_TOKEN!,
@@ -273,7 +273,7 @@ import {
   TelegramBotModule,
   TELEGRAM_BOT_TRACER,
   createOpenTelemetryTracer,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @Module({
   imports: [TelegramBotModule.forRoot({ token: process.env.BOT_TOKEN! })],

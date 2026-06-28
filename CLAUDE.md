@@ -8,7 +8,7 @@ instructions under `.github/`; that content is mirrored here for Claude.)
 
 ## Project overview
 
-`nestjs-telegram` is a reusable, fully-typed **NestJS library** wrapping the two
+`telenest` is a reusable, fully-typed **NestJS library** wrapping the two
 Telegram API surfaces:
 
 - **Bot API** (via Telegraf) — a normal bot. See `src/lib/bot`.
@@ -51,7 +51,7 @@ src/
     client/                     # TelegramClientModule, auth/user services, GramJS adapter
       updates/                  # @OnUserMessage inbound dispatch
       session/                  # SessionStore + 5 stores (memory/file/key-value/redis/encrypted)
-    testing/                    # nestjs-telegram/testing — mocks + DTO builders
+    testing/                    # telenest/testing — mocks + DTO builders
     telegram.module.ts          # umbrella TelegramModule.forRoot
   bots/ , common/config/        # demo app (example only)
 examples/                       # login CLI (+ QR), decorator/enhancer examples, reference wiring
@@ -76,7 +76,7 @@ its own. This is a hard architectural rule, not a preference:
   couples them.
 - **`telegraf` and `telegram` are optional peer dependencies** and neither side may
   take a hard runtime dependency on the other's SDK. Subpath exports
-  (`nestjs-telegram/bot`, `/client`, `/common`, `/testing`) keep each side
+  (`telenest/bot`, `/client`, `/common`, `/testing`) keep each side
   importable on its own.
 
 The boundary is enforced automatically by `src/lib/import-boundaries.spec.ts`. To

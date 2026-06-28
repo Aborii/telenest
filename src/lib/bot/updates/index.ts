@@ -9,7 +9,7 @@
  *
  * USAGE
  * -----
- * import { TelegramUpdate, Start, Command, Ctx, UseTelegramGuards } from 'nestjs-telegram';
+ * import { TelegramUpdate, Start, Command, Ctx, UseTelegramGuards } from 'telenest';
  */
 
 export { resolveHandlerArguments } from './argument-resolver';

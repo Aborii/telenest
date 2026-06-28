@@ -13,7 +13,7 @@
  * USAGE
  * -----
  * ```ts
- * import { encodeCallbackData, decodeCallbackData } from 'nestjs-telegram';
+ * import { encodeCallbackData, decodeCallbackData } from 'telenest';
  *
  * type Cb = { a: 'buy'; id: number };
  * const data = encodeCallbackData<Cb>({ a: 'buy', id: 42 }); // throws if > 64 bytes

@@ -19,7 +19,7 @@
  * -----
  * ```ts
  * import { trace } from '@opentelemetry/api';
- * import { TELEGRAM_BOT_TRACER, createOpenTelemetryTracer } from 'nestjs-telegram';
+ * import { TELEGRAM_BOT_TRACER, createOpenTelemetryTracer } from 'telenest';
  *
  * // Override the bot's tracer token with an OTel-backed implementation:
  * { provide: TELEGRAM_BOT_TRACER, useValue: createOpenTelemetryTracer(trace.getTracer('telegram')) }

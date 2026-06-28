@@ -10,7 +10,7 @@
  *
  * USAGE
  * -----
- * import { TelegramBotWebhookOptions, TelegramWebhookGuard, generateWebhookSecret } from 'nestjs-telegram';
+ * import { TelegramBotWebhookOptions, TelegramWebhookGuard, generateWebhookSecret } from 'telenest';
  */
 
 export { TELEGRAM_WEBHOOK_SECRET_HEADER } from './telegram-webhook.constants';

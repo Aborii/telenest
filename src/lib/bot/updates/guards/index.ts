@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { ChatAllowlistGuard, RateLimitGuard } from 'nestjs-telegram';
+ * import { ChatAllowlistGuard, RateLimitGuard } from 'telenest';
  */
 
 export * from './chat-allowlist.guard';

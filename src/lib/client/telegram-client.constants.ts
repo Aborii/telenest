@@ -10,7 +10,7 @@
  * -----
  * ```ts
  * import { Inject } from '@nestjs/common';
- * import { TELEGRAM_GRAM_CLIENT, IGramClient } from 'nestjs-telegram';
+ * import { TELEGRAM_GRAM_CLIENT, IGramClient } from 'telenest';
  *
  * constructor(@Inject(TELEGRAM_GRAM_CLIENT) private readonly client: IGramClient) {}
  * ```

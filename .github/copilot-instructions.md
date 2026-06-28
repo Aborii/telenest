@@ -1,6 +1,6 @@
 # GitHub Copilot Instructions
 
-`nestjs-telegram` is a reusable, fully-typed **NestJS library** (Bot API via
+`telenest` is a reusable, fully-typed **NestJS library** (Bot API via
 Telegraf + MTProto user account via GramJS) — not a Next.js app. See `CLAUDE.md`
 for the authoritative project rules.
 

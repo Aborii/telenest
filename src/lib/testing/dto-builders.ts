@@ -16,7 +16,7 @@
  * USAGE
  * -----
  * ```ts
- * import { aGramUser, aGramMessage } from 'nestjs-telegram/testing';
+ * import { aGramUser, aGramMessage } from 'telenest/testing';
  *
  * const me = aGramUser({ username: 'ada' });
  * const msg = aGramMessage({ text: 'hello', out: false });

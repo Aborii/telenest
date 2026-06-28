@@ -1,6 +1,6 @@
 # User-Account Client (MTProto / GramJS) Guide
 
-This guide covers the **MTProto user-account** side of `nestjs-telegram`: signing in as
+This guide covers the **MTProto user-account** side of `telenest`: signing in as
 **your own Telegram account** (not a bot) over the MTProto protocol via
 [GramJS](https://gram.js.org/) (the `telegram` package), reading and sending messages as
 yourself, and persisting the resulting session.
@@ -126,7 +126,7 @@ come from configuration, `forRootAsync` is the recommended form:
 ```ts
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { FileSessionStore, TelegramClientModule } from 'nestjs-telegram';
+import { FileSessionStore, TelegramClientModule } from 'telenest';
 
 @Module({
   imports: [
@@ -141,7 +141,7 @@ import { FileSessionStore, TelegramClientModule } from 'nestjs-telegram';
         session: config.get<string>('TG_SESSION'),
         // Persist newly-created sessions across restarts:
         sessionStore: new FileSessionStore('./.telegram.session'),
-        deviceModel: 'nestjs-telegram',
+        deviceModel: 'telenest',
         appVersion: '1.0.0',
       }),
     }),
@@ -236,7 +236,7 @@ The relevant `TelegramAuthService` methods:
 
 ```ts
 import { Injectable } from '@nestjs/common';
-import { TelegramAuthService } from 'nestjs-telegram';
+import { TelegramAuthService } from 'telenest';
 
 @Injectable()
 export class LoginService {
@@ -272,7 +272,7 @@ CLI that prints a string session you then save as `TG_SESSION`. The repository s
 import 'dotenv/config';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { createGramJsClient, isTelegramError, TelegramAuthService } from 'nestjs-telegram';
+import { createGramJsClient, isTelegramError, TelegramAuthService } from 'telenest';
 
 const apiId = Number(process.env.TG_API_ID);
 const apiHash = process.env.TG_API_HASH ?? '';
@@ -333,7 +333,7 @@ Volatile, process-local. Useful for tests and short-lived processes, but **not d
 session is lost on restart, forcing a fresh login next time. Optionally seed it from an env var:
 
 ```ts
-import { InMemorySessionStore } from 'nestjs-telegram';
+import { InMemorySessionStore } from 'telenest';
 
 const store = new InMemorySessionStore(process.env.TG_SESSION);
 ```
@@ -345,7 +345,7 @@ Durable, file-backed. Persists the session to a single UTF-8 file with `0o600` p
 I/O errors surface as `TelegramSessionError`.
 
 ```ts
-import { FileSessionStore } from 'nestjs-telegram';
+import { FileSessionStore } from 'telenest';
 
 const store = new FileSessionStore('./.telegram.session');
 ```
@@ -361,7 +361,7 @@ library takes no hard dependency on `redis`/`ioredis` — any client exposing
 
 ```ts
 import { createClient } from 'redis';
-import { RedisSessionStore } from 'nestjs-telegram';
+import { RedisSessionStore } from 'telenest';
 
 const redis = createClient();
 await redis.connect();
@@ -375,7 +375,7 @@ A generic adapter over any async `get`/`set`/`delete` backend — a database DAO
 
 ```ts
 import Keyv from 'keyv';
-import { KeyValueSessionStore } from 'nestjs-telegram';
+import { KeyValueSessionStore } from 'telenest';
 
 const store = new KeyValueSessionStore(new Keyv('postgres://…'), 'tg:session');
 ```
@@ -388,7 +388,7 @@ inner store, and authenticates on decrypt — so a tampered payload or wrong key
 it to protect the credential at rest on top of Redis, a DB, or a file:
 
 ```ts
-import { EncryptedSessionStore, RedisSessionStore } from 'nestjs-telegram';
+import { EncryptedSessionStore, RedisSessionStore } from 'telenest';
 
 const store = new EncryptedSessionStore(
   new RedisSessionStore(redis, 'tg:session'),
@@ -457,7 +457,7 @@ user/chat id.
 
 ```ts
 import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram';
+import { TelegramUserService } from 'telenest';
 
 @Injectable()
 export class MyAccountService {
@@ -600,7 +600,7 @@ seeks without a full download:
 ```ts
 import { Controller, Get, Headers, Param, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { TelegramUserService } from 'nestjs-telegram';
+import { TelegramUserService } from 'telenest';
 
 @Controller()
 export class MediaController {
@@ -697,7 +697,7 @@ export class Watcher implements OnModuleInit {
 module discovers and wires it at bootstrap (and tears it down on shutdown):
 
 ```ts
-import { OnUserMessage, GramMessage, GramUserMessageContext } from 'nestjs-telegram';
+import { OnUserMessage, GramMessage, GramUserMessageContext } from 'telenest';
 
 @Injectable()
 export class AutoReply {
@@ -724,7 +724,7 @@ three streams:
 import {
   OnUserEdited, OnUserDeleted, OnChatAction,
   GramMessage, GramDeletedMessages, GramChatActionEvent, GramUserMessageContext,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @Injectable()
 export class ActivityWatcher {
@@ -921,8 +921,8 @@ consumer compilation units. There are two ways to substitute a fake:
 **(a) Construct a service directly** with a fake `IGramClient` (no Nest required):
 
 ```ts
-import type { IGramClient } from 'nestjs-telegram';
-import { TelegramUserService } from 'nestjs-telegram';
+import type { IGramClient } from 'telenest';
+import { TelegramUserService } from 'telenest';
 
 // Abbreviated for illustration — a complete `IGramClient` also implements the
 // media / chat / message operations (`sendFile`, `downloadMedia`, `joinChannel`,
@@ -951,7 +951,7 @@ const user = new TelegramUserService(fake);
 
 > [!TIP]
 > For a **complete**, ready-made fake, use `createMockGramClient()` from the
-> `nestjs-telegram/testing` subpath — every method is a pre-stubbed `jest.fn()`, so you only
+> `telenest/testing` subpath — every method is a pre-stubbed `jest.fn()`, so you only
 > override the calls your test cares about. See [§ Testing](./TESTING.md).
 
 **(b) Pass `clientFactory`** so the module builds your fake instead of a real GramJS client.
@@ -995,7 +995,7 @@ type guard). The MTProto side raises two of them:
 ### Handling client operation failures
 
 ```ts
-import { TelegramClientError, isTelegramError } from 'nestjs-telegram';
+import { TelegramClientError, isTelegramError } from 'telenest';
 
 try {
   await this.user.sendMessage('@somebody', 'hi');
@@ -1049,7 +1049,7 @@ The standalone `withClientRetry(fn, options)` is also exported for use outside t
 ### Handling auth failures (and flood waits)
 
 ```ts
-import { TelegramAuthError } from 'nestjs-telegram';
+import { TelegramAuthError } from 'telenest';
 
 try {
   const step = await this.auth.signIn(code);

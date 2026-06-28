@@ -13,7 +13,7 @@
  * only override the calls a given test cares about.
  *
  * The `jest` reference is the **ambient global** provided by a Jest runtime;
- * this module never `import`s `jest`, so the `nestjs-telegram/testing` subpath
+ * this module never `import`s `jest`, so the `telenest/testing` subpath
  * adds no hard dependency on a test runner. Call {@link createMockGramClient}
  * (and {@link provideMockGramClient}) only from inside Jest specs.
  *
@@ -21,7 +21,7 @@
  * -----
  * ```ts
  * import { Test } from '@nestjs/testing';
- * import { createMockGramClient, provideMockGramClient } from 'nestjs-telegram/testing';
+ * import { createMockGramClient, provideMockGramClient } from 'telenest/testing';
  *
  * const client = createMockGramClient({
  *   getDialogs: jest.fn().mockResolvedValue([aGramDialog({ unreadCount: 3 })]),

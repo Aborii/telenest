@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { TelegramExceptionFilter } from 'nestjs-telegram';
+ * import { TelegramExceptionFilter } from 'telenest';
  */
 
 export * from './telegram-exception.filter';

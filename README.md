@@ -1,4 +1,4 @@
-# nestjs-telegram
+# telenest
 
 [![CI](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml/badge.svg)](https://github.com/Aborii/nestjs-telegram/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -55,14 +55,14 @@ A fully-typed [NestJS](https://nestjs.com) module for Telegram that wraps **two*
 
 - **Observability** — health indicators, update metrics, and an OpenTelemetry tracer bridge.
 - **Five session stores** — in-memory, file (`0o600`, atomic), key-value, Redis, and an AES-256-GCM **encrypted** wrapper.
-- **`nestjs-telegram/testing`** — ready-made mocks (`createMockGramClient`, `createMockBotContext`) and DTO builders, pulling in no SDK and no test runner.
+- **`telenest/testing`** — ready-made mocks (`createMockGramClient`, `createMockBotContext`) and DTO builders, pulling in no SDK and no test runner.
 
 ---
 
 ## Install
 
 ```bash
-npm i nestjs-telegram
+npm i telenest
 ```
 
 The NestJS runtime peers are always required:
@@ -92,18 +92,18 @@ never pulls in GramJS, and a user-account-only app never pulls in Telegraf:
 
 | Import                    | Pulls in                 | Use when                          |
 | ------------------------- | ------------------------ | --------------------------------- |
-| `nestjs-telegram/bot`     | `telegraf` only          | You only run a bot                |
-| `nestjs-telegram/client`  | `telegram` (GramJS) only | You only control a user account   |
-| `nestjs-telegram/common`  | neither                  | Just the shared error/types layer |
-| `nestjs-telegram/testing` | neither (test-only)      | Mocking the library in your tests |
-| `nestjs-telegram` (root)  | both                     | You use both sides                |
+| `telenest/bot`     | `telegraf` only          | You only run a bot                |
+| `telenest/client`  | `telegram` (GramJS) only | You only control a user account   |
+| `telenest/common`  | neither                  | Just the shared error/types layer |
+| `telenest/testing` | neither (test-only)      | Mocking the library in your tests |
+| `telenest` (root)  | both                     | You use both sides                |
 
 ```ts
-import { TelegramBotModule } from "nestjs-telegram/bot"; // no GramJS loaded
-import { TelegramClientModule } from "nestjs-telegram/client"; // no Telegraf loaded
+import { TelegramBotModule } from "telenest/bot"; // no GramJS loaded
+import { TelegramClientModule } from "telenest/client"; // no Telegraf loaded
 ```
 
-> Importing from the root (`nestjs-telegram`) re-exports everything and therefore
+> Importing from the root (`telenest`) re-exports everything and therefore
 > loads both SDKs — use the subpaths when you only need one side.
 
 ---
@@ -159,7 +159,7 @@ Configure the bot module (async, pulling the token from `ConfigService`) and inj
 ```ts
 import { Module, Injectable } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { TelegramBotModule, TelegramBotService } from "nestjs-telegram";
+import { TelegramBotModule, TelegramBotService } from "telenest";
 
 @Module({
   imports: [
@@ -192,7 +192,7 @@ export class NotificationsService {
 Register handlers and attach an inline keyboard with the builders:
 
 ```ts
-import { InlineKeyboardBuilder } from "nestjs-telegram";
+import { InlineKeyboardBuilder } from "telenest";
 
 this.bot.start(async (ctx) => {
   const keyboard = new InlineKeyboardBuilder()
@@ -241,7 +241,7 @@ Configure `TelegramClientModule` with your `apiId` / `apiHash`, resume from `TG_
 ```ts
 import { Module, Injectable } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { TelegramClientModule, TelegramUserService, FileSessionStore } from "nestjs-telegram";
+import { TelegramClientModule, TelegramUserService, FileSessionStore } from "telenest";
 
 @Module({
   imports: [
@@ -276,7 +276,7 @@ export class SelfNotesService {
 Need both sides at once? Use the umbrella module:
 
 ```ts
-import { TelegramModule } from "nestjs-telegram";
+import { TelegramModule } from "telenest";
 
 TelegramModule.forRoot({
   isGlobal: true,
@@ -303,7 +303,7 @@ TelegramModule.forRoot({
 | [docs/USER-CLIENT-MTPROTO.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/USER-CLIENT-MTPROTO.md)     | `TelegramClientModule`, `TelegramUserService`, dialogs/messages, and the DTOs                               |
 | [docs/MULTIPLE-ACCOUNTS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/MULTIPLE-ACCOUNTS.md)         | Multiple named user accounts in one app — `forRoot({ name })`, `@InjectTelegramUser(name)`, `@OnUserMessage(f, { client })` |
 | [docs/AUTHENTICATION.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/AUTHENTICATION.md)               | The `sendCode` → `signIn` → `checkPassword` flow and `SessionStore` persistence                             |
-| [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md)                             | Unit-testing both sides — ready-made `nestjs-telegram/testing` mocks plus the `IGramClient` / `clientFactory` seam |
+| [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md)                             | Unit-testing both sides — ready-made `telenest/testing` mocks plus the `IGramClient` / `clientFactory` seam |
 
 ---
 
@@ -311,7 +311,7 @@ TelegramModule.forRoot({
 
 The library ships with **740+ tests** and is built to keep network I/O out of your suite:
 
-- **Ready-made utilities** in `nestjs-telegram/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md).
+- **Ready-made utilities** in `telenest/testing`: `createMockGramClient()` (a fully-typed `jest.Mocked<IGramClient>`), `provideMockGramClient()` (binds it to the `TELEGRAM_GRAM_CLIENT` token), `createMockBotContext()` (a spyable Telegraf `Context`), and DTO builders (`aGramUser`/`aGramMessage`/`aGramDialog`). The subpath pulls in no SDK and no test runner. See [docs/TESTING.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/TESTING.md).
 - The MTProto services depend only on the `IGramClient` interface — the `telegram` (GramJS) package is imported in exactly one adapter file. Supply a fake `IGramClient` and construct `TelegramUserService` / `TelegramAuthService` directly (the bundled login CLI does exactly this when run outside of Nest DI).
 - Inside Nest, pass a `clientFactory` to `TelegramClientModule` (or override the `TELEGRAM_GRAM_CLIENT` token) to swap in a fake client without touching the network.
 - On the Bot side, `InMemorySessionStore` gives the client side a zero-I/O session backend, and every facade method funnels through a single error-normalizing path that wraps failures in `TelegramBotApiError`.

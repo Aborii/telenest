@@ -2,7 +2,7 @@
 
 First-class support for the Telegram **Payments** checkout flow on the Bot API
 side. A bot collects money *from its users* — this does **not** require the bot
-operator to hold any paid Telegram tier, so it is in scope for `nestjs-telegram`.
+operator to hold any paid Telegram tier, so it is in scope for `telenest`.
 The library wraps both directions of the flow: the **outbound** calls on
 `TelegramBotService` (`sendInvoice`, `createInvoiceLink`, `answerShippingQuery`,
 `answerPreCheckoutQuery`) and the **inbound** updates as typed decorators
@@ -141,7 +141,7 @@ import {
   SuccessfulPaymentData,
   TelegramBotService,
   TelegramUpdate,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 const PAYLOAD = 'pro-plan-monthly';
 

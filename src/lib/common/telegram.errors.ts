@@ -11,7 +11,7 @@
  * USAGE
  * -----
  * ```ts
- * import { TelegramAuthError, isTelegramError } from 'nestjs-telegram';
+ * import { TelegramAuthError, isTelegramError } from 'telenest';
  *
  * try {
  *   await auth.signIn({ phoneCode: '00000', ... });

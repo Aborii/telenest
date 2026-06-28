@@ -22,7 +22,7 @@
  * USAGE
  * -----
  * ```ts
- * import { encodeCallbackAction } from 'nestjs-telegram';
+ * import { encodeCallbackAction } from 'telenest';
  *
  * // Build a button whose data routes to the 'buy' action with a typed payload:
  * const data = encodeCallbackAction('buy', { id: 42 }); // {"a":"buy","d":{"id":42}}

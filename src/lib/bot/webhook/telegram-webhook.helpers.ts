@@ -45,10 +45,11 @@ const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
  * ```
  */
 export function normalizeWebhookPath(path: string): string {
-  const collapsed = path.trim().replace(/\/{2,}/g, '/');
-  const withLeading = collapsed.startsWith('/') ? collapsed : `/${collapsed}`;
-  const withoutTrailing = withLeading.replace(/\/+$/, '');
-  return withoutTrailing === '' ? '/' : withoutTrailing;
+  // ── Split on '/' and drop empty segments. This collapses duplicate slashes
+  //    and trims leading/trailing ones in a single linear pass — no
+  //    backtracking regex (avoids the `\/+$` polynomial-ReDoS shape). ─────────
+  const segments = path.trim().split('/').filter((segment) => segment !== '');
+  return segments.length === 0 ? '/' : `/${segments.join('/')}`;
 }
 
 /**
@@ -72,7 +73,11 @@ export function normalizeWebhookPath(path: string): string {
  * ```
  */
 export function joinWebhookUrl(domain: string, path: string): string {
-  const base = domain.replace(/\/+$/, '');
+  // ── Strip trailing slashes without a backtracking `\/+$` regex: walk back
+  //    from the end in a single linear pass. ──────────────────────────────────
+  let end = domain.length;
+  while (end > 0 && domain.charCodeAt(end - 1) === 0x2f /* '/' */) end -= 1;
+  const base = domain.slice(0, end);
   return `${base}${normalizeWebhookPath(path)}`;
 }
 

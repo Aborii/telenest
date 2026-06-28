@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# PURPOSE
+#   Build the TypeDoc API reference and publish it to GitHub Pages. The
+#   generated HTML is a build artifact (git-ignored); this workflow regenerates
+#   it from source on every release and deploys it, so the hosted docs always
+#   match the latest released code.
+#
+# USAGE
+#   Runs automatically on pushes to `main` (the release branch — `main` only
+#   advances on release merges per the repo's dev-based flow), and can be run
+#   on demand via the "Run workflow" button (workflow_dispatch).
+#
+#   ONE-TIME SETUP (cannot be automated): in the repository
+#   Settings -> Pages, set "Source" to "GitHub Actions". Until that is done the
+#   deploy step has nowhere to publish.
+#
+# OUTPUT
+#   https://aborii.github.io/telenest/
+# ---------------------------------------------------------------------------
+name: API Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege token: read the repo, plus the scopes the Pages deploy needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; supersede an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & deploy API reference
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate API reference
+        run: npm run docs:api
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/api
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

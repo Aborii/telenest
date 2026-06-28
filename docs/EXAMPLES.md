@@ -1,6 +1,6 @@
 # Examples & Recipes
 
-Practical, copy-paste examples for common use cases with `nestjs-telegram`.
+Practical, copy-paste examples for common use cases with `telenest`.
 
 ---
 
@@ -51,7 +51,7 @@ Echoes every message the user sends.
 ```typescript
 // echo.service.ts
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 
 @Injectable()
 export class EchoService {
@@ -72,7 +72,7 @@ export class EchoService {
 ```typescript
 // echo.update.ts
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, On, Ctx, MessageText } from "nestjs-telegram/bot";
+import { TelegramUpdate, On, Ctx, MessageText } from "telenest/bot";
 import type { Context } from "telegraf";
 
 @TelegramUpdate()
@@ -93,7 +93,7 @@ Parse command arguments from user input.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Command, Ctx } from "nestjs-telegram/bot";
+import { TelegramUpdate, Command, Ctx } from "telenest/bot";
 import type { Context } from "telegraf";
 
 @TelegramUpdate()
@@ -128,7 +128,7 @@ Interactive buttons under messages.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Command, Action, Ctx, CallbackData, InlineKeyboardBuilder } from "nestjs-telegram/bot";
+import { TelegramUpdate, Command, Action, Ctx, CallbackData, InlineKeyboardBuilder } from "telenest/bot";
 import type { Context } from "telegraf";
 
 @TelegramUpdate()
@@ -191,7 +191,7 @@ Persistent buttons that send text.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Start, Hears, Ctx, ReplyKeyboardBuilder, removeKeyboard } from "nestjs-telegram/bot";
+import { TelegramUpdate, Start, Hears, Ctx, ReplyKeyboardBuilder, removeKeyboard } from "telenest/bot";
 import type { Context } from "telegraf";
 
 @TelegramUpdate()
@@ -243,7 +243,7 @@ Upload and send various file types.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 import { createReadStream } from "fs";
 import { Input } from "telegraf";
 
@@ -309,7 +309,7 @@ Send multiple photos/videos as an album.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 
 @Injectable()
 export class GalleryService {
@@ -345,7 +345,7 @@ Multi-step conversation using sessions (requires `telegraf-session-local` or sim
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 import session from "telegraf-session-local";
 
 interface SessionData {
@@ -399,7 +399,7 @@ Restrict commands to specific users.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Command, Ctx, Sender } from "nestjs-telegram/bot";
+import { TelegramUpdate, Command, Ctx, Sender } from "telenest/bot";
 import type { Context, User } from "telegraf";
 
 @TelegramUpdate()
@@ -477,7 +477,7 @@ Run bot behind a web server instead of polling.
 ```typescript
 // app.module.ts
 import { Module } from "@nestjs/common";
-import { TelegramBotModule } from "nestjs-telegram/bot";
+import { TelegramBotModule } from "telenest/bot";
 
 @Module({
   imports: [
@@ -497,7 +497,7 @@ export class AppModule {}
 
 // bot.controller.ts
 import { Controller, Post, Req } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 import type { Request } from "express";
 
 @Controller("telegram")
@@ -532,7 +532,7 @@ Validate data from Telegram Mini Apps.
 ```typescript
 // auth.guard.ts
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from "@nestjs/common";
-import { validateWebAppInitData } from "nestjs-telegram/bot";
+import { validateWebAppInitData } from "telenest/bot";
 import { ConfigService } from "@nestjs/config";
 
 @Injectable()
@@ -585,7 +585,7 @@ Send messages at specific times.
 ```typescript
 import { Injectable } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 
 @Injectable()
 export class SchedulerService {
@@ -625,7 +625,7 @@ Complete authentication process.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramAuthService } from "nestjs-telegram/client";
+import { TelegramAuthService } from "telenest/client";
 
 @Injectable()
 export class AuthService {
@@ -673,7 +673,7 @@ Quick note-taking to yourself.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class NotesService {
@@ -698,7 +698,7 @@ Get your dialog list.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class ChatsService {
@@ -737,7 +737,7 @@ Fetch recent messages from a channel or group.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class ChannelReaderService {
@@ -770,7 +770,7 @@ React to messages in real-time.
 
 ```typescript
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class MessageListenerService implements OnModuleInit {
@@ -801,7 +801,7 @@ Automated responses from your account (use responsibly!).
 
 ```typescript
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class AutoReplyService implements OnModuleInit {
@@ -844,7 +844,7 @@ Export messages to JSON.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 import { writeFile } from "fs/promises";
 
 @Injectable()
@@ -896,7 +896,7 @@ Use both APIs together.
 ```typescript
 // app.module.ts
 import { Module } from "@nestjs/common";
-import { TelegramModule } from "nestjs-telegram";
+import { TelegramModule } from "telenest";
 import { BridgeService } from "./bridge.service";
 
 @Module({
@@ -917,8 +917,8 @@ export class AppModule {}
 
 // bridge.service.ts
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramBotService } from "telenest/bot";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class BridgeService implements OnModuleInit {
@@ -965,8 +965,8 @@ Mirror bot interactions to yourself.
 
 ```typescript
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramBotService } from "telenest/bot";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class MirrorService implements OnModuleInit {
@@ -1005,7 +1005,7 @@ Test without hitting Telegram servers.
 ```typescript
 // echo.update.spec.ts
 import { Test } from "@nestjs/testing";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 import { EchoUpdate } from "./echo.update";
 import type { Context } from "telegraf";
 
@@ -1049,9 +1049,9 @@ Mock `IGramClient` for offline tests.
 ```typescript
 // chat.service.spec.ts
 import { Test } from "@nestjs/testing";
-import { TelegramUserService } from "nestjs-telegram/client";
-import { TELEGRAM_GRAM_CLIENT } from "nestjs-telegram/client";
-import type { IGramClient } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
+import { TELEGRAM_GRAM_CLIENT } from "telenest/client";
+import type { IGramClient } from "telenest/client";
 
 describe("ChatsService", () => {
   let service: TelegramUserService;

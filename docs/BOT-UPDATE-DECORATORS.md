@@ -1,7 +1,7 @@
 # Bot API Update Decorators
 
 A first-class, decorator-based way to handle Bot API updates with
-`nestjs-telegram` — **without** `nestjs-telegraf` and without reaching for the raw
+`telenest` — **without** `nestjs-telegraf` and without reaching for the raw
 `Telegraf` instance. You declare handlers as ordinary NestJS providers; a
 `DiscoveryService`-driven registrar finds every `@TelegramUpdate` class at
 bootstrap and binds its methods onto the bot **before launch**, resolving each
@@ -89,8 +89,8 @@ src/lib/bot/updates/
 ```
 
 The registrar is added to `TelegramBotModule` alongside `DiscoveryModule`; the
-decorators are re-exported from the package root (`nestjs-telegram`) and from the
-`nestjs-telegram/bot` subpath.
+decorators are re-exported from the package root (`telenest`) and from the
+`telenest/bot` subpath.
 
 ## Quick start
 
@@ -104,7 +104,7 @@ import {
   Command,
   Ctx,
   Sender,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @TelegramUpdate()
 @Injectable()

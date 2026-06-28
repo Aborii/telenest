@@ -1,6 +1,6 @@
 # API Reference
 
-Complete reference for all public APIs, classes, interfaces, and types in `nestjs-telegram`.
+Complete reference for all public APIs, classes, interfaces, and types in `telenest`.
 
 ---
 
@@ -485,7 +485,7 @@ Returns the final keyboard.
 **Example:**
 
 ```typescript
-import { InlineKeyboardBuilder } from "nestjs-telegram/bot";
+import { InlineKeyboardBuilder } from "telenest/bot";
 
 const keyboard = new InlineKeyboardBuilder()
   .callback("Yes", "confirm")
@@ -548,7 +548,7 @@ Returns the final keyboard.
 **Example:**
 
 ```typescript
-import { ReplyKeyboardBuilder } from "nestjs-telegram/bot";
+import { ReplyKeyboardBuilder } from "telenest/bot";
 
 const keyboard = new ReplyKeyboardBuilder()
   .text("📝 New Task")
@@ -573,7 +573,7 @@ Removes the custom keyboard.
 **Example:**
 
 ```typescript
-import { removeKeyboard } from "nestjs-telegram/bot";
+import { removeKeyboard } from "telenest/bot";
 await bot.sendMessage(chatId, "Keyboard hidden", { reply_markup: removeKeyboard() });
 ```
 
@@ -596,7 +596,7 @@ Marks a class for automatic handler registration.
 **Example:**
 
 ```typescript
-import { TelegramUpdate, Start, Command, Ctx } from "nestjs-telegram/bot";
+import { TelegramUpdate, Start, Command, Ctx } from "telenest/bot";
 import { Injectable } from "@nestjs/common";
 import type { Context } from "telegraf";
 
@@ -714,7 +714,7 @@ Validates Telegram Mini App init data signature.
 **Example:**
 
 ```typescript
-import { validateWebAppInitData } from "nestjs-telegram/bot";
+import { validateWebAppInitData } from "telenest/bot";
 
 const data = validateWebAppInitData(req.body.initData, process.env.BOT_TOKEN!, {
   maxAgeSeconds: 3600,
@@ -1046,7 +1046,7 @@ Volatile, in-memory storage (lost on restart).
 **Example:**
 
 ```typescript
-import { InMemorySessionStore } from "nestjs-telegram/client";
+import { InMemorySessionStore } from "telenest/client";
 
 TelegramClientModule.forRoot({
   apiId: 12345,
@@ -1070,7 +1070,7 @@ new FileSessionStore(filePath: string)
 **Example:**
 
 ```typescript
-import { FileSessionStore } from "nestjs-telegram/client";
+import { FileSessionStore } from "telenest/client";
 
 TelegramClientModule.forRoot({
   apiId: 12345,
@@ -1088,7 +1088,7 @@ Implement `SessionStore` for Redis, database, secrets manager, etc.
 **Example:**
 
 ```typescript
-import { SessionStore } from "nestjs-telegram/client";
+import { SessionStore } from "telenest/client";
 import { Injectable } from "@nestjs/common";
 
 @Injectable()
@@ -1209,7 +1209,7 @@ Base class with discriminated `kind`.
 **Type Guard:**
 
 ```typescript
-import { isTelegramError } from "nestjs-telegram";
+import { isTelegramError } from "telenest";
 
 if (isTelegramError(error)) {
   console.error(error.kind, error.message);
@@ -1291,7 +1291,7 @@ Authentication failure (MTProto).
 **Example:**
 
 ```typescript
-import { isTelegramError } from "nestjs-telegram";
+import { isTelegramError } from "telenest";
 
 try {
   await auth.signIn(code);
@@ -1333,7 +1333,7 @@ type ParseMode = "Markdown" | "MarkdownV2" | "HTML";
 Also available as `PARSE_MODES` object:
 
 ```typescript
-import { PARSE_MODES } from "nestjs-telegram";
+import { PARSE_MODES } from "telenest";
 PARSE_MODES.MARKDOWN; // 'Markdown'
 PARSE_MODES.HTML; // 'HTML'
 ```
@@ -1383,7 +1383,7 @@ Composes both Bot API and MTProto in one module.
 **Example:**
 
 ```typescript
-import { TelegramModule } from "nestjs-telegram";
+import { TelegramModule } from "telenest";
 
 TelegramModule.forRoot({
   bot: { token: process.env.BOT_TOKEN! },
@@ -1406,7 +1406,7 @@ Advanced: Inject raw instances directly.
 ### Bot API Tokens
 
 ```typescript
-import { TELEGRAM_BOT } from "nestjs-telegram/bot";
+import { TELEGRAM_BOT } from "telenest/bot";
 
 @Injectable()
 export class MyService {
@@ -1417,7 +1417,7 @@ export class MyService {
 ### MTProto Tokens
 
 ```typescript
-import { TELEGRAM_GRAM_CLIENT } from "nestjs-telegram/client";
+import { TELEGRAM_GRAM_CLIENT } from "telenest/client";
 
 @Injectable()
 export class MyService {
@@ -1433,7 +1433,7 @@ Access Telegraf and GramJS types without importing the SDKs:
 
 ```typescript
 import type { Context, Markup } from "telegraf";
-import type { GramUser, GramMessage } from "nestjs-telegram/client";
+import type { GramUser, GramMessage } from "telenest/client";
 ```
 
 ---

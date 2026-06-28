@@ -9,7 +9,7 @@
  *
  * USAGE
  * -----
- * import { UseTelegramGuards, TelegramExecutionContext } from 'nestjs-telegram';
+ * import { UseTelegramGuards, TelegramExecutionContext } from 'telenest';
  */
 
 export * from './enhancer.decorators';

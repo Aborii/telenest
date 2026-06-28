@@ -1,6 +1,6 @@
 # Bot API Guide
 
-This guide covers the **Bot API** side of `nestjs-telegram` — a "normal bot" created
+This guide covers the **Bot API** side of `telenest` — a "normal bot" created
 through [@BotFather](https://t.me/BotFather) and driven by [Telegraf](https://telegraf.js.org/).
 It is the half of the library you use to act *as a bot*. (To act as **your own account**
 over MTProto, see the client/user-account guide instead.)
@@ -18,7 +18,7 @@ Everything described here is backed by these source files:
 - `src/lib/common/telegram.errors.ts` — `TelegramBotApiError` and friends
 
 All symbols are re-exported from the package root, so every import below resolves from
-`'nestjs-telegram'`.
+`'telenest'`.
 
 ---
 
@@ -89,7 +89,7 @@ Use this when the token is available synchronously (e.g. straight from `process.
 
 ```ts
 import { Module } from '@nestjs/common';
-import { TelegramBotModule } from 'nestjs-telegram';
+import { TelegramBotModule } from 'telenest';
 
 @Module({
   imports: [
@@ -110,7 +110,7 @@ returns the same `TelegramBotModuleOptions` object that `forRoot` takes directly
 ```ts
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TelegramBotModule } from 'nestjs-telegram';
+import { TelegramBotModule } from 'telenest';
 
 @Module({
   imports: [
@@ -165,7 +165,7 @@ TelegramBotModule.forRootAsync({
 A fully-specified example:
 
 ```ts
-import { TelegramBotModule } from 'nestjs-telegram';
+import { TelegramBotModule } from 'telenest';
 
 TelegramBotModule.forRoot({
   token: process.env.BOT_TOKEN!,
@@ -230,7 +230,7 @@ an HTTPS endpoint that you mount yourself. The clean pattern is:
 // app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TelegramBotModule } from 'nestjs-telegram';
+import { TelegramBotModule } from 'telenest';
 
 @Module({
   imports: [
@@ -253,7 +253,7 @@ export class AppModule {}
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import { TelegramBotService } from 'nestjs-telegram';
+import { TelegramBotService } from 'telenest';
 import { AppModule } from './app.module';
 
 const WEBHOOK_PATH = '/telegram/webhook';
@@ -331,7 +331,7 @@ A representative registration block — wire these up once, e.g. in `OnModuleIni
 
 ```ts
 import { Injectable, type OnModuleInit } from '@nestjs/common';
-import { InlineKeyboardBuilder, TelegramBotService } from 'nestjs-telegram';
+import { InlineKeyboardBuilder, TelegramBotService } from 'telenest';
 
 @Injectable()
 export class BotHandlers implements OnModuleInit {
@@ -380,7 +380,7 @@ export class BotHandlers implements OnModuleInit {
 ```
 
 > The `ctx` (context) object, `ctx.reply`, `ctx.answerCbQuery`, scenes, sessions, etc. all
-> come from Telegraf — `nestjs-telegram` does not re-document them. The library's job is
+> come from Telegraf — `telenest` does not re-document them. The library's job is
 > the DI wiring, the typed send/admin facade, and the keyboards/errors below.
 
 For lifecycle control beyond auto-launch, the service also exposes `launch()` and
@@ -399,7 +399,7 @@ If you prefer to inject the `Telegraf` directly, use the exported `TELEGRAM_BOT`
 
 ```ts
 import { Inject, Injectable } from '@nestjs/common';
-import { TELEGRAM_BOT } from 'nestjs-telegram';
+import { TELEGRAM_BOT } from 'telenest';
 import { Telegraf } from 'telegraf';
 
 @Injectable()
@@ -493,7 +493,7 @@ A few runnable examples:
 
 ```ts
 import { Injectable } from '@nestjs/common';
-import { PARSE_MODES, TelegramBotService } from 'nestjs-telegram';
+import { PARSE_MODES, TelegramBotService } from 'telenest';
 
 @Injectable()
 export class NotificationsService {
@@ -549,7 +549,7 @@ Available button helpers:
 - `.row()` / `.build()`
 
 ```ts
-import { InlineKeyboardBuilder, TelegramBotService } from 'nestjs-telegram';
+import { InlineKeyboardBuilder, TelegramBotService } from 'telenest';
 
 const markup = new InlineKeyboardBuilder()
   .url('Docs', 'https://core.telegram.org/bots/api')
@@ -581,7 +581,7 @@ Markup-level flags:
 - `.placeholder(text)` — placeholder shown in the empty input field
 
 ```ts
-import { ReplyKeyboardBuilder } from 'nestjs-telegram';
+import { ReplyKeyboardBuilder } from 'telenest';
 
 const markup = new ReplyKeyboardBuilder()
   .text('Menu')
@@ -602,7 +602,7 @@ await bot.sendMessage(chatId, 'What next?', { reply_markup: markup });
 Two one-shot helpers cover the remaining markup cases:
 
 ```ts
-import { removeKeyboard, forceReply } from 'nestjs-telegram';
+import { removeKeyboard, forceReply } from 'telenest';
 
 // Hide whatever custom keyboard is currently shown.
 await bot.sendMessage(chatId, 'Done.', { reply_markup: removeKeyboard() });
@@ -678,7 +678,7 @@ Build the button data with `encodeCallbackAction(key, payload?)` (it reuses the
 same 64-byte check, and omits `d` for key-only actions):
 
 ```ts
-import { encodeCallbackAction, InlineKeyboardBuilder } from 'nestjs-telegram';
+import { encodeCallbackAction, InlineKeyboardBuilder } from 'telenest';
 
 const markup = new InlineKeyboardBuilder()
   .callback('Buy', encodeCallbackAction('buy', { id: 42 })) // {"a":"buy","d":{"id":42}}
@@ -692,7 +692,7 @@ provider, and inject the payload with `@CallbackPayload()`:
 
 ```ts
 import { Context } from 'telegraf';
-import { CallbackAction, CallbackPayload, Ctx, TelegramUpdate } from 'nestjs-telegram';
+import { CallbackAction, CallbackPayload, Ctx, TelegramUpdate } from 'telenest';
 
 type Buy = { id: number };
 
@@ -790,7 +790,7 @@ import {
   TelegramBotApiError,
   TelegramBotService,
   isTelegramError,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @Injectable()
 export class SafeSender {

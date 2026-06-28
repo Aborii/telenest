@@ -1,6 +1,6 @@
 # CI & Release Automation
 
-`nestjs-telegram` ships two GitHub Actions workflows under `.github/workflows`:
+`telenest` ships two GitHub Actions workflows under `.github/workflows`:
 a **CI** workflow that gates every pull request and integration-branch push, and
 a tag-driven **Release (npm publish)** workflow that builds, verifies, and
 publishes the package to npm when a `v*` tag is pushed. The release workflow is

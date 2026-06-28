@@ -9,7 +9,7 @@
  *
  * USAGE
  * -----
- * import { Scene, WizardScene, SceneEnter, WizardStep } from 'nestjs-telegram';
+ * import { Scene, WizardScene, SceneEnter, WizardStep } from 'telenest';
  */
 
 export * from './scene.builder';

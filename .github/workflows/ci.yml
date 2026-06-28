@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
 # PURPOSE
-#   Continuous-integration gate for nestjs-telegram. Runs on every pull request
+#   Continuous-integration gate for telenest. Runs on every pull request
 #   and on pushes to the integration/release branches, across a Node version
 #   matrix, so regressions are caught automatically before code lands on `dev`.
 #

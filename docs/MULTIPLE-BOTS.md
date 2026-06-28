@@ -1,7 +1,7 @@
 # Multiple Named Bots
 
 Run **more than one Bot API bot** in a single NestJS application with
-`nestjs-telegram` — a notifications bot and a support bot side by side, for
+`telenest` — a notifications bot and a support bot side by side, for
 example — each with its own token, lifecycle, and handlers, and **no
 `nestjs-telegraf`**. Register each bot under a `name`, inject its typed facade
 with `@InjectBot(name)`, and scope decorator-based handlers to it with
@@ -118,7 +118,7 @@ import {
   Command,
   Ctx,
   InjectBot,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 // Handlers for the `support` bot only.
 @TelegramUpdate({ bot: 'support' })

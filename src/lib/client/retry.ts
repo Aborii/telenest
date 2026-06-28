@@ -23,7 +23,7 @@
  * USAGE
  * -----
  * ```ts
- * import { withClientRetry } from 'nestjs-telegram';
+ * import { withClientRetry } from 'telenest';
  *
  * // Retry a rate-limited send up to 5 times, waiting exactly as long as
  * // Telegram asks between attempts.

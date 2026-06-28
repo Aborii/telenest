@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `nestjs-telegram` are documented here.
+All notable changes to `telenest` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -46,7 +46,7 @@ The post-1.0 roadmap (epic #16) — a large batch of additive, backward-compatib
 
 - First-class bot update decorators via `DiscoveryService` (#3).
 - `validateWebAppInitData()` for Telegram Mini Apps (#4).
-- Public testing utilities via the `nestjs-telegram/testing` subpath (#5).
+- Public testing utilities via the `telenest/testing` subpath (#5).
 - Multiple named bots in one application (#8).
 - Built-in webhook controller with secret-token validation (#9).
 - Guards, interceptors & exception filters for updates (#10).
@@ -70,7 +70,7 @@ The post-1.0 roadmap (epic #16) — a large batch of additive, backward-compatib
 - Typed inbound updates for the MTProto user-account client: the `@OnUserMessage`
   decorator and the `TelegramUserService.updates$` observable, wired by a
   `DiscoveryService`-based registrar (#2).
-- Subpath exports (`nestjs-telegram/bot`, `/client`, `/common`) with `telegraf` and
+- Subpath exports (`telenest/bot`, `/client`, `/common`) with `telegraf` and
   `telegram` as **optional** peer dependencies, guarded by an import-boundary test (#6).
 
 ### Fixed

@@ -1,6 +1,6 @@
 # User-Account Authentication (MTProto)
 
-This guide covers signing in through the MTProto client side of `nestjs-telegram`
+This guide covers signing in through the MTProto client side of `telenest`
 — as **your own Telegram account** (phone/code/2FA or QR code) or as a **bot over
 MTProto**. It documents the `TelegramAuthService` login state machine, the
 alternative QR-code and bot-token flows, two-factor (2FA) password management,
@@ -47,7 +47,7 @@ The `apiId` and `apiHash` configure `TelegramClientModule` via
 [`TelegramClientModuleOptions`](../src/lib/client/telegram-client.options.ts):
 
 ```ts
-import { TelegramClientModule, FileSessionStore } from 'nestjs-telegram';
+import { TelegramClientModule, FileSessionStore } from 'telenest';
 
 TelegramClientModule.forRoot({
   apiId: Number(process.env.TG_API_ID),
@@ -112,7 +112,7 @@ sequenceDiagram
 A minimal driver:
 
 ```ts
-import { TelegramAuthService } from 'nestjs-telegram';
+import { TelegramAuthService } from 'telenest';
 
 async function login(auth: TelegramAuthService): Promise<void> {
   await auth.sendCode('+15551234567');
@@ -160,7 +160,7 @@ Notes:
 
 ```ts
 import { Injectable } from '@nestjs/common';
-import { TelegramAuthService } from 'nestjs-telegram';
+import { TelegramAuthService } from 'telenest';
 
 @Injectable()
 export class LoginService {
@@ -382,7 +382,7 @@ When `code` is `FLOOD_WAIT`, the error also carries `retryAfterSeconds`.
 Catch with the `isTelegramError` guard and narrow on `code`:
 
 ```ts
-import { isTelegramError, TelegramAuthService } from 'nestjs-telegram';
+import { isTelegramError, TelegramAuthService } from 'telenest';
 
 async function signInSafely(
   auth: TelegramAuthService,
@@ -510,7 +510,7 @@ The library ships two implementations:
 | [`InMemorySessionStore`](../src/lib/client/session/memory-session-store.ts) | `new InMemorySessionStore(initial?)` | Volatile — lost on restart, forcing a fresh login. | Tests, short-lived processes; seed it with `process.env.TG_SESSION`. |
 
 ```ts
-import { TelegramClientModule, FileSessionStore } from 'nestjs-telegram';
+import { TelegramClientModule, FileSessionStore } from 'telenest';
 
 TelegramClientModule.forRoot({
   apiId: Number(process.env.TG_API_ID),
@@ -523,7 +523,7 @@ Implement the `SessionStore` interface (`load` / `save` / `clear`, each
 sync or async) to back sessions with Redis, a database, or a secrets manager:
 
 ```ts
-import type { SessionStore } from 'nestjs-telegram';
+import type { SessionStore } from 'telenest';
 
 class RedisSessionStore implements SessionStore {
   async load() { return (await redis.get('tg:session')) ?? undefined; }

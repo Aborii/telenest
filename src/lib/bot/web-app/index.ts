@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { validateWebAppInitData } from 'nestjs-telegram';
+ * import { validateWebAppInitData } from 'telenest';
  */
 
 export * from './validate-web-app-init-data';

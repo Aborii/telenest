@@ -16,7 +16,7 @@
  * USAGE
  * -----
  * ```ts
- * import { withRetry } from 'nestjs-telegram';
+ * import { withRetry } from 'telenest';
  *
  * await withRetry(() => bot.sendMessage(chatId, text));
  * ```

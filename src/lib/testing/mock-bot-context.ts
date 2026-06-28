@@ -13,14 +13,14 @@
  *
  * The `telegraf` dependency is **type-only** (erased at compile time) and the
  * `jest` reference is the **ambient global** of a Jest runtime — this module
- * never `import`s either at runtime, so the `nestjs-telegram/testing` subpath
+ * never `import`s either at runtime, so the `telenest/testing` subpath
  * stays free of a hard Telegraf or test-runner dependency. Call
  * {@link createMockBotContext} only from inside Jest specs.
  *
  * USAGE
  * -----
  * ```ts
- * import { createMockBotContext } from 'nestjs-telegram/testing';
+ * import { createMockBotContext } from 'telenest/testing';
  *
  * const ctx = createMockBotContext({ text: '/start' });
  * await myHandler(ctx);

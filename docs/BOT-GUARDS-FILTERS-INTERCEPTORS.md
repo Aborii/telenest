@@ -95,8 +95,8 @@ src/lib/bot/updates/
     index.ts
 ```
 
-Everything is re-exported from the package root (`nestjs-telegram`) and the
-`nestjs-telegram/bot` subpath. The `TelegramEnhancerResolver` provider is wired
+Everything is re-exported from the package root (`telenest`) and the
+`telenest/bot` subpath. The `TelegramEnhancerResolver` provider is wired
 into `TelegramBotModule` automatically — no extra setup.
 
 ## Quick start
@@ -114,7 +114,7 @@ import {
   ChatAllowlistGuard,
   RateLimitGuard,
   TelegramExceptionFilter,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @TelegramUpdate()
 // Class-level: every handler below is restricted to one support chat
@@ -174,7 +174,7 @@ configurable burst plus a steady sustained rate. Configure these as **instances*
 
 ```ts
 import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
-import { TelegramExecutionContext, type TelegramGuard } from 'nestjs-telegram';
+import { TelegramExecutionContext, type TelegramGuard } from 'telenest';
 
 @Injectable()
 export class HasUsernameGuard implements TelegramGuard {
@@ -195,7 +195,7 @@ returned stream is subscribed, after every interceptor's pre-phase.
 ```ts
 import { Injectable, Logger, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
 import { tap } from 'rxjs';
-import { TelegramExecutionContext } from 'nestjs-telegram';
+import { TelegramExecutionContext } from 'telenest';
 
 @Injectable()
 export class TimingInterceptor implements NestInterceptor {
@@ -239,7 +239,7 @@ Pass `logger: false` to silence logging, or a custom `LoggerService` to redirect
 
 ```ts
 import { Catch, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
-import { TelegramExecutionContext } from 'nestjs-telegram';
+import { TelegramExecutionContext } from 'telenest';
 
 @Catch(MyDomainError)
 export class DomainErrorFilter implements ExceptionFilter {

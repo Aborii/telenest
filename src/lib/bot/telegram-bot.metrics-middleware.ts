@@ -20,7 +20,7 @@
  *   TELEGRAM_BOT_METRICS,
  *   telegramBotMetricsMiddleware,
  *   type TelegramMetricsRecorder,
- * } from 'nestjs-telegram';
+ * } from 'telenest';
  *
  * constructor(
  *   private readonly bot: TelegramBotService,

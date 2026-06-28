@@ -1,7 +1,7 @@
 # Multiple User Accounts
 
 Run **more than one MTProto user account** in a single NestJS application with
-`nestjs-telegram` — for example a personal account and an ops account — each with
+`telenest` — for example a personal account and an ops account — each with
 its own API credentials, **session**, login flow, and inbound-message handlers.
 Register each account under a `name`, inject its services with
 `@InjectTelegramUser(name)` / `@InjectTelegramAuth(name)`, and scope
@@ -126,7 +126,7 @@ import {
   InjectTelegramUser,
   type GramMessage,
   type GramUserMessageContext,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 // Inbound handler for the `ops` account only; replies through `ops`.
 @Injectable()

@@ -78,7 +78,7 @@ Volatile, process-local. Lost on restart — useful for tests and short-lived
 processes. Optionally seeded from an env var.
 
 ```ts
-import { InMemorySessionStore } from 'nestjs-telegram';
+import { InMemorySessionStore } from 'telenest';
 const store = new InMemorySessionStore(process.env.TG_SESSION);
 ```
 
@@ -90,7 +90,7 @@ a planted symlink isn't followed), then `rename`d over the destination — with
 `0o600` permissions on POSIX systems.
 
 ```ts
-import { FileSessionStore } from 'nestjs-telegram';
+import { FileSessionStore } from 'telenest';
 const store = new FileSessionStore('./.telegram.session');
 ```
 
@@ -107,7 +107,7 @@ or a test fake all work.
 
 ```ts
 import { createClient } from 'redis';
-import { RedisSessionStore } from 'nestjs-telegram';
+import { RedisSessionStore } from 'telenest';
 
 const redis = createClient();
 await redis.connect();
@@ -130,7 +130,7 @@ A generic adapter over any async `get`/`set`/`delete` backend — a database DAO
 
 ```ts
 import Keyv from 'keyv';
-import { KeyValueSessionStore } from 'nestjs-telegram';
+import { KeyValueSessionStore } from 'telenest';
 
 const store = new KeyValueSessionStore(new Keyv('postgres://…'), 'tg:session');
 ```
@@ -161,7 +161,7 @@ CREATE TABLE telegram_session (
 **TypeORM** — wrap a `Repository<SessionEntity>` (entity columns `key`, `value`):
 
 ```ts
-import { OrmSessionStore } from 'nestjs-telegram';
+import { OrmSessionStore } from 'telenest';
 
 const repo = dataSource.getRepository(SessionEntity);
 const store = new OrmSessionStore({
@@ -207,7 +207,7 @@ Because GCM authenticates the ciphertext, a tampered payload or a wrong secret
 **fails closed** with `TelegramSessionError` rather than returning corrupt data.
 
 ```ts
-import { EncryptedSessionStore, RedisSessionStore } from 'nestjs-telegram';
+import { EncryptedSessionStore, RedisSessionStore } from 'telenest';
 
 const store = new EncryptedSessionStore(
   new RedisSessionStore(redis, 'tg:session'),
@@ -272,7 +272,7 @@ failures in `TelegramSessionError`. For most async backends, prefer
 `KeyValueSessionStore` over a bespoke class:
 
 ```ts
-import { TelegramSessionError, type SessionStore } from 'nestjs-telegram';
+import { TelegramSessionError, type SessionStore } from 'telenest';
 
 export class MyStore implements SessionStore {
   async load(): Promise<string | undefined> {

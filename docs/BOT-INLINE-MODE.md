@@ -2,7 +2,7 @@
 
 First-class support for Telegram **inline mode** — a bot invoked via
 `@botname query` from *any* chat, returning a list of results the user can pick
-and send. `nestjs-telegram` gives inline mode the same decorator-driven treatment
+and send. `telenest` gives inline mode the same decorator-driven treatment
 as the rest of the Bot API: typed method decorators (`@InlineQuery`,
 `@ChosenInlineResult`), parameter decorators for the query text/offset, a fluent
 `InlineQueryResultBuilder`, and an `answerInlineQuery` helper on
@@ -97,7 +97,7 @@ import {
   InlineQueryText,
   TelegramBotModule,
   TelegramUpdate,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @TelegramUpdate()
 @Injectable()

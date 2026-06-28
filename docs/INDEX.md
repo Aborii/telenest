@@ -1,6 +1,6 @@
 # Documentation Index
 
-Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
+Complete guide to `telenest` — Navigate to the documentation you need.
 
 ---
 
@@ -314,23 +314,23 @@ The library uses subpath exports to load only what you need:
 
 | Import Path              | Includes            | Use When                        |
 | ------------------------ | ------------------- | ------------------------------- |
-| `nestjs-telegram`        | Both Bot + Client   | Using both APIs                 |
-| `nestjs-telegram/bot`    | Bot API only        | Bot-only app (no GramJS)        |
-| `nestjs-telegram/client` | MTProto only        | User account only (no Telegraf) |
-| `nestjs-telegram/common` | Shared types/errors | Type imports only               |
-| `nestjs-telegram/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
+| `telenest`        | Both Bot + Client   | Using both APIs                 |
+| `telenest/bot`    | Bot API only        | Bot-only app (no GramJS)        |
+| `telenest/client` | MTProto only        | User account only (no Telegraf) |
+| `telenest/common` | Shared types/errors | Type imports only               |
+| `telenest/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
 
 **Example:**
 
 ```typescript
 // Load only Bot API
-import { TelegramBotModule, TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotModule, TelegramBotService } from "telenest/bot";
 
 // Load only MTProto
-import { TelegramClientModule, TelegramUserService } from "nestjs-telegram/client";
+import { TelegramClientModule, TelegramUserService } from "telenest/client";
 
 // Load both
-import { TelegramModule } from "nestjs-telegram";
+import { TelegramModule } from "telenest";
 ```
 
 ---
@@ -369,7 +369,7 @@ import { TelegramModule } from "nestjs-telegram";
 Visual guide to documentation structure:
 
 ```
-nestjs-telegram/
+telenest/
 ├── README.md                     ← Start here: Overview
 └── docs/
     ├── INDEX.md                  ← You are here

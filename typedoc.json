@@ -14,7 +14,7 @@
   "excludePrivate": true,
   "excludeInternal": true,
   "excludeExternals": true,
-  "githubPages": false,
+  "githubPages": true,
   "validation": {
     "invalidLink": true,
     "notExported": true,

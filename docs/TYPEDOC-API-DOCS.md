@@ -134,6 +134,33 @@ non-blocking advisory step in CI.
 
 ---
 
+## Deployment (GitHub Pages)
+
+The reference is published to **GitHub Pages** at
+<https://aborii.github.io/telenest/> by the
+[`API Docs` workflow](../.github/workflows/docs.yml). The generated HTML is
+**not committed** — CI regenerates it from source and deploys the artifact, so
+the hosted site always matches the latest released code.
+
+```mermaid
+flowchart LR
+  A[push to main / manual dispatch] --> B[npm ci]
+  B --> C[npm run docs:api → docs/api]
+  C --> D[upload-pages-artifact]
+  D --> E[deploy-pages → aborii.github.io/telenest]
+```
+
+- **Trigger:** push to `main` (the release branch — `main` only advances on
+  release merges) and manual `workflow_dispatch`.
+- **`githubPages: true`** in `typedoc.json` makes TypeDoc emit a `.nojekyll`
+  file, without which GitHub Pages strips the `_`-prefixed asset paths and the
+  site renders unstyled.
+- **One-time setup** (cannot be automated): in the repository
+  **Settings → Pages**, set **Source = "GitHub Actions"**. Until that is done
+  the deploy step has nowhere to publish.
+
+---
+
 ## How To Extend
 
 - **Add a new public subpath export?** Add its barrel to `entryPoints` in
@@ -141,8 +168,10 @@ non-blocking advisory step in CI.
 - **Emit Markdown instead of HTML** (e.g. to host on Docusaurus/VitePress):
   install [`typedoc-plugin-markdown`](https://www.npmjs.com/package/typedoc-plugin-markdown)
   and add it under `"plugin"` in `typedoc.json`.
-- **Publish a hosted site:** point GitHub Pages (or any static host) at the
-  generated `docs/api` output in a CI job. Tracked separately from this setup.
+- **Publish a hosted site:** already wired — see
+  [Deployment](#deployment-github-pages). To host elsewhere (Netlify, Cloudflare
+  Pages, Vercel), point the host at build command `npm run docs:api` and publish
+  directory `docs/api`.
 - **Gate on doc quality in CI:** once the baseline link warnings are cleaned up,
   add `"treatWarningsAsErrors": true` to `typedoc.json` and run `npm run docs:api`
   as a CI step to keep the JSDoc honest.

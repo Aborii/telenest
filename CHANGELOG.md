@@ -5,7 +5,7 @@ All notable changes to `telenest` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each release also has full, auto-generated notes on the
-[GitHub Releases](https://github.com/Aborii/nestjs-telegram/releases) page.
+[GitHub Releases](https://github.com/Aborii/telenest/releases) page.
 
 ## [1.3.0] - 2026-06-25
 
@@ -97,7 +97,7 @@ First release — a fully-typed NestJS module covering both Telegram API surface
 - **Shared:** typed `TelegramError` hierarchy, the umbrella `TelegramModule`, and
   runnable examples (login CLI + reference app module).
 
-[1.3.0]: https://github.com/Aborii/nestjs-telegram/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/Aborii/nestjs-telegram/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/Aborii/nestjs-telegram/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/Aborii/nestjs-telegram/releases/tag/v1.0.0
+[1.3.0]: https://github.com/Aborii/telenest/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/Aborii/telenest/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/Aborii/telenest/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/Aborii/telenest/releases/tag/v1.0.0

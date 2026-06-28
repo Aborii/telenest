@@ -5,9 +5,9 @@
 > the npm package**. For the library's own bot platform — `TelegramBotModule`,
 > `TelegramBotService`, the `@TelegramUpdate` decorator system, guards/filters, the
 > webhook controller, and Mini Apps — see
-> [BOT-API.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-API.md),
-> [BOT-UPDATE-DECORATORS.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/BOT-UPDATE-DECORATORS.md),
-> and [WEBHOOK-CONTROLLER.md](https://github.com/Aborii/nestjs-telegram/blob/main/docs/WEBHOOK-CONTROLLER.md).
+> [BOT-API.md](https://github.com/Aborii/telenest/blob/main/docs/BOT-API.md),
+> [BOT-UPDATE-DECORATORS.md](https://github.com/Aborii/telenest/blob/main/docs/BOT-UPDATE-DECORATORS.md),
+> and [WEBHOOK-CONTROLLER.md](https://github.com/Aborii/telenest/blob/main/docs/WEBHOOK-CONTROLLER.md).
 
 This document covers the bundled demo application that runs multiple Telegraf bots in one process. It mirrors the architecture and ergonomics of `nestjs-telegraf` examples while adding stricter config validation, better module boundaries, and extension-ready conventions.
 

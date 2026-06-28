@@ -56,8 +56,42 @@ import * as p from '@clack/prompts';
 /** Repository root (this file lives in `<root>/scripts`). */
 const ROOT: string = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PKG_PATH: string = resolve(ROOT, 'package.json');
-const DEV: string = process.env.RELEASE_DEV_BRANCH || 'dev';
-const MAIN: string = process.env.RELEASE_MAIN_BRANCH || 'main';
+
+/**
+ * Conservative git branch-name shape: letters, digits, and the punctuation git
+ * permits in refs (`._/-`), starting with an alphanumeric. This is intentionally
+ * stricter than git's own rules — its sole job is to guarantee the branch names
+ * are inert when interpolated into the shell command strings below, closing the
+ * env-var → `execSync` command-injection path (the `RELEASE_*_BRANCH` overrides
+ * are operator-supplied and otherwise unsanitized).
+ */
+const SAFE_BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+/**
+ * Validate an operator-supplied branch name before it is interpolated into a
+ * shell command. Acts as the taint barrier for the `RELEASE_*_BRANCH` env vars.
+ *
+ * @param value - The raw branch name (env override or built-in default).
+ * @param varName - The env var the value came from, for the error message.
+ * @returns The validated branch name, unchanged.
+ * @throws {Error} If `value` contains anything outside {@link SAFE_BRANCH}.
+ */
+function safeBranch(value: string, varName: string): string {
+  if (!SAFE_BRANCH.test(value))
+    throw new Error(
+      `Refusing to use unsafe ${varName}="${value}": branch names must match ${String(SAFE_BRANCH)}.`,
+    );
+  return value;
+}
+
+const DEV: string = safeBranch(
+  process.env.RELEASE_DEV_BRANCH || 'dev',
+  'RELEASE_DEV_BRANCH',
+);
+const MAIN: string = safeBranch(
+  process.env.RELEASE_MAIN_BRANCH || 'main',
+  'RELEASE_MAIN_BRANCH',
+);
 const DRY: boolean = process.argv.includes('--dry-run');
 
 /** The semver components this script knows how to bump (excludes "custom"). */

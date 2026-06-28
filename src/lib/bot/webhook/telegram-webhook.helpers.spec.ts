@@ -43,6 +43,13 @@ describe('normalizeWebhookPath', () => {
     expect(normalizeWebhookPath('/')).toBe('/');
     expect(normalizeWebhookPath('///')).toBe('/');
   });
+
+  it('handles a slash-heavy path in linear time (ReDoS regression)', () => {
+    // A long run of slashes followed by a non-slash is the worst case for the
+    // old `\/+$` backtracking regex; the split-based impl stays linear.
+    const input = `${'/'.repeat(100_000)}hook${'/'.repeat(100_000)}`;
+    expect(normalizeWebhookPath(input)).toBe('/hook');
+  });
 });
 
 describe('joinWebhookUrl', () => {
@@ -67,6 +74,12 @@ describe('joinWebhookUrl', () => {
   it('normalizes a messy path so it matches the mounted route', () => {
     expect(joinWebhookUrl('https://x.com', 'telegram//webhook/')).toBe(
       'https://x.com/telegram/webhook',
+    );
+  });
+
+  it('strips a long run of trailing slashes on the domain in linear time (ReDoS regression)', () => {
+    expect(joinWebhookUrl(`https://x.com${'/'.repeat(100_000)}`, '/hook')).toBe(
+      'https://x.com/hook',
     );
   });
 });

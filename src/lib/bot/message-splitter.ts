@@ -14,7 +14,7 @@
  * USAGE
  * -----
  * ```ts
- * import { splitMessageText } from 'nestjs-telegram';
+ * import { splitMessageText } from 'telenest';
  *
  * for (const chunk of splitMessageText(hugeText)) {
  *   await bot.sendMessage(chatId, chunk);

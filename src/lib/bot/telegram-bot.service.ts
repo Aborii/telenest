@@ -763,6 +763,26 @@ export class TelegramBotService
   }
 
   /**
+   * Responds to a shipping query for an invoice whose `is_flexible` flag is set
+   * (the user picked a shipping address and the bot must reply with the
+   * available shipping options, or reject with an error message). Telegram only
+   * sends this update for invoices that request a shipping address; for digital
+   * goods and Stars-priced invoices it never fires.
+   *
+   * @param args - Shipping query id, `ok` flag, shipping options, and (when
+   *   `ok` is `false`) a human-readable error message.
+   * @returns `true` on success.
+   * @throws {TelegramBotApiError} If the Bot API request fails.
+   */
+  public answerShippingQuery(
+    ...args: Parameters<Telegram['answerShippingQuery']>
+  ): Promise<Awaited<ReturnType<Telegram['answerShippingQuery']>>> {
+    return this.exec('answerShippingQuery', () =>
+      this.telegram.answerShippingQuery(...args),
+    );
+  }
+
+  /**
    * Responds to a pre-checkout query (the final confirmation before payment).
    * Must be answered within 10 seconds or the payment is cancelled.
    *

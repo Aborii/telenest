@@ -8,7 +8,7 @@
  *
  * USAGE
  * -----
- * import { TelegramBotModule, TelegramClientModule, TelegramModule } from 'nestjs-telegram';
+ * import { TelegramBotModule, TelegramClientModule, TelegramModule } from 'telenest';
  */
 
 export * from './bot';

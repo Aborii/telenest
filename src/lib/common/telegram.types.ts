@@ -10,7 +10,7 @@
  * USAGE
  * -----
  * ```ts
- * import { ParseMode, ChatId } from 'nestjs-telegram';
+ * import { ParseMode, ChatId } from 'telenest';
  * ```
  *
  * KEY EXPORTS

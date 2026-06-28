@@ -236,18 +236,37 @@ describe('buildScene — validation', () => {
     ).toThrow(/each step position must be unique/);
   });
 
-  it('rejects inline-mode bindings inside a scene', () => {
+  it('rejects chatless update bindings (inline + payment queries) inside a scene', () => {
     for (const kind of [
       BOT_UPDATE_KINDS.INLINE_QUERY,
       BOT_UPDATE_KINDS.CHOSEN_INLINE_RESULT,
+      BOT_UPDATE_KINDS.PRE_CHECKOUT_QUERY,
+      BOT_UPDATE_KINDS.SHIPPING_QUERY,
     ] as const) {
       expect(() =>
         buildScene({
-          definition: sceneDef('inline'),
+          definition: sceneDef('chatless'),
           methods: [methodSpec({ updateBindings: [{ kind }] })],
         }),
       ).toThrow(/not supported inside a scene/);
     }
+  });
+
+  it('supports @SuccessfulPayment inside a scene (chat-bound message)', () => {
+    const on = jest.spyOn(Composer.prototype, 'on').mockReturnThis();
+
+    buildScene({
+      definition: sceneDef('paid'),
+      methods: [
+        methodSpec({
+          updateBindings: [{ kind: BOT_UPDATE_KINDS.SUCCESSFUL_PAYMENT }],
+        }),
+      ],
+    });
+
+    // ── Bound via a message() filter function, not a raw update-type string. ────
+    expect(on).toHaveBeenCalledWith(expect.any(Function), expect.any(Function));
+    on.mockRestore();
   });
 
   it('rejects @CallbackAction inside a scene', () => {

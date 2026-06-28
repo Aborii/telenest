@@ -1,6 +1,6 @@
 # Advanced Usage & Best Practices
 
-Advanced patterns, performance tips, and production-ready practices for `nestjs-telegram`.
+Advanced patterns, performance tips, and production-ready practices for `telenest`.
 
 ---
 
@@ -27,18 +27,6 @@ Advanced patterns, performance tips, and production-ready practices for `nestjs-
   - [Health Checks](#health-checks)
   - [Graceful Shutdown](#graceful-shutdown)
   - [Monitoring & Logging](#monitoring--logging)
-- [Advanced Bot Patterns](#advanced-bot-patterns)
-  - [Conversation State Management](#conversation-state-management)
-  - [Multi-language Support](#multi-language-support)
-  - [Plugin Architecture](#plugin-architecture)
-- [Advanced MTProto Patterns](#advanced-mtproto-patterns)
-  - [Session Management](#session-management)
-  - [Flood Wait Handling](#flood-wait-handling)
-  - [Multi-Account Management](#multi-account-management)
-- [Testing Strategies](#testing-strategies)
-  - [Integration Testing](#integration-testing)
-  - [E2E Testing](#e2e-testing)
-  - [Test Coverage Best Practices](#test-coverage-best-practices)
 
 ---
 
@@ -101,7 +89,7 @@ export class CreateTaskUseCase {
 // Presentation layer - bot handlers
 // tasks.update.ts
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Command, Ctx, Sender } from "nestjs-telegram/bot";
+import { TelegramUpdate, Command, Ctx, Sender } from "telenest/bot";
 import type { Context, User as TgUser } from "telegraf";
 import { CreateTaskUseCase } from "./create-task.use-case";
 
@@ -345,7 +333,7 @@ Cache expensive operations.
 import { Injectable, Inject } from "@nestjs/common";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import type { Cache } from "cache-manager";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class CachedDialogsService {
@@ -387,7 +375,7 @@ Efficiently process multiple operations.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 
 @Injectable()
 export class BulkMessagingService {
@@ -422,7 +410,7 @@ export class BulkMessagingService {
 ## Built-in helpers
 
 Three exported helpers cover common Bot-API foot-guns; all are importable from
-`nestjs-telegram` (or `nestjs-telegram/bot`).
+`telenest` (or `telenest/bot`).
 
 - **`withRetry(fn, options?)`** — runs `fn`, retrying only on Telegram's
   `429 Too Many Requests` by waiting the reported `retry_after`. Non-rate-limit
@@ -445,8 +433,8 @@ Handle failures without crashing.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
-import { isTelegramError } from "nestjs-telegram";
+import { TelegramBotService } from "telenest/bot";
+import { isTelegramError } from "telenest";
 
 @Injectable()
 export class ResilientMessagingService {
@@ -495,8 +483,8 @@ Automatic retries with exponential backoff.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramAuthService } from "nestjs-telegram/client";
-import { isTelegramError } from "nestjs-telegram";
+import { TelegramAuthService } from "telenest/client";
+import { isTelegramError } from "telenest";
 
 @Injectable()
 export class RetryableAuthService {
@@ -610,7 +598,7 @@ Always validate user input.
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramUpdate, Command, Ctx } from "nestjs-telegram/bot";
+import { TelegramUpdate, Command, Ctx } from "telenest/bot";
 import type { Context } from "telegraf";
 
 @TelegramUpdate()
@@ -825,8 +813,8 @@ Monitor application health.
 ```typescript
 import { Injectable } from "@nestjs/common";
 import { HealthIndicator, HealthIndicatorResult, HealthCheckError } from "@nestjs/terminus";
-import { TelegramBotService } from "nestjs-telegram/bot";
-import { TelegramAuthService } from "nestjs-telegram/client";
+import { TelegramBotService } from "telenest/bot";
+import { TelegramAuthService } from "telenest/client";
 
 @Injectable()
 export class TelegramHealthIndicator extends HealthIndicator {
@@ -919,7 +907,7 @@ Structured logging and error tracking.
 
 ```typescript
 import { Injectable, Logger } from "@nestjs/common";
-import { TelegramUpdate, Use, Ctx } from "nestjs-telegram/bot";
+import { TelegramUpdate, Use, Ctx } from "telenest/bot";
 import type { Context } from "telegraf";
 import * as Sentry from "@sentry/node";
 

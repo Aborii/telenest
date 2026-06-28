@@ -1,6 +1,6 @@
 # Telegram Module
 
-`nestjs-telegram` is a fully-typed NestJS library that wraps **two** distinct Telegram APIs behind one cohesive, dependency-injected surface: the **Bot API** (via [Telegraf](https://telegraf.js.org/)) for running a "normal" `@BotFather` bot, and the **MTProto user-account client** (via [GramJS](https://gram.js.org/) — the `telegram` package) for signing in *as your own account* and controlling it from your application. The two capabilities are independent feature modules (`TelegramBotModule` and `TelegramClientModule`) that share a common typed-error and scalar-type layer, can be configured synchronously or asynchronously through Nest's `ConfigurableModuleBuilder`, and can be composed together with a single call via the umbrella `TelegramModule`.
+`telenest` is a fully-typed NestJS library that wraps **two** distinct Telegram APIs behind one cohesive, dependency-injected surface: the **Bot API** (via [Telegraf](https://telegraf.js.org/)) for running a "normal" `@BotFather` bot, and the **MTProto user-account client** (via [GramJS](https://gram.js.org/) — the `telegram` package) for signing in *as your own account* and controlling it from your application. The two capabilities are independent feature modules (`TelegramBotModule` and `TelegramClientModule`) that share a common typed-error and scalar-type layer, can be configured synchronously or asynchronously through Nest's `ConfigurableModuleBuilder`, and can be composed together with a single call via the umbrella `TelegramModule`.
 
 ---
 
@@ -34,7 +34,7 @@ import {
   TelegramBotService,
   TelegramAuthService,
   TelegramUserService,
-} from 'nestjs-telegram';
+} from 'telenest';
 ```
 
 ### The three layers
@@ -55,7 +55,7 @@ import {
      `TelegramAuthError.code` is drawn from the `as const` record `TELEGRAM_AUTH_ERROR_CODES` (derived union `TelegramAuthErrorCode`): `PHONE_INVALID`, `CODE_INVALID`, `PASSWORD_REQUIRED`, `PASSWORD_INVALID`, `CODE_NOT_REQUESTED`, `SIGN_UP_REQUIRED`, `NOT_AUTHORIZED`, `FLOOD_WAIT`, `UNKNOWN`. The `isTelegramError(value): value is TelegramError` type guard lets consumers narrow an `unknown` caught value:
 
      ```ts
-     import { isTelegramError } from 'nestjs-telegram';
+     import { isTelegramError } from 'telenest';
 
      try {
        await auth.signIn(code);
@@ -214,7 +214,7 @@ The library declares its heavy integrations as **peer dependencies** (its own `d
 | `telegraf` | `^4.16.0` | Bot API client — only used by the `bot` layer. |
 | `telegram` | `^2.26.0` | GramJS MTProto client — only imported by `gramjs-client.adapter.ts`. |
 
-Because `telegraf` powers only the `bot` layer and `telegram` is touched only by the single GramJS adapter, a consumer who needs **just one** side installs only that SDK: both `telegraf` and `telegram` are declared **optional** peer dependencies (`peerDependenciesMeta`), and the subpath exports (`nestjs-telegram/bot`, `/client`) let each side be imported without pulling in the other's SDK. The typed facades derive their signatures from the installed peer versions (`Parameters<>` / `ReturnType<>` over Telegraf's `Telegram` type for the bot facade; library DTOs for the GramJS adapter), so upgrading a peer within its range never silently breaks the public surface.
+Because `telegraf` powers only the `bot` layer and `telegram` is touched only by the single GramJS adapter, a consumer who needs **just one** side installs only that SDK: both `telegraf` and `telegram` are declared **optional** peer dependencies (`peerDependenciesMeta`), and the subpath exports (`telenest/bot`, `/client`) let each side be imported without pulling in the other's SDK. The typed facades derive their signatures from the installed peer versions (`Parameters<>` / `ReturnType<>` over Telegraf's `Telegram` type for the bot facade; library DTOs for the GramJS adapter), so upgrading a peer within its range never silently breaks the public surface.
 
 ---
 
@@ -266,7 +266,7 @@ src/
         key-value-session-store.ts      # KeyValueSessionStore (bring-your-own KV)
         redis-session-store.ts          # RedisSessionStore
         encrypted-session-store.ts      # EncryptedSessionStore (AES-256-GCM wrapper)
-    testing/                            # ── nestjs-telegram/testing utilities ──
+    testing/                            # ── telenest/testing utilities ──
       mock-gram-client.ts               # createMockGramClient / provideMockGramClient
       mock-bot-context.ts               # createMockBotContext (spyable Telegraf Context)
       dto-builders.ts                   # aGramUser / aGramMessage / aGramDialog

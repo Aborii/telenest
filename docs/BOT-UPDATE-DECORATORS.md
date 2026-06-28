@@ -1,7 +1,7 @@
 # Bot API Update Decorators
 
 A first-class, decorator-based way to handle Bot API updates with
-`nestjs-telegram` — **without** `nestjs-telegraf` and without reaching for the raw
+`telenest` — **without** `nestjs-telegraf` and without reaching for the raw
 `Telegraf` instance. You declare handlers as ordinary NestJS providers; a
 `DiscoveryService`-driven registrar finds every `@TelegramUpdate` class at
 bootstrap and binds its methods onto the bot **before launch**, resolving each
@@ -37,11 +37,13 @@ The system has four cooperating pieces, all under `src/lib/bot/updates`:
 1. **Decorators** record intent as reflect-metadata.
    - `@TelegramUpdate()` marks a class as a handler provider to scan.
    - Method decorators (`@Start`, `@Help`, `@Command`, `@Hears`, `@Action`,
-     `@CallbackAction`, `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`)
-     append an `UpdateBinding` describing which `Telegraf` method the handler binds
-     to and with what trigger.
+     `@CallbackAction`, `@On`, `@Use`, `@InlineQuery`, `@ChosenInlineResult`,
+     `@PreCheckoutQuery`, `@ShippingQuery`, `@SuccessfulPayment`) append an
+     `UpdateBinding` describing which `Telegraf` method the handler binds to and
+     with what trigger.
    - Parameter decorators (`@Ctx`, `@MessageText`, `@Sender`, `@CallbackData`,
-     `@CallbackPayload`, `@InlineQueryText`, `@InlineQueryOffset`) append a
+     `@CallbackPayload`, `@InlineQueryText`, `@InlineQueryOffset`,
+     `@PreCheckoutData`, `@ShippingData`, `@SuccessfulPaymentData`) append a
      `ParamMetadata` describing what to inject at each argument slot.
 2. **The argument resolver** (`resolveHandlerArguments`) is a pure function that
    turns a Telegraf `Context` + the method's `ParamMetadata[]` into the positional
@@ -77,16 +79,18 @@ src/lib/bot/updates/
                                      #   UpdateBinding union, ParamMetadata, metadata keys
   telegram-update.decorator.ts      # @TelegramUpdate + @Start/@Help/@Command/@Hears/@Action/@On/@Use
                                      #   + @InlineQuery/@ChosenInlineResult
+                                     #   + @PreCheckoutQuery/@ShippingQuery/@SuccessfulPayment
   param.decorators.ts               # @Ctx / @MessageText / @Sender / @CallbackData
                                      #   + @InlineQueryText / @InlineQueryOffset
+                                     #   + @PreCheckoutData / @ShippingData / @SuccessfulPaymentData
   argument-resolver.ts              # resolveHandlerArguments(ctx, params) — pure
   telegram-bot-updates.registrar.ts # DiscoveryService scanner; binds to Telegraf before launch
   index.ts                          # barrel
 ```
 
 The registrar is added to `TelegramBotModule` alongside `DiscoveryModule`; the
-decorators are re-exported from the package root (`nestjs-telegram`) and from the
-`nestjs-telegram/bot` subpath.
+decorators are re-exported from the package root (`telenest`) and from the
+`telenest/bot` subpath.
 
 ## Quick start
 
@@ -100,7 +104,7 @@ import {
   Command,
   Ctx,
   Sender,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 @TelegramUpdate()
 @Injectable()
@@ -145,11 +149,22 @@ on one method (e.g. `@Command('a') @Command('b')`).
 | `@Use()` | `bot.use` | — (global middleware) |
 | `@InlineQuery(pattern?)` | `bot.inlineQuery` (or `bot.on('inline_query')`) | optional string / RegExp / array |
 | `@ChosenInlineResult()` | `bot.on('chosen_inline_result')` | — |
+| `@PreCheckoutQuery()` | `bot.on('pre_checkout_query')` | — |
+| `@ShippingQuery()` | `bot.on('shipping_query')` | — |
+| `@SuccessfulPayment()` | `bot.on(message('successful_payment'))` | — |
 
 Matched handlers (`start`, `help`, `command`, `hears`, `action`, `on`,
-`inlineQuery`, `chosen_inline_result`) are **terminal** — they do not call
-`next`. `@Use()` middleware is **not** terminal: the registrar calls `next()`
-after it so the chain continues.
+`inlineQuery`, `chosen_inline_result`, and the payment updates) are **terminal**
+— they do not call `next`. `@Use()` middleware is **not** terminal: the registrar
+calls `next()` after it so the chain continues.
+
+> **Payments.** `@PreCheckoutQuery` / `@ShippingQuery` / `@SuccessfulPayment`
+> (and their `@PreCheckoutData` / `@ShippingData` / `@SuccessfulPaymentData`
+> parameter decorators) cover the Telegram Payments checkout flow. `pre_checkout`
+> and `shipping` queries carry **no chat**, so — like inline updates — they must
+> live on a top-level provider, never inside a scene; `@SuccessfulPayment` is a
+> chat-bound message and may be used in a scene. Full guide:
+> [PAYMENTS.md](./PAYMENTS.md).
 
 > **Inline mode** (`@InlineQuery` / `@ChosenInlineResult`, the
 > `InlineQueryResultBuilder`, and `answerInlineQuery`) has its own guide:
@@ -240,6 +255,9 @@ not thrown, so it never takes down an otherwise-healthy app.
 | `@CallbackPayload()` | decoded callback-action payload (`d`), validated if `@CallbackAction` has a schema | your payload type / `unknown` | `undefined` |
 | `@InlineQueryText()` | `ctx.inlineQuery.query` | `string \| undefined` | `undefined` |
 | `@InlineQueryOffset()` | `ctx.inlineQuery.offset` | `string \| undefined` | `undefined` |
+| `@PreCheckoutData()` | `ctx.preCheckoutQuery` | `PreCheckoutQuery \| undefined` | `undefined` |
+| `@ShippingData()` | `ctx.shippingQuery` | `ShippingQuery \| undefined` | `undefined` |
+| `@SuccessfulPaymentData()` | `ctx.message.successful_payment` | `SuccessfulPayment \| undefined` | `undefined` |
 
 If a method has **no** parameter decorators, the raw `Context` is passed as the
 single argument (the common `(ctx) => …` ergonomic). Otherwise the resolver builds

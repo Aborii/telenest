@@ -4,7 +4,7 @@
  * PURPOSE
  * -------
  * Public barrel for the framework-agnostic testing utilities, published under
- * the `nestjs-telegram/testing` subpath. These helpers let consumers test code
+ * the `telenest/testing` subpath. These helpers let consumers test code
  * that depends on this library without hand-rolling fakes or ever touching the
  * Telegram network, leveraging the seams the library is already built around
  * (the `IGramClient` interface and the `TELEGRAM_GRAM_CLIENT` token on the
@@ -21,7 +21,7 @@
  *   provideMockGramClient,
  *   createMockBotContext,
  *   aGramUser,
- * } from 'nestjs-telegram/testing';
+ * } from 'telenest/testing';
  *
  * KEY EXPORTS
  * -----------

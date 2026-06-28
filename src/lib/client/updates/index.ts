@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { OnUserMessage, GramUserMessageContext } from 'nestjs-telegram';
+ * import { OnUserMessage, GramUserMessageContext } from 'telenest';
  */
 
 export * from './match-chat-action';

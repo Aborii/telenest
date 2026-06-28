@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
+ * import { TelegramBotModule, TelegramBotService } from 'telenest';
  */
 
 export * from './callback-action.codec';

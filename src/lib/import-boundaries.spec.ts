@@ -5,8 +5,8 @@
  * -------
  * Enforces the Bot ⟷ MTProto-client decoupling (see CLAUDE.md) as an executable
  * rule, which is also what makes the subpath exports safe: importing
- * `nestjs-telegram/bot` must never pull in GramJS (`telegram`), and
- * `nestjs-telegram/client` must never pull in Telegraf. This test scans the
+ * `telenest/bot` must never pull in GramJS (`telegram`), and
+ * `telenest/client` must never pull in Telegraf. This test scans the
  * source of each side and fails if a forbidden import appears.
  */
 

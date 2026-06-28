@@ -9,7 +9,7 @@
  * -----
  * ```ts
  * import { Inject } from '@nestjs/common';
- * import { TELEGRAM_BOT } from 'nestjs-telegram';
+ * import { TELEGRAM_BOT } from 'telenest';
  * import { Telegraf } from 'telegraf';
  *
  * constructor(@Inject(TELEGRAM_BOT) private readonly bot: Telegraf) {}

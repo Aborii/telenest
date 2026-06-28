@@ -1,12 +1,12 @@
-# Getting Started with nestjs-telegram
+# Getting Started with telenest
 
-This guide will help you get up and running with `nestjs-telegram` in under 10 minutes. We'll cover both the **Bot API** (for creating Telegram bots) and the **MTProto Client** (for controlling your own account).
+This guide will help you get up and running with `telenest` in under 10 minutes. We'll cover both the **Bot API** (for creating Telegram bots) and the **MTProto Client** (for controlling your own account).
 
 ---
 
 ## Table of Contents
 
-- [Getting Started with nestjs-telegram](#getting-started-with-nestjs-telegram)
+- [Getting Started with telenest](#getting-started-with-telenest)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
   - [Quick Start: Bot API](#quick-start-bot-api)
@@ -41,7 +41,7 @@ This guide will help you get up and running with `nestjs-telegram` in under 10 m
 Install the library and required NestJS peer dependencies:
 
 ```bash
-npm i nestjs-telegram @nestjs/common @nestjs/core reflect-metadata rxjs
+npm i telenest @nestjs/common @nestjs/core reflect-metadata rxjs
 ```
 
 Install **only the Telegram SDK(s) you need**. They are optional peer dependencies:
@@ -57,11 +57,11 @@ npm i telegram
 npm i telegraf telegram
 ```
 
-> **Tip:** Use [subpath imports](#subpath-imports) to load only what you need:
+> **Tip:** Use subpath imports to load only what you need:
 >
-> - `nestjs-telegram/bot` — Bot API only (no GramJS)
-> - `nestjs-telegram/client` — MTProto only (no Telegraf)
-> - `nestjs-telegram` — Both APIs
+> - `telenest/bot` — Bot API only (no GramJS)
+> - `telenest/client` — MTProto only (no Telegraf)
+> - `telenest` — Both APIs
 
 ---
 
@@ -86,7 +86,7 @@ BOT_TOKEN=your_bot_token_here
 // app.module.ts
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { TelegramBotModule } from "nestjs-telegram/bot";
+import { TelegramBotModule } from "telenest/bot";
 import { AppService } from "./app.service";
 
 @Module({
@@ -106,7 +106,7 @@ export class AppModule {}
 ```typescript
 // app.service.ts
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotService } from "telenest/bot";
 
 @Injectable()
 export class AppService implements OnModuleInit {
@@ -176,7 +176,7 @@ TG_API_HASH=abcdef1234567890abcdef1234567890
 // app.module.ts
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { TelegramClientModule } from "nestjs-telegram/client";
+import { TelegramClientModule } from "telenest/client";
 import { AppService } from "./app.service";
 
 @Module({
@@ -208,7 +208,7 @@ Follow the prompts, then copy the session string to `.env` as `TG_SESSION`.
 ```typescript
 // app.service.ts
 import { Injectable } from "@nestjs/common";
-import { TelegramAuthService } from "nestjs-telegram/client";
+import { TelegramAuthService } from "telenest/client";
 
 @Injectable()
 export class AppService {
@@ -240,7 +240,7 @@ Once you have a valid `TG_SESSION`:
 ```typescript
 // app.service.ts
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class AppService implements OnModuleInit {
@@ -278,7 +278,7 @@ You can use both the Bot API and MTProto client in the same app:
 ```typescript
 // app.module.ts
 import { Module } from "@nestjs/common";
-import { TelegramModule } from "nestjs-telegram"; // Umbrella module
+import { TelegramModule } from "telenest"; // Umbrella module
 
 @Module({
   imports: [
@@ -302,8 +302,8 @@ Then inject both services:
 
 ```typescript
 import { Injectable } from "@nestjs/common";
-import { TelegramBotService } from "nestjs-telegram/bot";
-import { TelegramUserService } from "nestjs-telegram/client";
+import { TelegramBotService } from "telenest/bot";
+import { TelegramUserService } from "telenest/client";
 
 @Injectable()
 export class NotificationService {
@@ -365,7 +365,7 @@ TG_SESSION=1AgAOMT...  # Get this from `npm run login`
 
 ```typescript
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { TelegramBotModule } from "nestjs-telegram/bot";
+import { TelegramBotModule } from "telenest/bot";
 
 @Module({
   imports: [
@@ -385,7 +385,7 @@ export class AppModule {}
 ### Error Handling
 
 ```typescript
-import { isTelegramError } from "nestjs-telegram";
+import { isTelegramError } from "telenest";
 
 try {
   await bot.sendMessage(chatId, "Hello!");
@@ -429,7 +429,7 @@ try {
 ## Help & Support
 
 - 📖 [Full Documentation](./TELEGRAM-MODULE.md)
-- 🐛 [GitHub Issues](https://github.com/Aborii/nestjs-telegram/issues)
+- 🐛 [GitHub Issues](https://github.com/Aborii/telenest/issues)
 - 💬 Check existing docs in the [docs/](../docs/) folder
 
 ---

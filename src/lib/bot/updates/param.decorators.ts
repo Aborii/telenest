@@ -23,6 +23,9 @@
  * - CallbackPayload: inject a decoded callback-action payload (or `undefined`).
  * - InlineQueryText: inject an inline query's text (or `undefined`).
  * - InlineQueryOffset: inject an inline query's offset (or `undefined`).
+ * - PreCheckoutData: inject a pre-checkout query (or `undefined`).
+ * - ShippingData: inject a shipping query (or `undefined`).
+ * - SuccessfulPaymentData: inject a successful-payment payload (or `undefined`).
  */
 
 import 'reflect-metadata';
@@ -165,4 +168,45 @@ export function InlineQueryText(): ParameterDecorator {
 export function InlineQueryOffset(): ParameterDecorator {
   return (target, propertyKey, index) =>
     appendParam(target, propertyKey, index, PARAM_KINDS.INLINE_QUERY_OFFSET);
+}
+
+/**
+ * Injects the pre-checkout query (`ctx.preCheckoutQuery`) — the user, currency,
+ * total amount, and `invoice_payload` to validate before charging — or
+ * `undefined` when the update is not a pre-checkout query. Pair with
+ * `@PreCheckoutQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function PreCheckoutData(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.PRE_CHECKOUT_QUERY);
+}
+
+/**
+ * Injects the shipping query (`ctx.shippingQuery`) — the user, `invoice_payload`,
+ * and the requested `shipping_address` — or `undefined` when the update is not a
+ * shipping query. Pair with `@ShippingQuery()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function ShippingData(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.SHIPPING_QUERY);
+}
+
+/**
+ * Injects the successful-payment payload (`ctx.message.successful_payment`) —
+ * currency, total, `invoice_payload`, and the charge ids used for fulfilment and
+ * refunds — or `undefined` when the message carries none. Never log the charge
+ * ids. Pair with `@SuccessfulPayment()`.
+ *
+ * @returns A parameter decorator.
+ * @throws Never.
+ */
+export function SuccessfulPaymentData(): ParameterDecorator {
+  return (target, propertyKey, index) =>
+    appendParam(target, propertyKey, index, PARAM_KINDS.SUCCESSFUL_PAYMENT);
 }

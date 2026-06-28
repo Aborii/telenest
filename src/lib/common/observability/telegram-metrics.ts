@@ -18,7 +18,7 @@
  * -----
  * ```ts
  * import { Inject } from '@nestjs/common';
- * import { TELEGRAM_BOT_METRICS, type TelegramMetrics } from 'nestjs-telegram';
+ * import { TELEGRAM_BOT_METRICS, type TelegramMetrics } from 'telenest';
  *
  * constructor(@Inject(TELEGRAM_BOT_METRICS) private readonly metrics: TelegramMetrics) {}
  *

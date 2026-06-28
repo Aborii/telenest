@@ -1,6 +1,6 @@
 # Bot API Scenes & Wizards
 
-First-class, decorator-based **scenes** and **wizards** for `nestjs-telegram` —
+First-class, decorator-based **scenes** and **wizards** for `telenest` —
 declarative multi-step conversational flows (onboarding, forms, surveys, guided
 menus) **without** `nestjs-telegraf` and without hand-rolling a Telegraf `Stage`
 against the raw instance. You declare a scene as an ordinary NestJS provider; a
@@ -103,7 +103,7 @@ import {
   Command, Ctx, Scene, SceneEnter, SceneLeave,
   TelegramBotModule, TelegramUpdate,
   WizardScene, WizardStep, MessageText,
-} from 'nestjs-telegram';
+} from 'telenest';
 import { Scenes } from 'telegraf';
 
 type FlowContext = Scenes.WizardContext;

@@ -23,7 +23,10 @@ import {
   InlineQueryOffset,
   InlineQueryText,
   MessageText,
+  PreCheckoutData,
   Sender,
+  ShippingData,
+  SuccessfulPaymentData,
 } from './param.decorators';
 import { TelegramBotUpdatesRegistrar } from './telegram-bot-updates.registrar';
 import {
@@ -35,7 +38,10 @@ import {
   Help,
   InlineQuery,
   On,
+  PreCheckoutQuery,
+  ShippingQuery,
   Start,
+  SuccessfulPayment,
   TelegramUpdate,
   Use,
 } from './telegram-update.decorator';
@@ -182,6 +188,41 @@ class InlineUpdate {
   }
 }
 
+/** Provider exercising the payment update decorators and their param injection. */
+@TelegramUpdate()
+@Injectable()
+class PaymentUpdate {
+  /** Ordered record of which payment handlers fired. */
+  public readonly events: string[] = [];
+  /** Last invoice payload injected from each payment update. */
+  public lastPayload: string | undefined;
+
+  @PreCheckoutQuery()
+  public onPreCheckout(
+    @PreCheckoutData() query: { invoice_payload: string } | undefined,
+  ): void {
+    this.events.push('pre_checkout');
+    this.lastPayload = query?.invoice_payload;
+  }
+
+  @ShippingQuery()
+  public onShipping(
+    @ShippingData() query: { invoice_payload: string } | undefined,
+  ): void {
+    this.events.push('shipping');
+    this.lastPayload = query?.invoice_payload;
+  }
+
+  @SuccessfulPayment()
+  public onPaid(
+    @SuccessfulPaymentData()
+    payment: { invoice_payload: string } | undefined,
+  ): void {
+    this.events.push('paid');
+    this.lastPayload = payment?.invoice_payload;
+  }
+}
+
 /** Payload shape carried by the `buy` callback action. */
 interface BuyPayload {
   /** The product id the user chose to buy. */
@@ -268,6 +309,9 @@ function fakeContext(partial: {
   from?: { id: number };
   callbackQuery?: { data: string };
   inlineQuery?: { query: string; offset: string };
+  preCheckoutQuery?: { invoice_payload: string };
+  shippingQuery?: { invoice_payload: string };
+  message?: { successful_payment?: { invoice_payload: string } };
 }): Context {
   return partial as unknown as Context;
 }
@@ -495,6 +539,53 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       // The handler never ran (validation threw during argument resolution).
       expect(update.events).toEqual([]);
       expect(errorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('payments', () => {
+    it('binds pre-checkout/shipping via on(string) and successful-payment via a filter', async () => {
+      const { regs } = await bootstrap([PaymentUpdate]);
+      const onTriggers = regs
+        .filter((r) => r.method === 'on')
+        .map((r) => r.trigger);
+
+      // ── Top-level update types bind via on('<type>'). ─────────────────────────
+      expect(onTriggers).toContain('pre_checkout_query');
+      expect(onTriggers).toContain('shipping_query');
+      // ── successful_payment is a message subtype → a message() filter function. ─
+      expect(onTriggers.some((t) => typeof t === 'function')).toBe(true);
+    });
+
+    it('dispatches each payment update with its injected payload', async () => {
+      const { regs, get } = await bootstrap([PaymentUpdate]);
+      const update = get(PaymentUpdate);
+      const next = jest.fn().mockResolvedValue(undefined);
+
+      const find = (trigger: unknown): Registration =>
+        regs.find((r) => r.method === 'on' && r.trigger === trigger) as Registration;
+      const successful = regs.find(
+        (r) => r.method === 'on' && typeof r.trigger === 'function',
+      ) as Registration;
+
+      await find('pre_checkout_query').middleware(
+        fakeContext({ preCheckoutQuery: { invoice_payload: 'sku-pre' } }),
+        next,
+      );
+      expect(update.events).toEqual(['pre_checkout']);
+      expect(update.lastPayload).toBe('sku-pre');
+
+      await find('shipping_query').middleware(
+        fakeContext({ shippingQuery: { invoice_payload: 'sku-ship' } }),
+        next,
+      );
+      expect(update.lastPayload).toBe('sku-ship');
+
+      await successful.middleware(
+        fakeContext({ message: { successful_payment: { invoice_payload: 'sku-paid' } } }),
+        next,
+      );
+      expect(update.events).toEqual(['pre_checkout', 'shipping', 'paid']);
+      expect(update.lastPayload).toBe('sku-paid');
     });
   });
 });

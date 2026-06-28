@@ -45,7 +45,7 @@ approach instead when you need full control over the raw request handling.
 ```ts
 // app.module.ts
 import { Module } from '@nestjs/common';
-import { TelegramBotModule } from 'nestjs-telegram';
+import { TelegramBotModule } from 'telenest';
 
 @Module({
   imports: [
@@ -128,7 +128,7 @@ The `webhook` object on `TelegramBotModule.forRoot` / `forRootAsync`:
 > exported `generateWebhookSecret()` helper:
 >
 > ```ts
-> import { generateWebhookSecret } from 'nestjs-telegram';
+> import { generateWebhookSecret } from 'telenest';
 > webhook: { path: '/telegram/webhook', secretToken: generateWebhookSecret() }
 > ```
 

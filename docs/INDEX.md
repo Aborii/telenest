@@ -1,6 +1,6 @@
 # Documentation Index
 
-Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
+Complete guide to `telenest` — Navigate to the documentation you need.
 
 ---
 
@@ -50,6 +50,12 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
   - Inline mode (`@botname query`)
   - `@InlineQuery` / `@ChosenInlineResult`
   - `InlineQueryResultBuilder` + `answerInlineQuery`
+
+- **[PAYMENTS.md](./PAYMENTS.md)**
+  - Telegram Payments checkout flow
+  - `sendInvoice` / `createInvoiceLink` / `answerShippingQuery` / `answerPreCheckoutQuery`
+  - `@PreCheckoutQuery` / `@ShippingQuery` / `@SuccessfulPayment` (+ data decorators)
+  - Telegram Stars (XTR)
 
 - **[BOT-GUARDS-FILTERS-INTERCEPTORS.md](./BOT-GUARDS-FILTERS-INTERCEPTORS.md)**
   - Guards, interceptors, exception filters
@@ -188,7 +194,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 
 1. Guide: [TESTING.md](./TESTING.md)
 2. Examples: [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)
-3. Patterns: [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies)
+3. Patterns: [TESTING.md § Do's and don'ts](./TESTING.md#4-dos-and-donts)
 
 ### I want to deploy to production
 
@@ -207,7 +213,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Bot module setup      | [BOT-API.md § Registering the module](./BOT-API.md#2-registering-the-module)                                           |
 | Client module setup   | [USER-CLIENT-MTPROTO.md § Configuring](./USER-CLIENT-MTPROTO.md#3-configuring-telegramclientmodule)                    |
 | Environment variables | [GETTING-STARTED.md § Environment](./GETTING-STARTED.md#common-patterns)                                               |
-| Async configuration   | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasync-options-telegrambotmoduleasyncoptions-dynamicmodule) |
+| Async configuration   | [API-REFERENCE.md § forRootAsync](./API-REFERENCE.md#forrootasyncoptions-telegrambotmoduleasyncoptions-dynamicmodule) |
 
 ### Messaging
 
@@ -229,6 +235,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Multiple named bots         | [MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)                                              |
 | Callback queries            | [EXAMPLES.md § Inline Keyboards](./EXAMPLES.md#inline-keyboards--callback-handling) |
 | Incoming messages (User)    | [EXAMPLES.md § Listen to Messages](./EXAMPLES.md#listen-to-incoming-messages)       |
+| Payments / invoices         | [PAYMENTS.md](./PAYMENTS.md)                                                        |
 | Multiple user accounts      | [MULTIPLE-ACCOUNTS.md](./MULTIPLE-ACCOUNTS.md)                                      |
 
 ### Authentication
@@ -236,7 +243,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | Topic              | Document                                                                                  |
 | ------------------ | ----------------------------------------------------------------------------------------- |
 | Bot token          | [GETTING-STARTED.md § Get Token](./GETTING-STARTED.md#1-get-your-bot-token)               |
-| MTProto login      | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#4-authentication-flow)                     |
+| MTProto login      | [AUTHENTICATION.md § Flow](./AUTHENTICATION.md#the-login-state-machine)                    |
 | Session management | [USER-CLIENT-MTPROTO.md § Sessions](./USER-CLIENT-MTPROTO.md#5-sessions-and-sessionstore) |
 | 2FA                | [AUTHENTICATION.md](./AUTHENTICATION.md)                                                  |
 
@@ -254,7 +261,7 @@ Complete guide to `nestjs-telegram` — Navigate to the documentation you need.
 | ------------- | ------------------------------------------------------------------------- |
 | Unit tests    | [TESTING.md § Unit Testing](./TESTING.md#2-testing-your-application-code) |
 | Mocking       | [EXAMPLES.md § Testing](./EXAMPLES.md#testing-examples)                   |
-| Test patterns | [ADVANCED-USAGE.md § Testing](./ADVANCED-USAGE.md#testing-strategies)     |
+| Test patterns | [TESTING.md § Do's and don'ts](./TESTING.md#4-dos-and-donts)              |
 
 ### Advanced
 
@@ -307,23 +314,23 @@ The library uses subpath exports to load only what you need:
 
 | Import Path              | Includes            | Use When                        |
 | ------------------------ | ------------------- | ------------------------------- |
-| `nestjs-telegram`        | Both Bot + Client   | Using both APIs                 |
-| `nestjs-telegram/bot`    | Bot API only        | Bot-only app (no GramJS)        |
-| `nestjs-telegram/client` | MTProto only        | User account only (no Telegraf) |
-| `nestjs-telegram/common` | Shared types/errors | Type imports only               |
-| `nestjs-telegram/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
+| `telenest`        | Both Bot + Client   | Using both APIs                 |
+| `telenest/bot`    | Bot API only        | Bot-only app (no GramJS)        |
+| `telenest/client` | MTProto only        | User account only (no Telegraf) |
+| `telenest/common` | Shared types/errors | Type imports only               |
+| `telenest/testing`| Test mocks + builders | Unit-testing the library (no SDK) |
 
 **Example:**
 
 ```typescript
 // Load only Bot API
-import { TelegramBotModule, TelegramBotService } from "nestjs-telegram/bot";
+import { TelegramBotModule, TelegramBotService } from "telenest/bot";
 
 // Load only MTProto
-import { TelegramClientModule, TelegramUserService } from "nestjs-telegram/client";
+import { TelegramClientModule, TelegramUserService } from "telenest/client";
 
 // Load both
-import { TelegramModule } from "nestjs-telegram";
+import { TelegramModule } from "telenest";
 ```
 
 ---
@@ -352,7 +359,7 @@ import { TelegramModule } from "nestjs-telegram";
 
 - 📖 Full docs in [docs/](../docs/) folder
 - 💻 Example code in [examples/](../examples/) folder
-- 🐛 [GitHub Issues](https://github.com/Aborii/nestjs-telegram/issues)
+- 🐛 [GitHub Issues](https://github.com/Aborii/telenest/issues)
 - 📝 [README.md](../README.md) for overview
 
 ---
@@ -362,7 +369,7 @@ import { TelegramModule } from "nestjs-telegram";
 Visual guide to documentation structure:
 
 ```
-nestjs-telegram/
+telenest/
 ├── README.md                     ← Start here: Overview
 └── docs/
     ├── INDEX.md                  ← You are here
@@ -423,4 +430,4 @@ nestjs-telegram/
 
 **Happy coding!** 🎉
 
-If you find these docs helpful, consider ⭐ starring the [repository](https://github.com/Aborii/nestjs-telegram)!
+If you find these docs helpful, consider ⭐ starring the [repository](https://github.com/Aborii/telenest)!

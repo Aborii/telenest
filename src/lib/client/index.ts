@@ -7,7 +7,7 @@
  *
  * USAGE
  * -----
- * import { TelegramClientModule, TelegramAuthService } from 'nestjs-telegram';
+ * import { TelegramClientModule, TelegramAuthService } from 'telenest';
  */
 
 export * from './gram-client.interface';

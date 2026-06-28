@@ -2,7 +2,7 @@
 
 This guide covers two distinct audiences:
 
-1. **The library's own test strategy** — how `nestjs-telegram` is tested internally, so contributors know the conventions.
+1. **The library's own test strategy** — how `telenest` is tested internally, so contributors know the conventions.
 2. **How _you_ (a consumer) test your application code** that depends on this library — without ever touching the Telegram network.
 
 The whole library is designed around testability: the Bot API side hides the raw [Telegraf](https://telegraf.js.org) instance behind an injection token and a typed facade, and the MTProto (user-account) side hides [GramJS](https://gram.js.org) behind a single narrow interface, `IGramClient`. Both seams let you swap in fakes with a one-liner.
@@ -96,11 +96,11 @@ Use these existing specs as templates when writing tests:
 
 ## 2. Testing _your_ application code
 
-You import `nestjs-telegram` from your own NestJS app and inject its services. The goal of your tests is the same as the library's: **never hit the network**. Pick the right seam for the side you depend on.
+You import `telenest` from your own NestJS app and inject its services. The goal of your tests is the same as the library's: **never hit the network**. Pick the right seam for the side you depend on.
 
-### Ready-made utilities (`nestjs-telegram/testing`)
+### Ready-made utilities (`telenest/testing`)
 
-Rather than hand-rolling fakes, import them from the dedicated **`nestjs-telegram/testing`** subpath. These promote the very seams the library uses in its own specs into a supported, fully-typed DX feature:
+Rather than hand-rolling fakes, import them from the dedicated **`telenest/testing`** subpath. These promote the very seams the library uses in its own specs into a supported, fully-typed DX feature:
 
 | Export | What it gives you |
 | ------ | ----------------- |
@@ -116,12 +116,12 @@ Rather than hand-rolling fakes, import them from the dedicated **`nestjs-telegra
 ```ts
 // digest.service.spec.ts
 import { Test } from '@nestjs/testing';
-import { TelegramUserService } from 'nestjs-telegram';
+import { TelegramUserService } from 'telenest';
 import {
   aGramDialog,
   createMockGramClient,
   provideMockGramClient,
-} from 'nestjs-telegram/testing';
+} from 'telenest/testing';
 import { DigestService } from './digest.service';
 
 describe('DigestService', () => {
@@ -158,7 +158,7 @@ For an imported central module you can't easily reach, the provider's value also
 #### Bot API: a spyable context in one call
 
 ```ts
-import { createMockBotContext } from 'nestjs-telegram/testing';
+import { createMockBotContext } from 'telenest/testing';
 
 it('greets on /start', async () => {
   const ctx = createMockBotContext({ text: '/start' });
@@ -186,7 +186,7 @@ Suppose this is the code under test:
 ```ts
 // notifications.service.ts
 import { Injectable } from '@nestjs/common';
-import { TelegramBotService } from 'nestjs-telegram';
+import { TelegramBotService } from 'telenest';
 
 @Injectable()
 export class NotificationsService {
@@ -203,7 +203,7 @@ A complete, network-free test:
 ```ts
 // notifications.service.spec.ts
 import { Test } from '@nestjs/testing';
-import { TelegramBotService } from 'nestjs-telegram';
+import { TelegramBotService } from 'telenest';
 import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService', () => {
@@ -243,7 +243,7 @@ Use this when your code reaches past the facade to the raw Telegraf instance (`@
 // bot-wiring.spec.ts
 import { Test } from '@nestjs/testing';
 import { Telegraf } from 'telegraf';
-import { TELEGRAM_BOT, TelegramBotModule, TelegramBotService } from 'nestjs-telegram';
+import { TELEGRAM_BOT, TelegramBotModule, TelegramBotService } from 'telenest';
 
 describe('bot wiring with a mock Telegraf', () => {
   it('routes facade calls through the injected Telegraf', async () => {
@@ -289,7 +289,7 @@ The user-account services — `TelegramAuthService` and `TelegramUserService` �
 
 #### A complete fake `IGramClient`
 
-> Prefer the built-in `createMockGramClient` from `nestjs-telegram/testing` (see [Ready-made utilities](#ready-made-utilities-nestjs-telegramtesting) above) — it _is_ this factory, maintained in lockstep with the interface. The hand-rolled version below is kept for understanding, or if you want zero reliance on the testing subpath.
+> Prefer the built-in `createMockGramClient` from `telenest/testing` (see [Ready-made utilities](#ready-made-utilities-telenesttesting) above) — it _is_ this factory, maintained in lockstep with the interface. The hand-rolled version below is kept for understanding, or if you want zero reliance on the testing subpath.
 
 `IGramClient` has fourteen methods. Here is a complete, typed, in-memory fake you can reuse across tests. It mirrors the factory pattern used in the library's own specs ([`telegram-user.service.spec.ts`](../src/lib/client/telegram-user.service.spec.ts)):
 
@@ -299,7 +299,7 @@ import type {
   IGramClient,
   GramUser,
   GramMessage,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 /** A representative authenticated account. */
 export const FAKE_USER: GramUser = {
@@ -364,7 +364,7 @@ Suppose this is your code:
 ```ts
 // digest.service.ts
 import { Injectable } from '@nestjs/common';
-import { TelegramUserService } from 'nestjs-telegram';
+import { TelegramUserService } from 'telenest';
 
 @Injectable()
 export class DigestService {
@@ -384,7 +384,7 @@ A complete test that wires the **real** `TelegramClientModule` but a **fake** cl
 ```ts
 // digest.service.spec.ts
 import { Test } from '@nestjs/testing';
-import { TelegramClientModule, TelegramUserService } from 'nestjs-telegram';
+import { TelegramClientModule, TelegramUserService } from 'telenest';
 import { createFakeGramClient } from './test-support/fake-gram-client';
 import { DigestService } from './digest.service';
 
@@ -434,7 +434,7 @@ import {
   TELEGRAM_GRAM_CLIENT,
   TelegramAuthService,
   TelegramClientModule,
-} from 'nestjs-telegram';
+} from 'telenest';
 import { createFakeGramClient } from './test-support/fake-gram-client';
 
 describe('account sign-in flow (override token)', () => {
@@ -527,7 +527,7 @@ import {
   TelegramBotApiError,
   TelegramAuthError,
   isTelegramError,
-} from 'nestjs-telegram';
+} from 'telenest';
 
 it('wraps a Bot API failure', async () => {
   telegram.sendMessage.mockRejectedValue({ code: 429, message: 'Too Many' });

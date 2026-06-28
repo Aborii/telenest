@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# PURPOSE
+#   Static application security testing (SAST) for telenest via GitHub CodeQL.
+#   Scans the TypeScript/JavaScript sources for security vulnerabilities and
+#   common quality anti-patterns, surfacing findings in the repository's
+#   Security ▸ Code scanning tab. Complements the secret-scanning and
+#   Dependabot features enabled at the repository level.
+#
+# USAGE
+#   Runs automatically (see `on:` below) on pushes/PRs to the integration and
+#   release branches, and on a weekly schedule so newly-published CodeQL
+#   queries catch issues even when the code is untouched. No local step.
+#
+# PERMISSIONS
+#   Needs `security-events: write` to upload the analysis SARIF; everything
+#   else is read-only. These are scoped per-job, not granted to any PAT.
+# ---------------------------------------------------------------------------
+name: CodeQL
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  schedule:
+    # Weekly re-scan (Mondays 06:00 UTC) so new query packs are applied even
+    # without a code change. Cron is in UTC.
+    - cron: '0 6 * * 1'
+
+# Cancel superseded runs on the same ref so only the latest commit is scanned.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # Least-privilege: only the scopes CodeQL needs to read code and publish findings.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Single combined analysis covers both TS and JS sources in this repo.
+        language: ['javascript-typescript']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Initialize CodeQL with the security-extended query suite ──────────
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Broader coverage than the default suite (more security queries).
+          queries: security-extended
+
+      # ── Run the analysis and upload results to the Security tab ───────────
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'

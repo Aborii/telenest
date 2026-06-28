@@ -6,12 +6,12 @@
   "author": "Abdullah Almofleh <118676821+Aborii@users.noreply.github.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aborii/nestjs-telegram.git"
+    "url": "git+https://github.com/Aborii/telenest.git"
   },
   "bugs": {
-    "url": "https://github.com/Aborii/nestjs-telegram/issues"
+    "url": "https://github.com/Aborii/telenest/issues"
   },
-  "homepage": "https://github.com/Aborii/nestjs-telegram#readme",
+  "homepage": "https://github.com/Aborii/telenest#readme",
   "engines": {
     "node": ">=20"
   },

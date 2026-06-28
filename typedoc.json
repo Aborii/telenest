@@ -1,0 +1,23 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts",
+    "src/lib/bot/index.ts",
+    "src/lib/client/index.ts",
+    "src/lib/common/index.ts",
+    "src/lib/testing/index.ts"
+  ],
+  "tsconfig": "tsconfig.build.json",
+  "out": "docs/api",
+  "name": "telenest API Reference",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "githubPages": true,
+  "validation": {
+    "invalidLink": true,
+    "notExported": true,
+    "notDocumented": false
+  }
+}

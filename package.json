@@ -1,6 +1,6 @@
 {
   "name": "telenest",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Fully-typed NestJS module for Telegram: the Bot API (via Telegraf) and the MTProto user-account client (via GramJS). Send/receive as a bot, or sign in with your own account and control it from your app.",
   "license": "MIT",
   "author": "Abdullah Almofleh <118676821+Aborii@users.noreply.github.com>",
@@ -88,6 +88,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
+    "docs:api": "typedoc",
     "git:release": "node scripts/release.mts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run clean"
@@ -147,6 +148,7 @@
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "typedoc": "^0.28.19",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.62.0"
   }

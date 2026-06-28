@@ -108,6 +108,12 @@ Complete guide to `telenest` — Navigate to the documentation you need.
   - Injection tokens
   - Error types
 
+- **[TYPEDOC-API-DOCS.md](./TYPEDOC-API-DOCS.md)** ⚙️
+  - Auto-generated API reference (TypeDoc)
+  - `npm run docs:api` → `docs/api/`
+  - Configuration & how to extend
+  - Mirrors the public subpath exports
+
 - **[EXAMPLES.md](./EXAMPLES.md)** 💡
   - Practical recipes
   - Common use cases

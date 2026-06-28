@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# PURPOSE
+#   Dependabot configuration for telenest. Keeps dependencies patched by
+#   opening grouped version-update PRs, complementing the repository-level
+#   Dependabot *security* alerts/updates (which only fire on known CVEs).
+#
+# USAGE
+#   Read automatically by GitHub Dependabot. PRs target `dev` (the integration
+#   branch) per the project's branching model — never `main`.
+#
+# NOTE
+#   `telegraf` and `telegram` (GramJS) are optional peer dependencies; updates
+#   to them still surface here so the example/dev manifests stay current.
+# ---------------------------------------------------------------------------
+version: 2
+
+updates:
+  # ── npm dependencies ──────────────────────────────────────────────────────
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    # Feature/fix work integrates through `dev`, so version-update PRs do too.
+    target-branch: 'dev'
+    open-pull-requests-limit: 10
+    labels:
+      - 'area:infra'
+    commit-message:
+      prefix: 'chore(deps)'
+      prefix-development: 'chore(deps-dev)'
+    # Batch related updates into fewer PRs to cut review noise.
+    groups:
+      production-dependencies:
+        dependency-type: 'production'
+      development-dependencies:
+        dependency-type: 'development'
+
+  # ── GitHub Actions used by the CI/CodeQL workflows ────────────────────────
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    target-branch: 'dev'
+    labels:
+      - 'area:infra'
+    commit-message:
+      prefix: 'chore(ci)'

@@ -108,6 +108,12 @@
   "optionalDependencies": {
     "big-integer": "^1.6.52"
   },
+  "overrides": {
+    "js-yaml": "^4.2.0",
+    "@babel/core": "^7.29.7",
+    "form-data": "^4.0.6",
+    "multer": "^2.2.0"
+  },
   "devDependencies": {
     "@clack/prompts": "^1.6.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",

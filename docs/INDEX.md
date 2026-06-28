@@ -359,7 +359,7 @@ import { TelegramModule } from "telenest";
 
 - 📖 Full docs in [docs/](../docs/) folder
 - 💻 Example code in [examples/](../examples/) folder
-- 🐛 [GitHub Issues](https://github.com/Aborii/nestjs-telegram/issues)
+- 🐛 [GitHub Issues](https://github.com/Aborii/telenest/issues)
 - 📝 [README.md](../README.md) for overview
 
 ---
@@ -430,4 +430,4 @@ telenest/
 
 **Happy coding!** 🎉
 
-If you find these docs helpful, consider ⭐ starring the [repository](https://github.com/Aborii/nestjs-telegram)!
+If you find these docs helpful, consider ⭐ starring the [repository](https://github.com/Aborii/telenest)!

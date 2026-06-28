@@ -429,7 +429,7 @@ try {
 ## Help & Support
 
 - 📖 [Full Documentation](./TELEGRAM-MODULE.md)
-- 🐛 [GitHub Issues](https://github.com/Aborii/nestjs-telegram/issues)
+- 🐛 [GitHub Issues](https://github.com/Aborii/telenest/issues)
 - 💬 Check existing docs in the [docs/](../docs/) folder
 
 ---

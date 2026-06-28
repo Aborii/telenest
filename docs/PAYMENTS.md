@@ -260,7 +260,7 @@ await bot.sendInvoice(chatId, {
 Stars invoices never raise a `shipping_query`; the `pre_checkout` →
 `successful_payment` steps are unchanged. The Stars **refund/transaction** APIs
 (`refundStarPayment`, `getStarTransactions`) and **paid media** are tracked
-separately in [#87](https://github.com/Aborii/nestjs-telegram/issues/87) — they
+separately in [#87](https://github.com/Aborii/telenest/issues/87) — they
 require Bot API methods not present in the pinned Telegraf version.
 
 ---
@@ -301,6 +301,6 @@ the library reads no payment-specific env vars itself.
 - **Multiple bots** — scope the provider with `@TelegramUpdate({ bot: 'shop' })`
   (see [MULTIPLE-BOTS.md](./MULTIPLE-BOTS.md)).
 - **Stars refunds / paid media** — follow
-  [#87](https://github.com/Aborii/nestjs-telegram/issues/87).
+  [#87](https://github.com/Aborii/telenest/issues/87).
 - **Testing** — drive the handlers with `createMockBotContext` and assert the
   `answer*` calls; see [TESTING.md](./TESTING.md).

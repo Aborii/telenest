@@ -304,7 +304,11 @@ describe('TelegramBotUpdatesRegistrar enhancers (integration)', () => {
   });
 
   it('does NOT continue the chain when a guard denies a @Use middleware', async () => {
-    const { regs, get } = await bootstrap([UseDenyUpdate, DenyGuard, AllowGuard]);
+    const { regs, get } = await bootstrap([
+      UseDenyUpdate,
+      DenyGuard,
+      AllowGuard,
+    ]);
     const update = get(UseDenyUpdate);
     const proceed = jest.fn().mockResolvedValue(undefined);
 

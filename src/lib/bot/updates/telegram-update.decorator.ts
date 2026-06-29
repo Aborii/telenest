@@ -70,14 +70,12 @@ function appendBinding(
   // ── Metadata is attached to the method function itself, which is the same
   //    reference the registrar later reads off the resolved instance. ────────
   const method = (target as Record<string | symbol, unknown>)[propertyKey] as
-    | object
-    | undefined;
+    object | undefined;
   if (!method) return;
 
   const existing =
     (Reflect.getMetadata(UPDATE_BINDINGS_METADATA, method) as
-      | UpdateBinding[]
-      | undefined) ?? [];
+      UpdateBinding[] | undefined) ?? [];
   Reflect.defineMetadata(
     UPDATE_BINDINGS_METADATA,
     [...existing, binding],

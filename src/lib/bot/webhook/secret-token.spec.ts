@@ -54,7 +54,7 @@ describe('generateWebhookSecret', () => {
     expect(generateWebhookSecret(16)).toHaveLength(32);
   });
 
-  it('stays within Telegram\'s allowed secret_token charset and length', () => {
+  it("stays within Telegram's allowed secret_token charset and length", () => {
     expect(generateWebhookSecret(128)).toMatch(/^[A-Za-z0-9_-]{1,256}$/);
   });
 

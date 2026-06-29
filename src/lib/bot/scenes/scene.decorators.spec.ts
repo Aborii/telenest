@@ -31,8 +31,7 @@ import {
 /** Reads the class-level scene definition recorded by `@Scene`/`@WizardScene`. */
 function readDefinition(target: object): SceneDefinition | undefined {
   return Reflect.getMetadata(SCENE_DEFINITION_METADATA, target) as
-    | SceneDefinition
-    | undefined;
+    SceneDefinition | undefined;
 }
 
 /** Reads the scene-method bindings recorded on a method by its decorators. */
@@ -42,8 +41,7 @@ function readBindings(
 ): SceneMethodBinding[] | undefined {
   const fn = (proto as Record<string, unknown>)[method] as object;
   return Reflect.getMetadata(SCENE_METHOD_BINDINGS_METADATA, fn) as
-    | SceneMethodBinding[]
-    | undefined;
+    SceneMethodBinding[] | undefined;
 }
 
 describe('scene class decorators', () => {

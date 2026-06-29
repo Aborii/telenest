@@ -438,13 +438,17 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       expect(patterned?.trigger).toBe('weather');
 
       // ── The bare @InlineQuery() falls back to on('inline_query', …). ─────────
-      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      const onTriggers = regs
+        .filter((r) => r.method === 'on')
+        .map((r) => r.trigger);
       expect(onTriggers).toContain('inline_query');
     });
 
     it('binds @ChosenInlineResult via on(chosen_inline_result)', async () => {
       const { regs } = await bootstrap([InlineUpdate]);
-      const onTriggers = regs.filter((r) => r.method === 'on').map((r) => r.trigger);
+      const onTriggers = regs
+        .filter((r) => r.method === 'on')
+        .map((r) => r.trigger);
       expect(onTriggers).toContain('chosen_inline_result');
     });
 
@@ -496,7 +500,9 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       const actions = regs.filter((r) => r.method === 'action');
       const next = jest.fn().mockResolvedValue(undefined);
 
-      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":9}}' } });
+      const ctx = fakeContext({
+        callbackQuery: { data: '{"a":"buy","d":{"id":9}}' },
+      });
       const buy = actions.find(
         (a) => fireTrigger(a, '{"a":"buy","d":{"id":9}}') !== null,
       );
@@ -528,7 +534,9 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       const next = jest.fn().mockResolvedValue(undefined);
 
       // ── A 'buy' envelope whose payload fails the schema (id is not a number). ─
-      const ctx = fakeContext({ callbackQuery: { data: '{"a":"buy","d":{"id":"x"}}' } });
+      const ctx = fakeContext({
+        callbackQuery: { data: '{"a":"buy","d":{"id":"x"}}' },
+      });
       const buy = actions.find(
         (a) => fireTrigger(a, '{"a":"buy","d":{"id":"x"}}') !== null,
       );
@@ -562,7 +570,9 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       const next = jest.fn().mockResolvedValue(undefined);
 
       const find = (trigger: unknown): Registration =>
-        regs.find((r) => r.method === 'on' && r.trigger === trigger) as Registration;
+        regs.find(
+          (r) => r.method === 'on' && r.trigger === trigger,
+        ) as Registration;
       const successful = regs.find(
         (r) => r.method === 'on' && typeof r.trigger === 'function',
       ) as Registration;
@@ -581,7 +591,9 @@ describe('TelegramBotUpdatesRegistrar (integration)', () => {
       expect(update.lastPayload).toBe('sku-ship');
 
       await successful.middleware(
-        fakeContext({ message: { successful_payment: { invoice_payload: 'sku-paid' } } }),
+        fakeContext({
+          message: { successful_payment: { invoice_payload: 'sku-paid' } },
+        }),
         next,
       );
       expect(update.events).toEqual(['pre_checkout', 'shipping', 'paid']);

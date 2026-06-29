@@ -13,7 +13,9 @@ import {
 import { matchesChatActionFilter } from './match-chat-action';
 
 /** Builds a chat-action event with overridable fields. */
-function act(overrides: Partial<GramChatActionEvent> = {}): GramChatActionEvent {
+function act(
+  overrides: Partial<GramChatActionEvent> = {},
+): GramChatActionEvent {
   return {
     peerId: '555',
     userId: '555',
@@ -29,12 +31,12 @@ describe('matchesChatActionFilter', () => {
 
   describe('chatId', () => {
     it('matches a single id and rejects others', () => {
-      expect(matchesChatActionFilter(act({ peerId: '555' }), { chatId: 555 })).toBe(
-        true,
-      );
-      expect(matchesChatActionFilter(act({ peerId: '777' }), { chatId: 555 })).toBe(
-        false,
-      );
+      expect(
+        matchesChatActionFilter(act({ peerId: '555' }), { chatId: 555 }),
+      ).toBe(true);
+      expect(
+        matchesChatActionFilter(act({ peerId: '777' }), { chatId: 555 }),
+      ).toBe(false);
     });
   });
 

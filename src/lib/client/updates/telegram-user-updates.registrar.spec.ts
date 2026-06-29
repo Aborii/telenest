@@ -264,7 +264,11 @@ describe('TelegramUserUpdatesRegistrar (integration)', () => {
     // ── Deleted: unfiltered, always delivered. ───────────────────────────────
     emitDeleted({ messageIds: [9, 10], peerId: '555' });
     // ── Chat action: the typing filter passes typing, drops online. ──────────
-    emitChatAction({ peerId: '7', userId: '7', action: GRAM_CHAT_ACTIONS.TYPING });
+    emitChatAction({
+      peerId: '7',
+      userId: '7',
+      action: GRAM_CHAT_ACTIONS.TYPING,
+    });
     emitChatAction({
       peerId: '7',
       userId: '7',

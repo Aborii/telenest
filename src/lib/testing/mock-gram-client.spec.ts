@@ -120,7 +120,8 @@ describe('createMockGramClient', () => {
     ).resolves.toEqual(Buffer.from('TEST_RANGE'));
 
     const chunks: Buffer[] = [];
-    for await (const chunk of await client.streamMedia('me', 1)) chunks.push(chunk);
+    for await (const chunk of await client.streamMedia('me', 1))
+      chunks.push(chunk);
     expect(Buffer.concat(chunks)).toEqual(Buffer.from('TEST_MEDIA'));
   });
 

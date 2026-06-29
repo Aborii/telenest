@@ -209,7 +209,11 @@ export class TelegramClientError extends TelegramError {
    */
   public constructor(
     message: string,
-    options?: { operation?: string; retryAfterSeconds?: number; cause?: unknown },
+    options?: {
+      operation?: string;
+      retryAfterSeconds?: number;
+      cause?: unknown;
+    },
   ) {
     super(message, options?.cause);
     this.operation = options?.operation;

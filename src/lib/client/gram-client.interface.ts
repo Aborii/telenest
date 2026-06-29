@@ -216,10 +216,7 @@ export interface IGramClient {
    *   downloadable media (or no longer exists).
    * @throws {import('../common').TelegramClientError} On failure.
    */
-  downloadMedia(
-    peer: GramPeer,
-    messageId: number,
-  ): Promise<Buffer | undefined>;
+  downloadMedia(peer: GramPeer, messageId: number): Promise<Buffer | undefined>;
 
   /**
    * Downloads a peer's current profile photo into a {@link Buffer}.
@@ -453,9 +450,7 @@ export interface IGramClient {
    * @throws Never (registration is synchronous; transport errors surface
    *   elsewhere).
    */
-  onDeletedMessages(
-    handler: (event: GramDeletedMessages) => void,
-  ): () => void;
+  onDeletedMessages(handler: (event: GramDeletedMessages) => void): () => void;
 
   /**
    * Subscribes to chat-action events (typing, recording, online/offline, …) for

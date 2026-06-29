@@ -37,8 +37,7 @@ describe('TelegramUserService metrics', () => {
     const metrics = new InMemoryTelegramMetrics();
     // ── Capture the handler registered with onNewMessage so we can deliver to it. ─
     let handler:
-      | ((message: ReturnType<typeof aGramMessage>) => void)
-      | undefined;
+      ((message: ReturnType<typeof aGramMessage>) => void) | undefined;
     const client = createMockGramClient({
       onNewMessage: jest.fn(
         (cb: (message: ReturnType<typeof aGramMessage>) => void) => {

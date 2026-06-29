@@ -281,9 +281,7 @@ function collectWizardSteps(
     seen.set(entry.step, entry.label);
   }
 
-  return [...entries]
-    .sort((a, b) => a.step - b.step)
-    .map((entry) => entry.run);
+  return [...entries].sort((a, b) => a.step - b.step).map((entry) => entry.run);
 }
 
 /**
@@ -325,7 +323,9 @@ function assertNoWizardSteps(
  * stage.register(scene);
  * ```
  */
-export function buildScene(spec: SceneSpec): Scenes.BaseScene<SceneFlowContext> {
+export function buildScene(
+  spec: SceneSpec,
+): Scenes.BaseScene<SceneFlowContext> {
   const { definition, methods } = spec;
 
   if (definition.kind === SCENE_KINDS.WIZARD) {

@@ -54,19 +54,25 @@ describe('extractClientRetryAfterSeconds', () => {
   });
 
   it('ignores negative / non-finite delays', () => {
-    expect(extractClientRetryAfterSeconds(floodClientError(-1))).toBeUndefined();
+    expect(
+      extractClientRetryAfterSeconds(floodClientError(-1)),
+    ).toBeUndefined();
     expect(
       extractClientRetryAfterSeconds(floodClientError(Number.NaN)),
     ).toBeUndefined();
     expect(
-      extractClientRetryAfterSeconds(floodClientError(Number.POSITIVE_INFINITY)),
+      extractClientRetryAfterSeconds(
+        floodClientError(Number.POSITIVE_INFINITY),
+      ),
     ).toBeUndefined();
   });
 });
 
 describe('withClientRetry', () => {
   /** A sleep spy that records requested delays without waiting. */
-  function fakeSleep(): jest.Mock<Promise<void>, [number]> & { calls: number[] } {
+  function fakeSleep(): jest.Mock<Promise<void>, [number]> & {
+    calls: number[];
+  } {
     const calls: number[] = [];
     const fn = jest.fn(async (ms: number) => {
       calls.push(ms);
@@ -149,7 +155,11 @@ describe('withClientRetry', () => {
       }),
     ).rejects.toBeInstanceOf(TelegramClientError);
     expect(seen).toHaveLength(2);
-    expect(seen[0]).toMatchObject({ attempt: 1, willRetry: true, delayMs: 1000 });
+    expect(seen[0]).toMatchObject({
+      attempt: 1,
+      willRetry: true,
+      delayMs: 1000,
+    });
     expect(seen[1]).toMatchObject({ attempt: 2, willRetry: false, delayMs: 0 });
   });
 

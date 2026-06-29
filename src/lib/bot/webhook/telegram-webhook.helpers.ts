@@ -48,7 +48,10 @@ export function normalizeWebhookPath(path: string): string {
   // ── Split on '/' and drop empty segments. This collapses duplicate slashes
   //    and trims leading/trailing ones in a single linear pass — no
   //    backtracking regex (avoids the `\/+$` polynomial-ReDoS shape). ─────────
-  const segments = path.trim().split('/').filter((segment) => segment !== '');
+  const segments = path
+    .trim()
+    .split('/')
+    .filter((segment) => segment !== '');
   return segments.length === 0 ? '/' : `/${segments.join('/')}`;
 }
 
@@ -102,10 +105,7 @@ export function joinWebhookUrl(domain: string, path: string): string {
 export function assertValidWebhookOptions(
   options: TelegramBotWebhookOptions,
 ): void {
-  if (
-    typeof options.path !== 'string' ||
-    options.path.trim().length === 0
-  )
+  if (typeof options.path !== 'string' || options.path.trim().length === 0)
     throw new TelegramConfigError(
       'TelegramBotModule webhook requires a non-empty "path".',
     );
@@ -119,7 +119,10 @@ export function assertValidWebhookOptions(
 
   // ── Fail closed: a route with no secret is unauthenticated. Require either a
   //    valid secretToken or an explicit allowInsecure opt-in. ─────────────────
-  if (typeof options.secretToken === 'string' && options.secretToken.length > 0) {
+  if (
+    typeof options.secretToken === 'string' &&
+    options.secretToken.length > 0
+  ) {
     if (!WEBHOOK_SECRET_PATTERN.test(options.secretToken))
       throw new TelegramConfigError(
         'TelegramBotModule webhook "secretToken" must be 1-256 characters of ' +

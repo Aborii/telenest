@@ -39,8 +39,9 @@ import type { Telegram } from 'telegraf';
  * One element of the Bot API `answerInlineQuery` `results` array, derived from
  * Telegraf's own method signature so it tracks the installed version.
  */
-export type InlineQueryResult =
-  Parameters<Telegram['answerInlineQuery']>[1][number];
+export type InlineQueryResult = Parameters<
+  Telegram['answerInlineQuery']
+>[1][number];
 
 /** The `article` result variant (its `input_message_content` is mandatory). */
 type ArticleResult = Extract<InlineQueryResult, { type: 'article' }>;
@@ -73,15 +74,27 @@ type ResultOptions<R extends InlineQueryResult> = Omit<R, 'type' | 'id'> & {
 };
 
 /** Convenience aliases selecting each concrete result variant from the union. */
-type PhotoResult = Extract<InlineQueryResult, { type: 'photo'; photo_url: string }>;
+type PhotoResult = Extract<
+  InlineQueryResult,
+  { type: 'photo'; photo_url: string }
+>;
 type GifResult = Extract<InlineQueryResult, { type: 'gif'; gif_url: string }>;
 type Mpeg4GifResult = Extract<
   InlineQueryResult,
   { type: 'mpeg4_gif'; mpeg4_url: string }
 >;
-type VideoResult = Extract<InlineQueryResult, { type: 'video'; video_url: string }>;
-type AudioResult = Extract<InlineQueryResult, { type: 'audio'; audio_url: string }>;
-type VoiceResult = Extract<InlineQueryResult, { type: 'voice'; voice_url: string }>;
+type VideoResult = Extract<
+  InlineQueryResult,
+  { type: 'video'; video_url: string }
+>;
+type AudioResult = Extract<
+  InlineQueryResult,
+  { type: 'audio'; audio_url: string }
+>;
+type VoiceResult = Extract<
+  InlineQueryResult,
+  { type: 'voice'; voice_url: string }
+>;
 type DocumentResult = Extract<
   InlineQueryResult,
   { type: 'document'; document_url: string }

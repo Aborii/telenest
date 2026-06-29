@@ -86,7 +86,6 @@ describe('dispatchToHandler', () => {
   it('stringifies a non-Error thrown value', async () => {
     await dispatchToHandler(
       target(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- testing non-Error rejection
         throw 'plain string';
       }),
       ctx,
@@ -158,7 +157,6 @@ describe('dispatchToHandler', () => {
 
     await dispatchToHandler(
       target(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- testing non-Error rejection
         throw 42;
       }, enhancers),
       ctx,

@@ -154,9 +154,12 @@ export function createOpenTelemetryMetrics(
   //    they read idiomatically and match the Prometheus exporter's series. ──────
   const counters = {} as Record<TelegramCounter, OtelCounterLike>;
   for (const counter of TELEGRAM_COUNTER_VALUES)
-    counters[counter] = meter.createCounter(`${prefix}${toSnakeCase(counter)}`, {
-      description: TELEGRAM_COUNTER_DESCRIPTIONS[counter],
-    });
+    counters[counter] = meter.createCounter(
+      `${prefix}${toSnakeCase(counter)}`,
+      {
+        description: TELEGRAM_COUNTER_DESCRIPTIONS[counter],
+      },
+    );
 
   return {
     increment(counter: TelegramCounter, by = 1): void {

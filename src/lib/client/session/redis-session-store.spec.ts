@@ -83,7 +83,9 @@ describe('RedisSessionStore', () => {
 
     it('wraps save failures in TelegramSessionError', async () => {
       const store = new RedisSessionStore(new FakeRedis(true));
-      await expect(store.save('x')).rejects.toBeInstanceOf(TelegramSessionError);
+      await expect(store.save('x')).rejects.toBeInstanceOf(
+        TelegramSessionError,
+      );
     });
 
     it('wraps clear failures in TelegramSessionError', async () => {

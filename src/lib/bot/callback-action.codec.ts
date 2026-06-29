@@ -135,7 +135,10 @@ export function encodeCallbackAction<P>(key: string, payload?: P): string {
   const envelope: CallbackActionEnvelope<P> =
     payload === undefined
       ? { [CALLBACK_ACTION_KEY_FIELD]: key }
-      : { [CALLBACK_ACTION_KEY_FIELD]: key, [CALLBACK_ACTION_DATA_FIELD]: payload };
+      : {
+          [CALLBACK_ACTION_KEY_FIELD]: key,
+          [CALLBACK_ACTION_DATA_FIELD]: payload,
+        };
 
   return encodeCallbackData(envelope);
 }
@@ -166,7 +169,9 @@ export function encodeCallbackAction<P>(key: string, payload?: P): string {
  * decodeCallbackAction('legacy:42');                // null
  * ```
  */
-export function decodeCallbackAction(data: string): DecodedCallbackAction | null {
+export function decodeCallbackAction(
+  data: string,
+): DecodedCallbackAction | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(data);

@@ -159,7 +159,9 @@ describe('TelegramClientModule', () => {
       const fake = createFakeClient();
       (fake.sendMessage as jest.Mock).mockResolvedValue({ id: 1 });
       const increments: string[] = [];
-      const custom = { increment: (counter: string) => increments.push(counter) };
+      const custom = {
+        increment: (counter: string) => increments.push(counter),
+      };
 
       const moduleRef = await Test.createTestingModule({
         imports: [

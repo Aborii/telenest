@@ -11,8 +11,8 @@
 import { Logger } from '@nestjs/common';
 import type { Telegraf } from 'telegraf';
 
-import { TelegramWebhookRegistrar } from './telegram-webhook.registrar';
 import type { TelegramBotWebhookOptions } from './telegram-webhook.options';
+import { TelegramWebhookRegistrar } from './telegram-webhook.registrar';
 
 /** A fake Telegraf exposing only the `telegram.setWebhook` method under test. */
 interface FakeBot {
@@ -21,7 +21,9 @@ interface FakeBot {
 }
 
 /** Builds a fake Telegraf whose `setWebhook` resolves (or rejects) on demand. */
-function createFakeBot(setWebhook = jest.fn().mockResolvedValue(true)): FakeBot {
+function createFakeBot(
+  setWebhook = jest.fn().mockResolvedValue(true),
+): FakeBot {
   const bot = { telegram: { setWebhook } } as unknown as Telegraf;
   return { bot, setWebhook };
 }
@@ -39,10 +41,9 @@ describe('TelegramWebhookRegistrar', () => {
     await new TelegramWebhookRegistrar(bot, options).onApplicationBootstrap();
 
     expect(setWebhook).toHaveBeenCalledTimes(1);
-    expect(setWebhook).toHaveBeenCalledWith(
-      'https://bot.example.com/tg/hook',
-      { secret_token: 's3cr3t' },
-    );
+    expect(setWebhook).toHaveBeenCalledWith('https://bot.example.com/tg/hook', {
+      secret_token: 's3cr3t',
+    });
   });
 
   it('does not call setWebhook when registerOnBootstrap is falsy', async () => {

@@ -60,9 +60,7 @@ describe('FileSessionStore', () => {
   it('writes to a unique temp file per save so concurrent saves do not collide', async () => {
     // ── Mock the fs ops so the temp paths are captured deterministically,
     //    without real concurrent I/O (which races and makes the assert flaky). ─
-    const writeFile = jest
-      .spyOn(fs, 'writeFile')
-      .mockResolvedValue(undefined);
+    const writeFile = jest.spyOn(fs, 'writeFile').mockResolvedValue(undefined);
     jest.spyOn(fs, 'chmod').mockResolvedValue(undefined);
     jest.spyOn(fs, 'rename').mockResolvedValue(undefined);
     try {

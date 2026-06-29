@@ -16,7 +16,7 @@
  * by invoking the fake's captured `onNewMessage` callback.
  */
 
-import { type DynamicModule, Injectable, type Provider } from '@nestjs/common';
+import { Injectable, type DynamicModule, type Provider } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import type { IGramClient } from './gram-client.interface';

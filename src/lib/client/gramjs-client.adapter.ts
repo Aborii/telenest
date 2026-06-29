@@ -22,20 +22,14 @@
 import { Api, errors, password, sessions, TelegramClient } from 'telegram';
 import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events';
 import {
-  EditedMessage,
-  type EditedMessageEvent,
-} from 'telegram/events/EditedMessage';
-import {
   DeletedMessage,
   type DeletedMessageEvent,
 } from 'telegram/events/DeletedMessage';
+import {
+  EditedMessage,
+  type EditedMessageEvent,
+} from 'telegram/events/EditedMessage';
 import type { Dialog } from 'telegram/tl/custom/dialog';
-
-// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
-//    so the import-equals form is required. GramJS' download offset is a
-//    big-integer `BigInteger`, not a native `bigint`. ────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above.
-import bigInt = require('big-integer');
 
 import {
   TelegramAuthError,
@@ -77,6 +71,12 @@ import {
   type GramUser,
 } from './gram-client.types';
 import type { TelegramClientModuleOptions } from './telegram-client.options';
+
+// ── big-integer uses `export =` (CommonJS); the project omits esModuleInterop,
+//    so the import-equals form is required. GramJS' download offset is a
+//    big-integer `BigInteger`, not a native `bigint`. ────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see note above.
+import bigInt = require('big-integer');
 
 /**
  * Per-request download size for streaming, in bytes. Must be a multiple of
@@ -314,9 +314,7 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /** {@inheritDoc IGramClient.updateTwoFactor} */
-  public async updateTwoFactor(
-    input: GramUpdateTwoFactorInput,
-  ): Promise<void> {
+  public async updateTwoFactor(input: GramUpdateTwoFactorInput): Promise<void> {
     try {
       await this.client.updateTwoFaSettings({
         currentPassword: input.currentPassword,
@@ -1179,16 +1177,12 @@ export class GramJsClientAdapter implements IGramClient {
    * @returns The normalized deletion DTO.
    * @throws Never.
    */
-  private mapDeletedMessages(
-    event: DeletedMessageEvent,
-  ): GramDeletedMessages {
+  private mapDeletedMessages(event: DeletedMessageEvent): GramDeletedMessages {
     const peer = event.peer;
     return {
       messageIds: event.deletedIds,
       peerId:
-        peer instanceof Api.PeerChannel
-          ? peer.channelId.toString()
-          : undefined,
+        peer instanceof Api.PeerChannel ? peer.channelId.toString() : undefined,
     };
   }
 

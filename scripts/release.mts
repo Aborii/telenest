@@ -46,7 +46,6 @@
  * `.mts` keeps it ESM while still being type-checked. Run directly with `node`
  * (Node >= 23.6 strips the TypeScript types natively — no `tsx`/build step).
  */
-
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -143,8 +142,8 @@ function bump(version: string, kind: BumpKind): string {
     number,
     number,
   ];
-  if (kind === 'major') (major += 1), (minor = 0), (patch = 0);
-  else if (kind === 'minor') (minor += 1), (patch = 0);
+  if (kind === 'major') ((major += 1), (minor = 0), (patch = 0));
+  else if (kind === 'minor') ((minor += 1), (patch = 0));
   else patch += 1;
   return `${major}.${minor}.${patch}`;
 }

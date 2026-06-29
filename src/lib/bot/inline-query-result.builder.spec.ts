@@ -77,7 +77,12 @@ describe('InlineQueryResultBuilder', () => {
       .photo({ photo_url: 'p', thumbnail_url: 't' })
       .gif({ gif_url: 'g', thumbnail_url: 't' })
       .mpeg4Gif({ mpeg4_url: 'm', thumbnail_url: 't' })
-      .video({ video_url: 'v', mime_type: 'video/mp4', thumbnail_url: 't', title: 'V' })
+      .video({
+        video_url: 'v',
+        mime_type: 'video/mp4',
+        thumbnail_url: 't',
+        title: 'V',
+      })
       .audio({ audio_url: 'a', title: 'A' })
       .voice({ voice_url: 'vo', title: 'Vo' })
       .document({ document_url: 'd', mime_type: 'application/pdf', title: 'D' })
@@ -164,7 +169,9 @@ describe('InlineQueryResultBuilder', () => {
 
   describe('static text()', () => {
     it('builds a plain text message content', () => {
-      expect(InlineQueryResultBuilder.text('hi')).toEqual({ message_text: 'hi' });
+      expect(InlineQueryResultBuilder.text('hi')).toEqual({
+        message_text: 'hi',
+      });
     });
 
     it('merges extra fields like parse_mode', () => {

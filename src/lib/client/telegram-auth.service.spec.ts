@@ -324,7 +324,9 @@ describe('TelegramAuthService', () => {
       expect(user).toEqual(FAKE_USER);
       expect(store.save).toHaveBeenCalledWith('SESSION-STRING');
 
-      const logged = logSpy.mock.calls.map((args) => String(args[0])).join('\n');
+      const logged = logSpy.mock.calls
+        .map((args) => String(args[0]))
+        .join('\n');
       expect(logged).not.toContain('SECRET-TOKEN');
 
       logSpy.mockRestore();

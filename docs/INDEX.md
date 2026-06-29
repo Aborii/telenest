@@ -69,6 +69,12 @@ Complete guide to `telenest` — Navigate to the documentation you need.
   - `@TelegramUpdate({ bot })` handler scoping
   - Per-bot isolation & lifecycle
 
+- **[RUNTIME-BOT.md](./RUNTIME-BOT.md)**
+  - Token supplied/rotated/cleared **after** boot (not at `forRoot`)
+  - `TelegramBotModule.forRootRuntime` + `TelegramBotRuntime` manager
+  - Boot-safe & `409`-aware: bad token → status, never a crash
+  - Handlers/guards/scenes re-bind on every rebuild
+
 - **[WEBHOOK-CONTROLLER.md](./WEBHOOK-CONTROLLER.md)**
   - Built-in `POST {path}` webhook controller
   - Constant-time secret-token verification

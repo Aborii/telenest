@@ -10,11 +10,11 @@
  */
 
 import { TelegramSessionError } from '../../common';
-import { DEFAULT_KEY_VALUE_SESSION_KEY } from './key-value-session-store';
 import { EncryptedSessionStore } from './encrypted-session-store';
+import { DEFAULT_KEY_VALUE_SESSION_KEY } from './key-value-session-store';
 import {
-  OrmSessionStore,
   ormRepositoryToKeyValueStore,
+  OrmSessionStore,
   type OrmSessionRepository,
   type OrmSessionRow,
 } from './orm-session-store';
@@ -96,7 +96,10 @@ describe('OrmSessionStore', () => {
 
   it('isolates accounts that share a repository via distinct keys', async () => {
     const repo = new FakeOrmRepository();
-    const personal = new OrmSessionStore(repo, 'nestjs-telegram:session:personal');
+    const personal = new OrmSessionStore(
+      repo,
+      'nestjs-telegram:session:personal',
+    );
     const ops = new OrmSessionStore(repo, 'nestjs-telegram:session:ops');
 
     await personal.save('personal-session');
@@ -131,7 +134,9 @@ describe('OrmSessionStore', () => {
 
     it('wraps save failures in TelegramSessionError', async () => {
       const store = new OrmSessionStore(new FakeOrmRepository(true));
-      await expect(store.save('x')).rejects.toBeInstanceOf(TelegramSessionError);
+      await expect(store.save('x')).rejects.toBeInstanceOf(
+        TelegramSessionError,
+      );
     });
 
     it('wraps clear failures in TelegramSessionError', async () => {

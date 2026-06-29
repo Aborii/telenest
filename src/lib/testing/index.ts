@@ -27,9 +27,11 @@
  * -----------
  * - createMockGramClient / provideMockGramClient: MTProto client test seam.
  * - createMockBotContext: Bot API context test seam.
+ * - createMockTelegraf: runtime-bot (`forRootRuntime`) `botFactory` test seam.
  * - aGramUser / aGramMessage / aGramDialog: DTO fixture builders.
  */
 
 export * from './dto-builders';
 export * from './mock-bot-context';
 export * from './mock-gram-client';
+export * from './mock-telegraf';

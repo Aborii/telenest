@@ -55,8 +55,7 @@ export type TelegramGuardRef = TelegramGuard | Type<TelegramGuard>;
 
 /** Either a ready interceptor instance or an interceptor class to resolve via DI. */
 export type TelegramInterceptorRef =
-  | TelegramInterceptor
-  | Type<TelegramInterceptor>;
+  TelegramInterceptor | Type<TelegramInterceptor>;
 
 /** Either a ready filter instance or a filter class to resolve via DI. */
 export type TelegramFilterRef = TelegramFilter | Type<TelegramFilter>;

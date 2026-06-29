@@ -9,10 +9,7 @@
  * no network is touched.
  */
 
-import {
-  InMemoryTelegramMetrics,
-  TELEGRAM_COUNTERS,
-} from './telegram-metrics';
+import { InMemoryTelegramMetrics, TELEGRAM_COUNTERS } from './telegram-metrics';
 import {
   createOpenTelemetryMetrics,
   TELEGRAM_COUNTER_DESCRIPTIONS,

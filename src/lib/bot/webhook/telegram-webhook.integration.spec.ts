@@ -15,10 +15,10 @@
  * `setWebhook` never call Telegram.
  */
 
-import type { INestApplication, InjectionToken } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { INestApplication, InjectionToken } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import type { Telegraf } from 'telegraf';
 
 import { TELEGRAM_BOT } from '../telegram-bot.constants';

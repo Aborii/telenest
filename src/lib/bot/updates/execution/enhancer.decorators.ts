@@ -65,8 +65,7 @@ function appendEnhancers<TRef>(
     propertyKey === undefined
       ? target
       : ((target as Record<string | symbol, unknown>)[propertyKey] as
-          | object
-          | undefined);
+          object | undefined);
   if (!metadataTarget) return;
 
   const existing =

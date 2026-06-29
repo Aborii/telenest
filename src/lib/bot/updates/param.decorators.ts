@@ -58,14 +58,12 @@ function appendParam(
   if (propertyKey === undefined) return;
 
   const method = (target as Record<string | symbol, unknown>)[propertyKey] as
-    | object
-    | undefined;
+    object | undefined;
   if (!method) return;
 
   const existing =
     (Reflect.getMetadata(UPDATE_PARAMS_METADATA, method) as
-      | ParamMetadata[]
-      | undefined) ?? [];
+      ParamMetadata[] | undefined) ?? [];
   Reflect.defineMetadata(
     UPDATE_PARAMS_METADATA,
     [...existing, { index, kind }],

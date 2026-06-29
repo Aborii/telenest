@@ -340,11 +340,9 @@ export class TelegramUserUpdatesRegistrar
     kind: string,
     label: string,
   ): void {
-    const subscription = stream
-      .pipe(rxFilter(matches))
-      .subscribe((event) => {
-        void this.invoke(instance, handler as AnyHandler, [event], kind, label);
-      });
+    const subscription = stream.pipe(rxFilter(matches)).subscribe((event) => {
+      void this.invoke(instance, handler as AnyHandler, [event], kind, label);
+    });
 
     this._subscriptions.push(subscription);
     this.logRegistered(kind, label);

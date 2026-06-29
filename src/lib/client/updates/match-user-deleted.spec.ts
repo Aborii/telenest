@@ -10,7 +10,9 @@ import type { GramDeletedMessages } from '../gram-client.types';
 import { matchesUserDeletedFilter } from './match-user-deleted';
 
 /** Builds a deletion event with overridable fields. */
-function del(overrides: Partial<GramDeletedMessages> = {}): GramDeletedMessages {
+function del(
+  overrides: Partial<GramDeletedMessages> = {},
+): GramDeletedMessages {
   return { messageIds: [1, 2], peerId: '555', ...overrides };
 }
 
@@ -22,12 +24,12 @@ describe('matchesUserDeletedFilter', () => {
 
   describe('chatId', () => {
     it('matches a single id', () => {
-      expect(matchesUserDeletedFilter(del({ peerId: '555' }), { chatId: 555 })).toBe(
-        true,
-      );
-      expect(matchesUserDeletedFilter(del({ peerId: '777' }), { chatId: 555 })).toBe(
-        false,
-      );
+      expect(
+        matchesUserDeletedFilter(del({ peerId: '555' }), { chatId: 555 }),
+      ).toBe(true);
+      expect(
+        matchesUserDeletedFilter(del({ peerId: '777' }), { chatId: 555 }),
+      ).toBe(false);
     });
 
     it('matches any id in an array', () => {

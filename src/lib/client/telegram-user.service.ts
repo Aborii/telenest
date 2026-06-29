@@ -41,11 +41,6 @@ import {
   type TelegramMetricsRecorder,
 } from '../common';
 import type { IGramClient } from './gram-client.interface';
-import {
-  withClientRetry,
-  type WithClientRetryOptions,
-} from './retry';
-import type { TelegramClientRetryDefaults } from './telegram-client.options';
 import type {
   GramChatActionEvent,
   GramChatInfo,
@@ -66,10 +61,12 @@ import type {
   GramStreamMediaOptions,
   GramUser,
 } from './gram-client.types';
+import { withClientRetry, type WithClientRetryOptions } from './retry';
 import {
   TELEGRAM_CLIENT_METRICS,
   TELEGRAM_GRAM_CLIENT,
 } from './telegram-client.constants';
+import type { TelegramClientRetryDefaults } from './telegram-client.options';
 
 /**
  * Facade for acting as the logged-in account over MTProto.

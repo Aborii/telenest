@@ -49,9 +49,14 @@ describe('TelegramUserService.withRetry', () => {
   it('applies the module-level retry defaults', async () => {
     const metrics = new InMemoryTelegramMetrics();
     // retries: 1 => initial attempt + 1 retry = 2 calls, 2 flood-waits observed.
-    const service = new TelegramUserService(createMockGramClient(), metrics, 0, {
-      retries: 1,
-    });
+    const service = new TelegramUserService(
+      createMockGramClient(),
+      metrics,
+      0,
+      {
+        retries: 1,
+      },
+    );
 
     const op = jest.fn(async () => {
       throw floodError(1);
@@ -66,9 +71,14 @@ describe('TelegramUserService.withRetry', () => {
 
   it('lets per-call options override the module defaults', async () => {
     const metrics = new InMemoryTelegramMetrics();
-    const service = new TelegramUserService(createMockGramClient(), metrics, 0, {
-      retries: 5,
-    });
+    const service = new TelegramUserService(
+      createMockGramClient(),
+      metrics,
+      0,
+      {
+        retries: 5,
+      },
+    );
 
     const op = jest.fn(async () => {
       throw floodError(1);
@@ -108,7 +118,10 @@ describe('TelegramUserService.withRetry', () => {
         if (calls === 1) throw floodError(4);
         return 'done';
       },
-      { sleep: noWait, onFloodWait: (info) => seen.push(info.retryAfterSeconds) },
+      {
+        sleep: noWait,
+        onFloodWait: (info) => seen.push(info.retryAfterSeconds),
+      },
     );
 
     expect(seen).toEqual([4]);

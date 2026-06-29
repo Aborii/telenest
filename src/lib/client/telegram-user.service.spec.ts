@@ -238,7 +238,11 @@ describe('TelegramUserService', () => {
 
     it('forwardMessages forwards destination, source and ids', async () => {
       const client = createFakeClient();
-      await new TelegramUserService(client).forwardMessages('@to', '@from', [9]);
+      await new TelegramUserService(client).forwardMessages(
+        '@to',
+        '@from',
+        [9],
+      );
       expect(client.forwardMessages).toHaveBeenCalledWith('@to', '@from', [9]);
     });
 
@@ -298,11 +302,24 @@ describe('TelegramUserService', () => {
       });
       const service = new TelegramUserService(client);
 
-      const completed = { updates: false, edited: false, deleted: false, actions: false };
-      service.updates$.subscribe({ complete: () => (completed.updates = true) });
-      service.editedMessages$.subscribe({ complete: () => (completed.edited = true) });
-      service.deletedMessages$.subscribe({ complete: () => (completed.deleted = true) });
-      service.chatActions$.subscribe({ complete: () => (completed.actions = true) });
+      const completed = {
+        updates: false,
+        edited: false,
+        deleted: false,
+        actions: false,
+      };
+      service.updates$.subscribe({
+        complete: () => (completed.updates = true),
+      });
+      service.editedMessages$.subscribe({
+        complete: () => (completed.edited = true),
+      });
+      service.deletedMessages$.subscribe({
+        complete: () => (completed.deleted = true),
+      });
+      service.chatActions$.subscribe({
+        complete: () => (completed.actions = true),
+      });
 
       service.onModuleInit();
       service.onModuleDestroy();

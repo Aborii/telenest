@@ -143,9 +143,7 @@ describe('buildScene — binding wiring', () => {
   });
 
   it('maps every message binding kind onto the matching Composer method', async () => {
-    const command = jest
-      .spyOn(Composer.prototype, 'command')
-      .mockReturnThis();
+    const command = jest.spyOn(Composer.prototype, 'command').mockReturnThis();
     const hears = jest.spyOn(Composer.prototype, 'hears').mockReturnThis();
     const action = jest.spyOn(Composer.prototype, 'action').mockReturnThis();
     const on = jest.spyOn(Composer.prototype, 'on').mockReturnThis();

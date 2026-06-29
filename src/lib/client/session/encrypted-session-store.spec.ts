@@ -18,9 +18,9 @@ const SECRET = 'test-secret-please-ignore-0123456789';
 
 describe('EncryptedSessionStore', () => {
   it('rejects an empty secret', () => {
-    expect(() => new EncryptedSessionStore(new InMemorySessionStore(), '')).toThrow(
-      TelegramSessionError,
-    );
+    expect(
+      () => new EncryptedSessionStore(new InMemorySessionStore(), ''),
+    ).toThrow(TelegramSessionError);
   });
 
   it('rejects a too-short secret (< 16 bytes)', () => {
@@ -92,7 +92,10 @@ describe('EncryptedSessionStore', () => {
     it('fails on a wrong key', async () => {
       const inner = new InMemorySessionStore();
       await new EncryptedSessionStore(inner, SECRET).save('secret-session');
-      const wrong = new EncryptedSessionStore(inner, 'a-completely-different-key');
+      const wrong = new EncryptedSessionStore(
+        inner,
+        'a-completely-different-key',
+      );
       await expect(wrong.load()).rejects.toBeInstanceOf(TelegramSessionError);
     });
 
@@ -129,7 +132,9 @@ describe('EncryptedSessionStore', () => {
         clear: () => undefined,
       };
       const store = new EncryptedSessionStore(failing, SECRET);
-      await expect(store.save('x')).rejects.toBeInstanceOf(TelegramSessionError);
+      await expect(store.save('x')).rejects.toBeInstanceOf(
+        TelegramSessionError,
+      );
     });
   });
 });

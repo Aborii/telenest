@@ -1221,7 +1221,9 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         getMessages: jest
           .fn()
-          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+          .mockResolvedValue([
+            aRawMessage({ media: new Api.MessageMediaPhoto({}) }),
+          ]),
       });
       const [message] = await createAdapter(mock).getMessages('me');
       expect(message?.hasMedia).toBe(true);
@@ -1231,7 +1233,9 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         getMessages: jest
           .fn()
-          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaEmpty() })]),
+          .mockResolvedValue([
+            aRawMessage({ media: new Api.MessageMediaEmpty() }),
+          ]),
       });
       const [message] = await createAdapter(mock).getMessages('me');
       expect(message?.hasMedia).toBe(false);
@@ -1268,7 +1272,10 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         sendFile: jest.fn().mockResolvedValue(aRawMessage()),
       });
-      await createAdapter(mock).sendFile('me', { file: 'a.bin', asPhoto: false });
+      await createAdapter(mock).sendFile('me', {
+        file: 'a.bin',
+        asPhoto: false,
+      });
       expect(mock.sendFile.mock.calls[0]?.[1]).toMatchObject({
         forceDocument: true,
       });
@@ -1287,7 +1294,9 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         getMessages: jest
           .fn()
-          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+          .mockResolvedValue([
+            aRawMessage({ media: new Api.MessageMediaPhoto({}) }),
+          ]),
         downloadMedia: jest.fn().mockResolvedValue(buffer),
       });
       await expect(createAdapter(mock).downloadMedia('me', 1)).resolves.toBe(
@@ -1320,7 +1329,9 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         getMessages: jest
           .fn()
-          .mockResolvedValue([aRawMessage({ media: new Api.MessageMediaPhoto({}) })]),
+          .mockResolvedValue([
+            aRawMessage({ media: new Api.MessageMediaPhoto({}) }),
+          ]),
         downloadMedia: jest.fn().mockResolvedValue('/tmp/path'),
       });
       await expect(
@@ -1397,17 +1408,25 @@ describe('GramJsClientAdapter', () => {
 
     it('getParticipants maps users and forwards limit/search', async () => {
       const mock = createMockClient({
-        getParticipants: jest.fn().mockResolvedValue([
-          { id: bigInt('1'), self: false, firstName: 'A' },
-          new Api.UserEmpty({ id: bigInt('2') }),
-        ]),
+        getParticipants: jest
+          .fn()
+          .mockResolvedValue([
+            { id: bigInt('1'), self: false, firstName: 'A' },
+            new Api.UserEmpty({ id: bigInt('2') }),
+          ]),
       });
       const users = await createAdapter(mock).getParticipants('@g', {
         limit: 5,
         search: 'a',
       });
       expect(users).toEqual([
-        { id: '1', isSelf: false, isBot: false, isPremium: false, firstName: 'A' },
+        {
+          id: '1',
+          isSelf: false,
+          isBot: false,
+          isPremium: false,
+          firstName: 'A',
+        },
         { id: '2', isSelf: false, isBot: false, isPremium: false },
       ]);
       expect(mock.getParticipants).toHaveBeenCalledWith('@g', {
@@ -1442,7 +1461,9 @@ describe('GramJsClientAdapter', () => {
       });
       const mock = createMockClient({
         getEntity: jest.fn().mockResolvedValue(user),
-        invoke: jest.fn().mockResolvedValue({ fullUser: { about: 'hi there' } }),
+        invoke: jest
+          .fn()
+          .mockResolvedValue({ fullUser: { about: 'hi there' } }),
       });
       await expect(createAdapter(mock).getFullChat('@ada')).resolves.toEqual({
         id: '5',
@@ -1492,7 +1513,10 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         getEntity: jest.fn().mockResolvedValue(supergroup),
         invoke: jest.fn().mockResolvedValue({
-          fullChat: asEntity(Api.ChannelFull, { about: '', participantsCount: 5 }),
+          fullChat: asEntity(Api.ChannelFull, {
+            about: '',
+            participantsCount: 5,
+          }),
         }),
       });
       const info = await createAdapter(mock).getFullChat('@devs');
@@ -1600,7 +1624,10 @@ describe('GramJsClientAdapter', () => {
       const mock = createMockClient({
         forwardMessages: jest
           .fn()
-          .mockResolvedValue([aRawMessage({ id: 21 }), aRawMessage({ id: 22 })]),
+          .mockResolvedValue([
+            aRawMessage({ id: 21 }),
+            aRawMessage({ id: 22 }),
+          ]),
       });
       const forwarded = await createAdapter(mock).forwardMessages(
         '@to',
@@ -1647,7 +1674,9 @@ describe('GramJsClientAdapter', () => {
       expect(mock.pinMessage).toHaveBeenCalledWith('me', 7, { notify: false });
 
       await adapter.pinMessage('me', 8, { notify: true });
-      expect(mock.pinMessage).toHaveBeenLastCalledWith('me', 8, { notify: true });
+      expect(mock.pinMessage).toHaveBeenLastCalledWith('me', 8, {
+        notify: true,
+      });
     });
 
     it.each([
@@ -1669,17 +1698,20 @@ describe('GramJsClientAdapter', () => {
       [
         'searchMessages',
         'getMessages',
-        (a: GramJsClientAdapter): Promise<unknown> => a.searchMessages('@x', 'q'),
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.searchMessages('@x', 'q'),
       ],
       [
         'editMessage',
         'editMessage',
-        (a: GramJsClientAdapter): Promise<unknown> => a.editMessage('me', 1, 't'),
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.editMessage('me', 1, 't'),
       ],
       [
         'deleteMessages',
         'deleteMessages',
-        (a: GramJsClientAdapter): Promise<unknown> => a.deleteMessages('me', [1]),
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.deleteMessages('me', [1]),
       ],
       [
         'forwardMessages',
@@ -1726,18 +1758,18 @@ describe('GramJsClientAdapter', () => {
           getMessages: jest.fn().mockResolvedValue([aRawMessage({ media })]),
         });
 
-        await expect(createAdapter(mock).getMediaInfo('me', 1)).resolves.toEqual(
-          {
-            kind: 'video',
-            mimeType: 'video/mp4',
-            size: 1_048_576,
-            fileName: 'clip.mp4',
-            durationSeconds: 12,
-            width: 1280,
-            height: 720,
-            supportsStreaming: true,
-          },
-        );
+        await expect(
+          createAdapter(mock).getMediaInfo('me', 1),
+        ).resolves.toEqual({
+          kind: 'video',
+          mimeType: 'video/mp4',
+          size: 1_048_576,
+          fileName: 'clip.mp4',
+          durationSeconds: 12,
+          width: 1280,
+          height: 720,
+          supportsStreaming: true,
+        });
       });
 
       it('classifies a voice note vs. music by the audio attribute', async () => {
@@ -1750,12 +1782,16 @@ describe('GramJsClientAdapter', () => {
 
         const voiceInfo = await createAdapter(
           createMockClient({
-            getMessages: jest.fn().mockResolvedValue([aRawMessage({ media: voice })]),
+            getMessages: jest
+              .fn()
+              .mockResolvedValue([aRawMessage({ media: voice })]),
           }),
         ).getMediaInfo('me', 1);
         const musicInfo = await createAdapter(
           createMockClient({
-            getMessages: jest.fn().mockResolvedValue([aRawMessage({ media: music })]),
+            getMessages: jest
+              .fn()
+              .mockResolvedValue([aRawMessage({ media: music })]),
           }),
         ).getMediaInfo('me', 1);
 
@@ -1784,7 +1820,9 @@ describe('GramJsClientAdapter', () => {
               aRawMessage({ media: asEntity(Api.MessageMediaPhoto, {}) }),
             ]),
         });
-        await expect(createAdapter(mock).getMediaInfo('me', 1)).resolves.toEqual({
+        await expect(
+          createAdapter(mock).getMediaInfo('me', 1),
+        ).resolves.toEqual({
           kind: 'photo',
           mimeType: 'image/jpeg',
         });
@@ -1833,7 +1871,10 @@ describe('GramJsClientAdapter', () => {
             .mockImplementation(() => asyncChunks(Buffer.from('0123456789'))),
         });
         await expect(
-          createAdapter(mock).downloadMediaRange('me', 1, { offset: 2, limit: 3 }),
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: 2,
+            limit: 3,
+          }),
         ).resolves.toEqual(Buffer.from('234'));
       });
 
@@ -1907,7 +1948,10 @@ describe('GramJsClientAdapter', () => {
             .mockImplementation(() => asyncChunks(Buffer.from('ab'))),
         });
         await expect(
-          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 10 }),
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: 0,
+            limit: 10,
+          }),
         ).resolves.toEqual(Buffer.from('ab'));
       });
 
@@ -1916,7 +1960,10 @@ describe('GramJsClientAdapter', () => {
           getMessages: jest.fn().mockResolvedValue([aRawMessage()]),
         });
         await expect(
-          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: 0,
+            limit: 4,
+          }),
         ).resolves.toBeUndefined();
       });
 
@@ -1932,7 +1979,10 @@ describe('GramJsClientAdapter', () => {
           ),
         });
         await expect(
-          createAdapter(mock).downloadMediaRange('me', 1, { offset: 0, limit: 4 }),
+          createAdapter(mock).downloadMediaRange('me', 1, {
+            offset: 0,
+            limit: 4,
+          }),
         ).rejects.toBeInstanceOf(TelegramClientError);
       });
 
@@ -1964,7 +2014,10 @@ describe('GramJsClientAdapter', () => {
             ),
         });
         const chunks: Buffer[] = [];
-        for await (const chunk of await createAdapter(mock).streamMedia('me', 1))
+        for await (const chunk of await createAdapter(mock).streamMedia(
+          'me',
+          1,
+        ))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('helloworld'));
       });
@@ -1990,10 +2043,14 @@ describe('GramJsClientAdapter', () => {
             .mockImplementation(() => asyncChunks(Buffer.from('helloworld'))),
         });
         const chunks: Buffer[] = [];
-        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
-          offset: 2,
-          limit: 4,
-        }))
+        for await (const chunk of await createAdapter(mock).streamMedia(
+          'me',
+          1,
+          {
+            offset: 2,
+            limit: 4,
+          },
+        ))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('llow'));
       });
@@ -2011,9 +2068,13 @@ describe('GramJsClientAdapter', () => {
         });
         const chunks: Buffer[] = [];
         // limit 5 over 'ab' + 'cdef': first whole chunk, then 3 of the next.
-        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
-          limit: 5,
-        }))
+        for await (const chunk of await createAdapter(mock).streamMedia(
+          'me',
+          1,
+          {
+            limit: 5,
+          },
+        ))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('abcde'));
       });
@@ -2031,9 +2092,13 @@ describe('GramJsClientAdapter', () => {
         });
         const chunks: Buffer[] = [];
         // offset 2 (skip 2): drop 'a', then drop one more from 'bcdef' → 'cdef'.
-        for await (const chunk of await createAdapter(mock).streamMedia('me', 1, {
-          offset: 2,
-        }))
+        for await (const chunk of await createAdapter(mock).streamMedia(
+          'me',
+          1,
+          {
+            offset: 2,
+          },
+        ))
           chunks.push(chunk);
         expect(Buffer.concat(chunks)).toEqual(Buffer.from('cdef'));
       });

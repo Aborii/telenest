@@ -32,8 +32,8 @@
 import { SetMetadata } from '@nestjs/common';
 
 import { DEFAULT_CLIENT_NAME } from '../telegram-client.constants';
-import type { OnUserMessageOptions } from './on-user-message.types';
 import type { OnUserDeletedFilter } from './on-user-deleted.types';
+import type { OnUserMessageOptions } from './on-user-message.types';
 
 /** Metadata key under which a handler's {@link OnUserDeletedFilter} is stored. */
 export const ON_USER_DELETED_METADATA = 'nestjs-telegram:on-user-deleted';

@@ -39,13 +39,13 @@
 
 import { Inject, type InjectionToken } from '@nestjs/common';
 
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import {
   DEFAULT_BOT_NAME,
   TELEGRAM_BOT,
   TELEGRAM_BOT_METRICS,
   TELEGRAM_BOT_TRACER,
 } from './telegram-bot.constants';
-import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import { TelegramBotHealthIndicator } from './telegram-bot.health';
 import { TelegramBotService } from './telegram-bot.service';
 import { TelegramBotUpdatesRegistrar } from './updates/telegram-bot-updates.registrar';

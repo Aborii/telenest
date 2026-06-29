@@ -58,7 +58,9 @@ describe('joinWebhookUrl', () => {
   });
 
   it('tolerates a trailing slash on the domain', () => {
-    expect(joinWebhookUrl('https://x.com/', '/hook')).toBe('https://x.com/hook');
+    expect(joinWebhookUrl('https://x.com/', '/hook')).toBe(
+      'https://x.com/hook',
+    );
   });
 
   it('adds a missing leading slash to the path', () => {
@@ -103,7 +105,7 @@ describe('assertValidWebhookOptions', () => {
     ).not.toThrow();
   });
 
-  it('rejects a secretToken outside Telegram\'s allowed charset', () => {
+  it("rejects a secretToken outside Telegram's allowed charset", () => {
     expect(() =>
       assertValidWebhookOptions({ path: '/hook', secretToken: 'bad token!' }),
     ).toThrow(/secretToken/);

@@ -164,7 +164,10 @@ export class EncryptedSessionStore implements SessionStore {
       );
       return `${FORMAT_PREFIX}${encoded}`;
     } catch (error) {
-      throw new TelegramSessionError('Failed to encrypt session string.', error);
+      throw new TelegramSessionError(
+        'Failed to encrypt session string.',
+        error,
+      );
     }
   }
 

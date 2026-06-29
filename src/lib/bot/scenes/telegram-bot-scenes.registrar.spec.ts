@@ -27,12 +27,12 @@ import {
 } from '../telegram-bot.tokens';
 import { UseTelegramGuards } from '../updates/execution/enhancer.decorators';
 import { Ctx, MessageText, Sender } from '../updates/param.decorators';
+import { TelegramBotUpdatesRegistrar } from '../updates/telegram-bot-updates.registrar';
 import {
   Command,
   Hears,
   TelegramUpdate,
 } from '../updates/telegram-update.decorator';
-import { TelegramBotUpdatesRegistrar } from '../updates/telegram-bot-updates.registrar';
 import type { SceneFlowContext } from './scene.builder';
 import {
   Scene,
@@ -227,7 +227,11 @@ describe('TelegramBotScenesRegistrar — registration', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         TelegramBotModule.forRoot({ token: '1:a', launch: false }),
-        TelegramBotModule.forRoot({ name: 'notify', token: '2:b', launch: false }),
+        TelegramBotModule.forRoot({
+          name: 'notify',
+          token: '2:b',
+          launch: false,
+        }),
       ],
       providers: [NotifyScene],
     }).compile();
@@ -262,7 +266,13 @@ describe('TelegramBotScenesRegistrar — end-to-end (real Telegraf)', () => {
     updateId = 0;
     const moduleRef = await Test.createTestingModule({
       imports: [TelegramBotModule.forRoot({ token: '123:abc', launch: false })],
-      providers: [EntryUpdate, SurveyScene, SignupWizard, GuardedScene, DenyGuard],
+      providers: [
+        EntryUpdate,
+        SurveyScene,
+        SignupWizard,
+        GuardedScene,
+        DenyGuard,
+      ],
     }).compile();
 
     bot = moduleRef.get<Telegraf>(TELEGRAM_BOT);

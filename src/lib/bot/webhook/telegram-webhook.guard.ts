@@ -82,9 +82,7 @@ export class TelegramWebhookGuard implements CanActivate {
     // ── No secret configured → cannot verify; allow (warned at bootstrap). ─────
     if (!expected) return true;
 
-    const request = context
-      .switchToHttp()
-      .getRequest<RequestWithHeaders>();
+    const request = context.switchToHttp().getRequest<RequestWithHeaders>();
     const raw = request.headers[TELEGRAM_WEBHOOK_SECRET_HEADER];
     // ── A duplicated header arrives as an array; take the first value. ─────────
     const received = Array.isArray(raw) ? raw[0] : raw;

@@ -208,10 +208,8 @@ export class TelegramBotScenesRegistrar {
       if (sceneBindings.length === 0 && updateBindings.length === 0) continue;
 
       const params =
-        this._reflector.get<ParamMetadata[]>(
-          UPDATE_PARAMS_METADATA,
-          handler,
-        ) ?? [];
+        this._reflector.get<ParamMetadata[]>(UPDATE_PARAMS_METADATA, handler) ??
+        [];
       const label = `${className}.${methodName}`;
       const enhancers = this._enhancers.resolve(metatype, handler);
 

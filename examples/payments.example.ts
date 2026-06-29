@@ -52,11 +52,11 @@ import type {
 import {
   Command,
   Ctx,
-  PreCheckoutData,
   PreCheckoutQuery as OnPreCheckoutQuery,
-  ShippingData,
   ShippingQuery as OnShippingQuery,
   SuccessfulPayment as OnSuccessfulPayment,
+  PreCheckoutData,
+  ShippingData,
   SuccessfulPaymentData,
   TelegramBotModule,
   TelegramBotService,

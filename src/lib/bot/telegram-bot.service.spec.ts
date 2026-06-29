@@ -108,7 +108,12 @@ describe('TelegramBotService', () => {
       const { service, telegram } = createService();
       telegram.answerInlineQuery.mockResolvedValue(true);
       const results = [
-        { type: 'article', id: '1', title: 'x', input_message_content: { message_text: 'y' } },
+        {
+          type: 'article',
+          id: '1',
+          title: 'x',
+          input_message_content: { message_text: 'y' },
+        },
       ] as Parameters<TelegramBotService['answerInlineQuery']>[1];
 
       await expect(

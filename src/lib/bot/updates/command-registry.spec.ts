@@ -146,9 +146,9 @@ describe('buildCommandGroups', () => {
   });
 
   it('rejects an empty description', () => {
-    expect(() =>
-      buildCommandGroups([declare({ description: '' })]),
-    ).toThrow(TelegramConfigError);
+    expect(() => buildCommandGroups([declare({ description: '' })])).toThrow(
+      TelegramConfigError,
+    );
   });
 
   it('rejects a description longer than 256 characters', () => {
@@ -159,7 +159,10 @@ describe('buildCommandGroups', () => {
 
   it('rejects a duplicate command within the same scope', () => {
     expect(() =>
-      buildCommandGroups([declare({ command: 'ping' }), declare({ command: 'ping' })]),
+      buildCommandGroups([
+        declare({ command: 'ping' }),
+        declare({ command: 'ping' }),
+      ]),
     ).toThrow(/Duplicate command/);
   });
 

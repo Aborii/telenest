@@ -119,7 +119,11 @@ export async function dispatchToHandler(
 
   // ── getHandler() exposes the metadata-bearing function so Reflector-driven
   //    enhancers read the inherited method's metadata, not the override's. ──────
-  const context = new TelegramExecutionContext(ctx, metatype, decorated ?? handler);
+  const context = new TelegramExecutionContext(
+    ctx,
+    metatype,
+    decorated ?? handler,
+  );
   try {
     const outcome = await runWithEnhancers({
       context,

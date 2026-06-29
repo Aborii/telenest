@@ -110,16 +110,13 @@ export function createMockGramClient(
       .fn()
       .mockResolvedValue(Buffer.from('TEST_PHOTO')),
     getMediaInfo: jest.fn().mockResolvedValue(aGramMediaInfo()),
-    downloadMediaRange: jest
-      .fn()
-      .mockResolvedValue(Buffer.from('TEST_RANGE')),
+    downloadMediaRange: jest.fn().mockResolvedValue(Buffer.from('TEST_RANGE')),
     // ── A fresh single-chunk async iterable per call (re-iterable across
     //    tests because `createMockGramClient` is invoked per test). ──────────
-    streamMedia: jest.fn().mockImplementation(
-      async () =>
-        (async function* () {
-          yield Buffer.from('TEST_MEDIA');
-        })(),
+    streamMedia: jest.fn().mockImplementation(async () =>
+      (async function* () {
+        yield Buffer.from('TEST_MEDIA');
+      })(),
     ),
     joinChannel: jest.fn().mockResolvedValue(undefined),
     leaveChannel: jest.fn().mockResolvedValue(undefined),

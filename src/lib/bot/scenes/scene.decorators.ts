@@ -75,14 +75,12 @@ function appendSceneBinding(
   // ── Metadata is attached to the method function itself — the same reference
   //    the scenes registrar later reads off the resolved instance. ────────────
   const method = (target as Record<string | symbol, unknown>)[propertyKey] as
-    | object
-    | undefined;
+    object | undefined;
   if (!method) return;
 
   const existing =
     (Reflect.getMetadata(SCENE_METHOD_BINDINGS_METADATA, method) as
-      | SceneMethodBinding[]
-      | undefined) ?? [];
+      SceneMethodBinding[] | undefined) ?? [];
   Reflect.defineMetadata(
     SCENE_METHOD_BINDINGS_METADATA,
     [...existing, binding],

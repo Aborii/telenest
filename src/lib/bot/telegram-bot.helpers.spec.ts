@@ -190,14 +190,24 @@ describe('TelegramBotService convenience helpers', () => {
       await service.sendLongMessage(42, text, extra);
 
       // ── First chunk: parse_mode kept, keyboard dropped. ─────────────────────
-      expect(telegram.sendMessage).toHaveBeenNthCalledWith(1, 42, 'a'.repeat(4096), {
-        parse_mode: 'HTML',
-      });
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(
+        1,
+        42,
+        'a'.repeat(4096),
+        {
+          parse_mode: 'HTML',
+        },
+      );
       // ── Last chunk: keyboard appears once, at the end. ──────────────────────
-      expect(telegram.sendMessage).toHaveBeenNthCalledWith(2, 42, 'b'.repeat(10), {
-        parse_mode: 'HTML',
-        reply_markup,
-      });
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(
+        2,
+        42,
+        'b'.repeat(10),
+        {
+          parse_mode: 'HTML',
+          reply_markup,
+        },
+      );
     });
 
     it('applies reply_parameters to the first chunk only when splitting', async () => {
@@ -211,10 +221,20 @@ describe('TelegramBotService convenience helpers', () => {
       await service.sendLongMessage(42, text, extra);
 
       // ── Reply target on the first chunk; dropped on the rest. ───────────────
-      expect(telegram.sendMessage).toHaveBeenNthCalledWith(1, 42, 'a'.repeat(4096), {
-        reply_parameters: { message_id: 7 },
-      });
-      expect(telegram.sendMessage).toHaveBeenNthCalledWith(2, 42, 'b'.repeat(10), {});
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(
+        1,
+        42,
+        'a'.repeat(4096),
+        {
+          reply_parameters: { message_id: 7 },
+        },
+      );
+      expect(telegram.sendMessage).toHaveBeenNthCalledWith(
+        2,
+        42,
+        'b'.repeat(10),
+        {},
+      );
     });
 
     it('sends nothing for empty text', async () => {

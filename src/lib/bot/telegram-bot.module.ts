@@ -65,6 +65,16 @@ import {
   type TelegramMetricsRecorder,
   type TelegramTracer,
 } from '../common';
+import {
+  getBotRuntimeOptionsToken,
+  getBotRuntimeToken,
+} from './runtime/telegram-bot-runtime.constants';
+import { TelegramBotRuntime } from './runtime/telegram-bot-runtime.service';
+import type {
+  TelegramBotRuntimeForRootOptions,
+  TelegramBotRuntimeModuleOptions,
+} from './runtime/telegram-bot-runtime.types';
+import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import { DEFAULT_BOT_NAME } from './telegram-bot.constants';
 import { createTelegrafInstance } from './telegram-bot.factory';
 import { TelegramBotHealthIndicator } from './telegram-bot.health';
@@ -76,7 +86,6 @@ import {
 } from './telegram-bot.module-definition';
 import type { TelegramBotModuleOptions } from './telegram-bot.options';
 import { TelegramBotService } from './telegram-bot.service';
-import { TelegramBotScenesRegistrar } from './scenes/telegram-bot-scenes.registrar';
 import {
   getBotHealthToken,
   getBotInstanceToken,
@@ -323,6 +332,80 @@ function withWebhook(
 }
 
 /**
+ * Builds the DI providers a **runtime** (token-after-boot) bot needs: its baseline
+ * options, its metrics sink and tracer, the enhancer resolver, and the
+ * {@link TelegramBotRuntime} manager itself — each under the same per-name tokens
+ * the static path uses, so a runtime bot coexists with static and other runtime
+ * bots without collision.
+ *
+ * Unlike {@link createBotProviders}, no `Telegraf` instance, facade, or registrar
+ * is wired here: the manager constructs (and rebinds) those on demand from the
+ * token supplied at {@link TelegramBotRuntime.configure} time.
+ *
+ * @param name - The bot's name (`DEFAULT_BOT_NAME` for the default runtime bot).
+ * @param options - The baseline runtime options from `forRootRuntime`.
+ * @returns The provider set for this runtime bot.
+ * @throws Never.
+ */
+function createRuntimeProviders(
+  name: string,
+  options: TelegramBotRuntimeModuleOptions,
+): Provider[] {
+  const optionsToken = getBotRuntimeOptionsToken(name);
+  const metricsToken = getBotMetricsToken(name);
+  const tracerToken = getBotTracerToken(name);
+  return [
+    // ── Baseline options every configure() merges its overrides onto. ─────────
+    { provide: optionsToken, useValue: options },
+    // ── Per-bot metrics sink (configured recorder, else in-memory). ───────────
+    {
+      provide: metricsToken,
+      useFactory: (
+        opts: TelegramBotRuntimeModuleOptions,
+      ): TelegramMetricsRecorder =>
+        opts.metrics ?? new InMemoryTelegramMetrics(),
+      inject: [optionsToken],
+    },
+    // ── Per-bot tracer; no-op by default. ─────────────────────────────────────
+    { provide: tracerToken, useValue: NOOP_TELEGRAM_TRACER },
+    // ── Resolves a handler's guard/interceptor/filter refs (DI + @Catch). ─────
+    TelegramEnhancerResolver,
+    // ── The runtime manager: builds/rebinds/launches the bot on demand. ───────
+    {
+      provide: getBotRuntimeToken(name),
+      useFactory: (
+        opts: TelegramBotRuntimeModuleOptions,
+        discovery: DiscoveryService,
+        scanner: MetadataScanner,
+        reflector: Reflector,
+        enhancers: TelegramEnhancerResolver,
+        metrics: TelegramMetricsRecorder,
+        tracer: TelegramTracer,
+      ): TelegramBotRuntime =>
+        new TelegramBotRuntime(
+          name,
+          opts,
+          discovery,
+          scanner,
+          reflector,
+          enhancers,
+          metrics,
+          tracer,
+        ),
+      inject: [
+        optionsToken,
+        DiscoveryService,
+        MetadataScanner,
+        Reflector,
+        TelegramEnhancerResolver,
+        metricsToken,
+        tracerToken,
+      ],
+    },
+  ];
+}
+
+/**
  * Bot API feature module. Extends the generated `ConfigurableModuleClass` to
  * inherit fully-typed `forRoot` / `forRootAsync`, then augments their output
  * with this library's per-bot providers (instance, facade, registrar).
@@ -371,5 +454,49 @@ export class TelegramBotModule extends ConfigurableModuleClass {
     return options.webhook
       ? withWebhook(dynamicModule, name, options.webhook)
       : dynamicModule;
+  }
+
+  /**
+   * Registers a **runtime-reconfigurable** bot whose token is supplied (and may be
+   * rotated or cleared) *after* application bootstrap, via the injectable
+   * {@link TelegramBotRuntime} manager — rather than required at `forRoot` time.
+   *
+   * No `Telegraf` instance is built at registration: nothing connects to Telegram
+   * until the first {@link TelegramBotRuntime.configure} call, so a missing token
+   * never crashes bootstrap. Decorator handlers, guards, filters, and scenes are
+   * discovered and re-bound onto each instance the manager builds, scoped to this
+   * registration's `name`. This is additive — it does not affect `forRoot` /
+   * `forRootAsync`.
+   *
+   * @param options - Baseline runtime options plus the `isGlobal` / `name` extras.
+   * @returns A dynamic module wiring this bot's {@link TelegramBotRuntime} manager.
+   * @throws Never (a bad token is reported as `error` status at `configure` time,
+   *   never thrown from registration).
+   *
+   * @example
+   * ```ts
+   * @Module({ imports: [TelegramBotModule.forRootRuntime({ isGlobal: true })] })
+   * export class AppModule {}
+   *
+   * // later:
+   * constructor(@InjectBotRuntime() private readonly bot: TelegramBotRuntime) {}
+   * await this.bot.configure({ token: tokenFromDb });
+   * ```
+   */
+  public static forRootRuntime(
+    options: TelegramBotRuntimeForRootOptions = {},
+  ): DynamicModule {
+    const { isGlobal, name: rawName, ...baseOptions } = options;
+    const name = rawName ?? DEFAULT_BOT_NAME;
+    return {
+      module: TelegramBotModule,
+      global: isGlobal,
+      providers: createRuntimeProviders(name, baseOptions),
+      exports: [
+        getBotRuntimeToken(name),
+        getBotMetricsToken(name),
+        getBotTracerToken(name),
+      ],
+    };
   }
 }

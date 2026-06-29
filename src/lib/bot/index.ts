@@ -16,6 +16,7 @@ export * from './inline-query-result.builder';
 export * from './keyboard.builder';
 export * from './message-splitter';
 export * from './retry';
+export * from './runtime';
 export * from './scenes';
 export * from './telegram-bot.constants';
 export { createTelegrafInstance } from './telegram-bot.factory';

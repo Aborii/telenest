@@ -543,6 +543,9 @@ export class TelegramBotRuntime
     this._service = null;
     this._updatesRegistrar = null;
     this._launched = false;
+    // ── Drop the stale username too: a failed (re)configure leaves no active
+    //    bot, so reporting the previous bot's @username would be misleading. ────
+    this._botUsername = undefined;
     this._lastError = detail;
     this._status = BOT_RUNTIME_STATUSES.ERROR;
     this._logger.error(

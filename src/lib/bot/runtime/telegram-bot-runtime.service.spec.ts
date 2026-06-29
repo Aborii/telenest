@@ -309,6 +309,46 @@ describe('TelegramBotRuntime', () => {
     }
   });
 
+  it('drops the stale botUsername when a re-configure fails', async () => {
+    let firstCall = true;
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        TelegramBotModule.forRootRuntime({
+          botFactory: () => {
+            // ── First build succeeds (sets botUsername); the second's getMe
+            //    rejects (revoked token) so the re-configure fails. ─────────────
+            const bot = firstCall
+              ? createMockTelegraf()
+              : createMockTelegraf({
+                  telegram: {
+                    getMe: jest.fn().mockRejectedValue(new Error('401')),
+                    setMyCommands: jest.fn().mockResolvedValue(true),
+                  },
+                });
+            firstCall = false;
+            return asTelegraf(bot);
+          },
+        }),
+      ],
+      providers: [DefaultUpdate],
+    }).compile();
+    try {
+      const runtime = moduleRef.get<TelegramBotRuntime>(getBotRuntimeToken(), {
+        strict: false,
+      });
+      const ok = await runtime.configure({ token: 'good:token' });
+      expect(ok.botUsername).toBe('mock_bot');
+
+      const failed = await runtime.configure({ token: 'revoked:token' });
+      expect(failed.status).toBe(BOT_RUNTIME_STATUSES.ERROR);
+      // ── No stale username leaks into the error snapshot. ─────────────────────
+      expect(failed.botUsername).toBeUndefined();
+      expect(runtime.getStatus().botUsername).toBeUndefined();
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
   it('clear() stops and drops the instance, returning to offline', async () => {
     const { runtime, built, close } = await bootstrapRuntime();
     try {

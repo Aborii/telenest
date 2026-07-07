@@ -1315,14 +1315,30 @@ export class GramJsClientAdapter implements IGramClient {
     operation: string,
   ): TelegramClientError {
     if (error instanceof TelegramClientError) return error;
-    // ── Surface Telegram's FLOOD_WAIT delay (seconds) on the typed error so the
-    //    client retry helper can back off for exactly the requested interval.
-    //    Reading the GramJS error shape stays confined to this adapter. ────────
+    // ── Surface Telegram's FLOOD_WAIT delay (seconds) and the raw MTProto code
+    //    on the typed error so the retry helper can back off for exactly the
+    //    requested interval and callers can classify auth-loss without reaching
+    //    into `cause`. Reading the GramJS error shape stays confined here. ─────
     return new TelegramClientError(message, {
       operation,
       retryAfterSeconds: this.floodWaitSeconds(error),
+      rpcCode: this.rpcErrorCode(error),
       cause: error,
     });
+  }
+
+  /**
+   * Extracts the raw MTProto error code from a GramJS `RPCError` (its
+   * `errorMessage`, e.g. `AUTH_KEY_UNREGISTERED`), or `undefined` for a
+   * non-RPC (transport / generic) failure. Keeps the GramJS error shape
+   * confined to this adapter.
+   *
+   * @param error - The caught value (typically a raw GramJS error).
+   * @returns The RPC error code string, or `undefined`.
+   * @throws Never.
+   */
+  private rpcErrorCode(error: unknown): string | undefined {
+    return error instanceof errors.RPCError ? error.errorMessage : undefined;
   }
 
   /**

@@ -317,6 +317,34 @@ describe('GramJsClientAdapter', () => {
       expect(error).toBeInstanceOf(TelegramClientError);
       expect(error.retryAfterSeconds).toBeUndefined();
     });
+
+    it('surfaces the raw MTProto code (rpcCode) from an RPCError', async () => {
+      const rpc = new errors.RPCError(
+        'AUTH_KEY_UNREGISTERED',
+        new Api.messages.GetHistory({ peer: 'me' }),
+        401,
+      );
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(rpc),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.rpcCode).toBe('AUTH_KEY_UNREGISTERED');
+    });
+
+    it('leaves rpcCode undefined for a non-RPC (transport) failure', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(new Error('socket hang up')),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error.rpcCode).toBeUndefined();
+    });
   });
 
   describe('signInWithCode', () => {

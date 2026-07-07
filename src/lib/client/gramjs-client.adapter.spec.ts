@@ -106,11 +106,15 @@ function documentMedia(
 }
 
 /** Wraps a mock client in a freshly-constructed adapter. */
-function createAdapter(mock: MockClient): GramJsClientAdapter {
+function createAdapter(
+  mock: MockClient,
+  connectTimeoutMs?: number,
+): GramJsClientAdapter {
   return new GramJsClientAdapter(
     mock as unknown as TelegramClient,
     new sessions.StringSession(''),
     { apiId: 1, apiHash: 'hash' },
+    connectTimeoutMs,
   );
 }
 
@@ -189,6 +193,45 @@ describe('GramJsClientAdapter', () => {
       await expect(adapter.connect()).rejects.toBeInstanceOf(
         TelegramClientError,
       );
+    });
+
+    it('times out a hung connect and disconnects the underlying client', async () => {
+      jest.useFakeTimers();
+      try {
+        const disconnect = jest.fn().mockResolvedValue(undefined);
+        const mock = createMockClient({
+          // A connect that never settles → the timeout must win.
+          connect: jest.fn().mockReturnValue(new Promise<void>(() => {})),
+          disconnect,
+        });
+        const adapter = createAdapter(mock, 5_000);
+
+        const pending = adapter.connect().catch((e: unknown) => e);
+        await jest.advanceTimersByTimeAsync(5_001);
+        const error = await pending;
+
+        expect(error).toBeInstanceOf(TelegramClientError);
+        expect((error as TelegramClientError).operation).toBe('connect');
+        // The abandoned attempt is aborted so it can't resurrect a connection.
+        expect(disconnect).toHaveBeenCalled();
+        expect(adapter.isConnected()).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('connects normally within the timeout (no disconnect)', async () => {
+      const disconnect = jest.fn().mockResolvedValue(undefined);
+      const mock = createMockClient({
+        connect: jest.fn().mockResolvedValue(undefined),
+        disconnect,
+      });
+      const adapter = createAdapter(mock, 5_000);
+
+      await adapter.connect();
+
+      expect(adapter.isConnected()).toBe(true);
+      expect(disconnect).not.toHaveBeenCalled();
     });
 
     it('isAuthorized delegates to checkAuthorization', async () => {
@@ -316,6 +359,34 @@ describe('GramJsClientAdapter', () => {
         .catch((e: unknown) => e)) as TelegramClientError;
       expect(error).toBeInstanceOf(TelegramClientError);
       expect(error.retryAfterSeconds).toBeUndefined();
+    });
+
+    it('surfaces the raw MTProto code (rpcCode) from an RPCError', async () => {
+      const rpc = new errors.RPCError(
+        'AUTH_KEY_UNREGISTERED',
+        new Api.messages.GetHistory({ peer: 'me' }),
+        401,
+      );
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(rpc),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.rpcCode).toBe('AUTH_KEY_UNREGISTERED');
+    });
+
+    it('leaves rpcCode undefined for a non-RPC (transport) failure', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockRejectedValue(new Error('socket hang up')),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogs()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error.rpcCode).toBeUndefined();
     });
   });
 

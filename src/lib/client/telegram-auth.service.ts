@@ -46,7 +46,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 
-import { TelegramAuthError } from '../common';
+import { maskPhoneNumber, TelegramAuthError } from '../common';
 import type { IGramClient } from './gram-client.interface';
 import type {
   GramQrToken,
@@ -165,7 +165,7 @@ export class TelegramAuthService {
     const result = await this.client.sendCode(phoneNumber, forceSMS);
     this._phoneNumber = phoneNumber;
     this._phoneCodeHash = result.phoneCodeHash;
-    this._logger.log(`Login code sent to ${this.maskPhone(phoneNumber)}.`);
+    this._logger.log(`Login code sent to ${maskPhoneNumber(phoneNumber)}.`);
     return result;
   }
 
@@ -420,21 +420,5 @@ export class TelegramAuthService {
     const session = this.client.exportSession();
     await this.sessionStore.save(session);
     this._logger.log('Session persisted to the configured store.');
-  }
-
-  /**
-   * Masks a phone number for safe logging by keeping only the first two and
-   * last two characters and replacing the middle with asterisks. Inputs of
-   * four characters or fewer are masked entirely.
-   *
-   * @param phone - The raw phone number.
-   * @returns A masked variant such as `+1******67`.
-   * @throws Never.
-   */
-  private maskPhone(phone: string): string {
-    if (phone.length <= 4) return '*'.repeat(phone.length);
-    const head = phone.slice(0, 2);
-    const tail = phone.slice(-2);
-    return `${head}${'*'.repeat(Math.max(0, phone.length - 4))}${tail}`;
   }
 }

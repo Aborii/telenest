@@ -113,6 +113,15 @@ export interface TelegramClientModuleOptions {
   floodSleepThreshold?: number;
 
   /**
+   * Upper bound (milliseconds) on a single {@link IGramClient.connect} attempt.
+   * When set and the deadline elapses, the adapter DISCONNECTS the underlying
+   * client (aborting the in-flight attempt so it cannot resurrect a zombie
+   * connection) and rejects with a `TelegramClientError`. Omit / `0` to let
+   * GramJS manage the attempt with `connectionRetries` alone.
+   */
+  connectTimeoutMs?: number;
+
+  /**
    * Whether to connect on module initialization. Defaults to `true`. Set to
    * `false` to connect lazily/manually (e.g. in tests or CLI login scripts).
    */

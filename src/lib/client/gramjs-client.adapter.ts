@@ -111,6 +111,13 @@ function streamRequestSize(neededBytes: number): number {
   return Math.min(size, STREAM_REQUEST_SIZE);
 }
 
+/**
+ * Private sentinel the connect-timeout timer rejects with, so the race's catch
+ * can distinguish a deadline from a genuine connect failure without matching on
+ * a message. Module-private — never surfaced to callers.
+ */
+const CONNECT_TIMEOUT = Symbol('gramjs-connect-timeout');
+
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
   /** Application api_id. */
@@ -135,18 +142,21 @@ export class GramJsClientAdapter implements IGramClient {
    * @param stringSession - The session instance, used to export the session
    *   string (the abstract `Session.save()` type erases the string return).
    * @param credentials - api_id / api_hash forwarded to `sendCode`.
+   * @param connectTimeoutMs - Optional per-attempt {@link connect} deadline; on
+   *   expiry the underlying client is disconnected and `connect` rejects.
    */
   public constructor(
     private readonly client: TelegramClient,
     private readonly stringSession: sessions.StringSession,
     private readonly credentials: ApiCredentials,
+    private readonly connectTimeoutMs?: number,
   ) {}
 
   /** {@inheritDoc IGramClient.connect} */
   public async connect(): Promise<void> {
     if (this._connected) return;
     try {
-      await this.client.connect();
+      await this.connectWithOptionalTimeout();
       this._connected = true;
     } catch (error) {
       throw this.toClientError(
@@ -154,6 +164,44 @@ export class GramJsClientAdapter implements IGramClient {
         'Failed to connect to Telegram.',
         'connect',
       );
+    }
+  }
+
+  /**
+   * Runs `client.connect()`, bounded by {@link connectTimeoutMs} when set. On
+   * timeout the underlying client is disconnected so the abandoned attempt
+   * cannot later resurrect a zombie connection, then a timeout error is thrown
+   * (wrapped into a `TelegramClientError` by the caller).
+   *
+   * @returns Resolves once connected.
+   * @throws {Error} On a connect failure, or a timeout when the deadline elapses.
+   */
+  private async connectWithOptionalTimeout(): Promise<void> {
+    if (!this.connectTimeoutMs || this.connectTimeoutMs <= 0) {
+      await this.client.connect();
+      return;
+    }
+
+    const timeoutMs = this.connectTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(CONNECT_TIMEOUT), timeoutMs);
+      // Never keep the process alive solely for this timer.
+      (timer as { unref?: () => void }).unref?.();
+    });
+
+    try {
+      await Promise.race([this.client.connect(), timeout]);
+    } catch (error) {
+      if (error === CONNECT_TIMEOUT) {
+        // ── Abort the still-pending attempt so it cannot flip `connected` true
+        //    after we have already given up. ────────────────────────────────
+        await this.client.disconnect().catch(() => undefined);
+        throw new Error(`Telegram connect timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -1315,14 +1363,30 @@ export class GramJsClientAdapter implements IGramClient {
     operation: string,
   ): TelegramClientError {
     if (error instanceof TelegramClientError) return error;
-    // ── Surface Telegram's FLOOD_WAIT delay (seconds) on the typed error so the
-    //    client retry helper can back off for exactly the requested interval.
-    //    Reading the GramJS error shape stays confined to this adapter. ────────
+    // ── Surface Telegram's FLOOD_WAIT delay (seconds) and the raw MTProto code
+    //    on the typed error so the retry helper can back off for exactly the
+    //    requested interval and callers can classify auth-loss without reaching
+    //    into `cause`. Reading the GramJS error shape stays confined here. ─────
     return new TelegramClientError(message, {
       operation,
       retryAfterSeconds: this.floodWaitSeconds(error),
+      rpcCode: this.rpcErrorCode(error),
       cause: error,
     });
+  }
+
+  /**
+   * Extracts the raw MTProto error code from a GramJS `RPCError` (its
+   * `errorMessage`, e.g. `AUTH_KEY_UNREGISTERED`), or `undefined` for a
+   * non-RPC (transport / generic) failure. Keeps the GramJS error shape
+   * confined to this adapter.
+   *
+   * @param error - The caught value (typically a raw GramJS error).
+   * @returns The RPC error code string, or `undefined`.
+   * @throws Never.
+   */
+  private rpcErrorCode(error: unknown): string | undefined {
+    return error instanceof errors.RPCError ? error.errorMessage : undefined;
   }
 
   /**
@@ -1461,8 +1525,10 @@ export function createGramJsClient(
     },
   );
 
-  return new GramJsClientAdapter(client, stringSession, {
-    apiId: options.apiId,
-    apiHash: options.apiHash,
-  });
+  return new GramJsClientAdapter(
+    client,
+    stringSession,
+    { apiId: options.apiId, apiHash: options.apiHash },
+    options.connectTimeoutMs,
+  );
 }

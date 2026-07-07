@@ -11,5 +11,6 @@
  */
 
 export * from './observability';
+export * from './phone';
 export * from './telegram.errors';
 export * from './telegram.types';

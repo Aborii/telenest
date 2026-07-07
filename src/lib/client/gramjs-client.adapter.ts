@@ -986,13 +986,56 @@ export class GramJsClientAdapter implements IGramClient {
         ? GRAM_DIALOG_TYPES.GROUP
         : GRAM_DIALOG_TYPES.USER;
 
+    const lastMessage = dialog.message;
+    const preview = lastMessage?.message;
     return {
       id: dialog.id ? dialog.id.toString() : '',
       title: dialog.title ?? dialog.name ?? '',
       type,
       unreadCount: dialog.unreadCount,
       pinned: dialog.pinned,
+      lastMessagePreview: preview ? preview : undefined,
+      lastMessageDate: lastMessage?.date,
+      muted: this.isDialogMuted(dialog),
+      hasPhoto: this.entityHasPhoto(dialog.entity),
     };
+  }
+
+  /**
+   * Reports whether the account has muted notifications for a dialog.
+   *
+   * Telegram stores the mute state as a `muteUntil` timestamp on the raw
+   * {@link Api.Dialog}'s notification settings (NOT on the peer entity): the
+   * dialog is muted while that timestamp is in the future. Returns `undefined`
+   * when the object carries no settings (e.g. a hand-built fake), so the field
+   * is simply omitted rather than reported as `false`.
+   *
+   * @param dialog - The GramJS dialog to inspect.
+   * @returns `true`/`false` when settings are present, else `undefined`.
+   * @throws Never.
+   */
+  private isDialogMuted(dialog: Dialog): boolean | undefined {
+    const settings = dialog.dialog?.notifySettings;
+    if (!settings) return undefined;
+    const muteUntil = settings.muteUntil;
+    if (muteUntil === undefined) return false;
+    return muteUntil > Math.floor(Date.now() / 1000);
+  }
+
+  /**
+   * Reports whether a resolved peer entity carries a non-empty profile/chat
+   * photo — a cheap hint that an avatar is fetchable, without downloading it.
+   *
+   * @param entity - The dialog's resolved entity, if any.
+   * @returns `true`/`false` when the entity is resolved, else `undefined`.
+   * @throws Never.
+   */
+  private entityHasPhoto(entity: Dialog['entity']): boolean | undefined {
+    if (!entity) return undefined;
+    const photo = 'photo' in entity ? entity.photo : undefined;
+    return (
+      photo instanceof Api.UserProfilePhoto || photo instanceof Api.ChatPhoto
+    );
   }
 
   /**
@@ -1051,6 +1094,7 @@ export class GramJsClientAdapter implements IGramClient {
    */
   private mapMessage(message: Api.Message): GramMessage {
     const sender = message.senderId;
+    const editDate = message.editDate;
     return {
       id: message.id,
       peerId: this.peerToString(message.peerId),
@@ -1059,7 +1103,54 @@ export class GramJsClientAdapter implements IGramClient {
       out: Boolean(message.out),
       senderId: sender ? sender.toString() : undefined,
       hasMedia: this.hasDownloadableMedia(message),
+      replyToMsgId: this.replyToMsgId(message),
+      edited: editDate !== undefined ? true : undefined,
+      editDate,
+      media: this.mapMediaInfo(message.media),
+      senderName: this.senderDisplayName(message.sender),
     };
+  }
+
+  /**
+   * Extracts the replied-to message id, when a message is a reply to another
+   * *message* (a reply to a story or other non-message target has no msg id).
+   *
+   * Reads the raw `replyTo` header rather than GramJS' `replyToMsgId` getter so
+   * the mapping also works on the plain fixture objects used in tests.
+   *
+   * @param message - The message to inspect.
+   * @returns The replied-to message id, or `undefined` when not a message reply.
+   * @throws Never.
+   */
+  private replyToMsgId(message: Api.Message): number | undefined {
+    const replyTo = message.replyTo;
+    return replyTo instanceof Api.MessageReplyHeader
+      ? replyTo.replyToMsgId
+      : undefined;
+  }
+
+  /**
+   * Derives a best-effort display name from an **already-resolved** sender
+   * entity. Never triggers a network fetch (the caller passes GramJS' cached
+   * `message.sender`), so it stays flood-safe; returns `undefined` when the
+   * sender is unresolved or nameless.
+   *
+   * @param sender - The resolved sender entity, if GramJS attached one.
+   * @returns The sender's display name, or `undefined`.
+   * @throws Never.
+   */
+  private senderDisplayName(
+    sender: Api.TypeUser | Api.TypeChat | undefined,
+  ): string | undefined {
+    if (sender instanceof Api.User) {
+      const fullName = [sender.firstName, sender.lastName]
+        .filter((part): part is string => Boolean(part))
+        .join(' ');
+      return fullName || sender.username || undefined;
+    }
+    if (sender instanceof Api.Chat || sender instanceof Api.Channel)
+      return sender.title || undefined;
+    return undefined;
   }
 
   /**

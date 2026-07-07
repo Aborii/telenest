@@ -944,6 +944,227 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('enriched dialog fields', () => {
+    /** A GramJS dialog-like fixture carrying only the fields mapDialog reads. */
+    function aDialog(overrides: Record<string, unknown> = {}): unknown {
+      return {
+        isChannel: false,
+        isGroup: false,
+        isUser: true,
+        id: bigInt('42'),
+        title: 'Ada',
+        name: '',
+        unreadCount: 0,
+        pinned: false,
+        ...overrides,
+      };
+    }
+
+    it('maps last-message preview and date from the dialog message', async () => {
+      const mock = createMockClient({
+        getDialogs: jest
+          .fn()
+          .mockResolvedValue([
+            aDialog({ message: { message: 'see you', date: 1700000123 } }),
+          ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.lastMessagePreview).toBe('see you');
+      expect(dialog?.lastMessageDate).toBe(1700000123);
+    });
+
+    it('omits the preview for a text-less last message but keeps the date', async () => {
+      const mock = createMockClient({
+        getDialogs: jest
+          .fn()
+          .mockResolvedValue([aDialog({ message: { message: '', date: 5 } })]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.lastMessagePreview).toBeUndefined();
+      expect(dialog?.lastMessageDate).toBe(5);
+    });
+
+    it('reports muted true when muteUntil is in the future', async () => {
+      const future = Math.floor(Date.now() / 1000) + 3600;
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              notifySettings: asEntity(Api.PeerNotifySettings, {
+                muteUntil: future,
+              }),
+            },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.muted).toBe(true);
+    });
+
+    it('reports muted false for a past or unset muteUntil', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              notifySettings: asEntity(Api.PeerNotifySettings, { muteUntil: 1 }),
+            },
+          }),
+          aDialog({
+            dialog: { notifySettings: asEntity(Api.PeerNotifySettings, {}) },
+          }),
+        ]),
+      });
+      const [past, unset] = await createAdapter(mock).getDialogs();
+      expect(past?.muted).toBe(false);
+      expect(unset?.muted).toBe(false);
+    });
+
+    it('leaves muted undefined when the dialog carries no notify settings', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([aDialog()]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.muted).toBeUndefined();
+    });
+
+    it('flags hasPhoto from a non-empty entity photo (and false for empty)', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            entity: asEntity(Api.User, {
+              photo: asEntity(Api.UserProfilePhoto, {}),
+            }),
+          }),
+          aDialog({
+            entity: asEntity(Api.User, {
+              photo: asEntity(Api.UserProfilePhotoEmpty, {}),
+            }),
+          }),
+        ]),
+      });
+      const [withPhoto, without] = await createAdapter(mock).getDialogs();
+      expect(withPhoto?.hasPhoto).toBe(true);
+      expect(without?.hasPhoto).toBe(false);
+    });
+
+    it('leaves hasPhoto undefined when the entity is unresolved', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([aDialog()]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.hasPhoto).toBeUndefined();
+    });
+  });
+
+  describe('enriched message fields', () => {
+    /** A GramJS message-like fixture with an overridable extra field set. */
+    function aMsg(extra: Record<string, unknown> = {}): unknown {
+      return {
+        id: 1,
+        peerId: new Api.PeerUser({ userId: bigInt('1001') }),
+        message: 'hi',
+        date: 1700000000,
+        out: false,
+        senderId: bigInt('1001'),
+        ...extra,
+      };
+    }
+
+    it('maps replyToMsgId from a message reply header', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({ replyTo: asEntity(Api.MessageReplyHeader, { replyToMsgId: 7 }) }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.replyToMsgId).toBe(7);
+    });
+
+    it('leaves replyToMsgId undefined for a non-reply message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.replyToMsgId).toBeUndefined();
+    });
+
+    it('flags edited with the edit date when a message was edited', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ editDate: 1700000500 })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.edited).toBe(true);
+      expect(message?.editDate).toBe(1700000500);
+    });
+
+    it('leaves edited/editDate unset for an unedited message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.edited).toBeUndefined();
+      expect(message?.editDate).toBeUndefined();
+    });
+
+    it('maps message media into a GramMediaInfo descriptor', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ media: documentMedia() })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.media).toMatchObject({
+        mimeType: 'video/mp4',
+        size: 1_048_576,
+      });
+    });
+
+    it('leaves media undefined for a text-only message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.media).toBeUndefined();
+    });
+
+    it('derives senderName from a resolved user sender', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            sender: asEntity(Api.User, {
+              firstName: 'Ada',
+              lastName: 'Lovelace',
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.senderName).toBe('Ada Lovelace');
+    });
+
+    it('falls back to the username, then a channel/chat title', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({ sender: asEntity(Api.User, { username: 'ada' }) }),
+          aMsg({ sender: asEntity(Api.Channel, { title: 'My Channel' }) }),
+        ]),
+      });
+      const [byUsername, byTitle] = await createAdapter(mock).getMessages('me');
+      expect(byUsername?.senderName).toBe('ada');
+      expect(byTitle?.senderName).toBe('My Channel');
+    });
+
+    it('leaves senderName undefined when the sender is unresolved', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.senderName).toBeUndefined();
+    });
+  });
+
   describe('exportSession', () => {
     it('returns a string for an empty session', () => {
       const adapter = createAdapter(createMockClient());

@@ -80,6 +80,29 @@ export interface GramDialog {
   unreadCount: number;
   /** Whether the dialog is pinned to the top of the list. */
   pinned: boolean;
+  /**
+   * Plain-text body of the dialog's most recent message, for a list preview.
+   * Omitted when the last message has no text (service/media-only) or is not
+   * available on the dialog object.
+   */
+  lastMessagePreview?: string;
+  /**
+   * Unix timestamp (seconds) of the dialog's most recent message, when
+   * available — used to sort/label the conversation list.
+   */
+  lastMessageDate?: number;
+  /**
+   * Whether the account has muted notifications for this dialog. `undefined`
+   * when the dialog object carries no notification settings (e.g. a hand-built
+   * fake); a `boolean` otherwise.
+   */
+  muted?: boolean;
+  /**
+   * Whether the peer has a (non-empty) profile/chat photo — a cheap hint that
+   * an avatar can be fetched. `undefined` when the peer entity is not resolved
+   * on the dialog object.
+   */
+  hasPhoto?: boolean;
 }
 
 /** Normalized Telegram message. */
@@ -105,6 +128,31 @@ export interface GramMessage {
    * this message's `peerId` and `id`. Service/empty media never counts.
    */
   hasMedia?: boolean;
+  /**
+   * Id of the message this one replies to, when it is a reply. Omitted for
+   * non-reply messages (and for replies to non-message targets, e.g. stories).
+   */
+  replyToMsgId?: number;
+  /**
+   * Whether the message has been edited. Present (and `true`) only when an
+   * {@link GramMessage.editDate} is set; omitted otherwise.
+   */
+  edited?: boolean;
+  /** Unix timestamp (seconds) of the last edit, when the message was edited. */
+  editDate?: number;
+  /**
+   * GramJS-free descriptor of the message's media, when it carries downloadable
+   * media that resolves to a file body. Omitted for text-only or service
+   * messages (and for media with no byte body, e.g. a web-page preview).
+   */
+  media?: GramMediaInfo;
+  /**
+   * Best-effort display name of the sender, populated **only** when GramJS has
+   * already resolved the sender entity on the message object (no extra network
+   * call is made to fetch it — that would risk `FLOOD_WAIT`). Omitted when the
+   * sender is unresolved; callers should fall back to {@link GramMessage.senderId}.
+   */
+  senderName?: string;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */

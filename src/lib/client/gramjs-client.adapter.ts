@@ -111,6 +111,13 @@ function streamRequestSize(neededBytes: number): number {
   return Math.min(size, STREAM_REQUEST_SIZE);
 }
 
+/**
+ * Private sentinel the connect-timeout timer rejects with, so the race's catch
+ * can distinguish a deadline from a genuine connect failure without matching on
+ * a message. Module-private — never surfaced to callers.
+ */
+const CONNECT_TIMEOUT = Symbol('gramjs-connect-timeout');
+
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
   /** Application api_id. */
@@ -135,18 +142,21 @@ export class GramJsClientAdapter implements IGramClient {
    * @param stringSession - The session instance, used to export the session
    *   string (the abstract `Session.save()` type erases the string return).
    * @param credentials - api_id / api_hash forwarded to `sendCode`.
+   * @param connectTimeoutMs - Optional per-attempt {@link connect} deadline; on
+   *   expiry the underlying client is disconnected and `connect` rejects.
    */
   public constructor(
     private readonly client: TelegramClient,
     private readonly stringSession: sessions.StringSession,
     private readonly credentials: ApiCredentials,
+    private readonly connectTimeoutMs?: number,
   ) {}
 
   /** {@inheritDoc IGramClient.connect} */
   public async connect(): Promise<void> {
     if (this._connected) return;
     try {
-      await this.client.connect();
+      await this.connectWithOptionalTimeout();
       this._connected = true;
     } catch (error) {
       throw this.toClientError(
@@ -154,6 +164,44 @@ export class GramJsClientAdapter implements IGramClient {
         'Failed to connect to Telegram.',
         'connect',
       );
+    }
+  }
+
+  /**
+   * Runs `client.connect()`, bounded by {@link connectTimeoutMs} when set. On
+   * timeout the underlying client is disconnected so the abandoned attempt
+   * cannot later resurrect a zombie connection, then a timeout error is thrown
+   * (wrapped into a `TelegramClientError` by the caller).
+   *
+   * @returns Resolves once connected.
+   * @throws {Error} On a connect failure, or a timeout when the deadline elapses.
+   */
+  private async connectWithOptionalTimeout(): Promise<void> {
+    if (!this.connectTimeoutMs || this.connectTimeoutMs <= 0) {
+      await this.client.connect();
+      return;
+    }
+
+    const timeoutMs = this.connectTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(CONNECT_TIMEOUT), timeoutMs);
+      // Never keep the process alive solely for this timer.
+      (timer as { unref?: () => void }).unref?.();
+    });
+
+    try {
+      await Promise.race([this.client.connect(), timeout]);
+    } catch (error) {
+      if (error === CONNECT_TIMEOUT) {
+        // ── Abort the still-pending attempt so it cannot flip `connected` true
+        //    after we have already given up. ────────────────────────────────
+        await this.client.disconnect().catch(() => undefined);
+        throw new Error(`Telegram connect timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -1477,8 +1525,10 @@ export function createGramJsClient(
     },
   );
 
-  return new GramJsClientAdapter(client, stringSession, {
-    apiId: options.apiId,
-    apiHash: options.apiHash,
-  });
+  return new GramJsClientAdapter(
+    client,
+    stringSession,
+    { apiId: options.apiId, apiHash: options.apiHash },
+    options.connectTimeoutMs,
+  );
 }

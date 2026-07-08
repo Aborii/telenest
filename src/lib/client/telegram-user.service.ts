@@ -50,6 +50,7 @@ import type {
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
+  GramMarkAsReadParams,
   GramMediaInfo,
   GramMediaRange,
   GramMessage,
@@ -305,8 +306,13 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
   /**
    * Fetches recent messages from a peer.
    *
+   * Supports two paging styles (never mix them): id bounds (`minId`/`maxId`)
+   * or a positioned window (`offsetId` + `addOffset`, negative `addOffset`
+   * slides toward newer messages). See {@link GramGetMessagesParams} for the
+   * window math and the GramJS `offsetId`+`minId` empty-result trap.
+   *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
-   * @param params - Optional limit / pagination bounds.
+   * @param params - Optional limit / pagination bounds / window position.
    * @returns The messages, newest first.
    * @throws {import('../common').TelegramClientError} On failure.
    */
@@ -621,12 +627,17 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    * Marks a peer's history as read (clears the unread badge).
    *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - Optional `maxId` to mark read only up to (and including)
+   *   that message id; omitted marks the whole dialog read.
    * @returns Resolves once acknowledged.
    * @throws {import('../common').TelegramClientError} On failure.
    */
-  public async markAsRead(peer: GramPeer): Promise<void> {
+  public async markAsRead(
+    peer: GramPeer,
+    params?: GramMarkAsReadParams,
+  ): Promise<void> {
     await this.ensureConnected();
-    return this.client.markAsRead(peer);
+    return this.client.markAsRead(peer, params);
   }
 
   /**

@@ -249,7 +249,13 @@ describe('TelegramUserService', () => {
     it('markAsRead forwards the peer', async () => {
       const client = createFakeClient();
       await new TelegramUserService(client).markAsRead('@g');
-      expect(client.markAsRead).toHaveBeenCalledWith('@g');
+      expect(client.markAsRead).toHaveBeenCalledWith('@g', undefined);
+    });
+
+    it('markAsRead forwards a maxId params object', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).markAsRead('@g', { maxId: 7 });
+      expect(client.markAsRead).toHaveBeenCalledWith('@g', { maxId: 7 });
     });
 
     it('pinMessage forwards peer, id and params', async () => {

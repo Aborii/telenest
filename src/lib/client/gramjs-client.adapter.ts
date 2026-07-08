@@ -52,6 +52,7 @@ import {
   type GramGetDialogsParams,
   type GramGetMessagesParams,
   type GramGetParticipantsParams,
+  type GramMarkAsReadParams,
   type GramMediaInfo,
   type GramMediaKind,
   type GramMediaRange,
@@ -422,6 +423,8 @@ export class GramJsClientAdapter implements IGramClient {
         limit: params.limit,
         minId: params.minId,
         maxId: params.maxId,
+        offsetId: params.offsetId,
+        addOffset: params.addOffset,
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
@@ -833,9 +836,21 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /** {@inheritDoc IGramClient.markAsRead} */
-  public async markAsRead(peer: GramPeer): Promise<void> {
+  public async markAsRead(
+    peer: GramPeer,
+    params: GramMarkAsReadParams = {},
+  ): Promise<void> {
     try {
-      await this.client.markAsRead(peer);
+      // ── maxId goes through the POSITIONAL `message` argument on purpose.
+      //    GramJS's MarkAsReadParams object has an inverted `clearMentions`
+      //    flag: passing any params object with a falsy `clearMentions` fires
+      //    an extra `messages.ReadMentions` RPC as a side effect. The
+      //    positional form sets maxId without that trap. ─────────────────────
+      if (params.maxId !== undefined) {
+        await this.client.markAsRead(peer, params.maxId);
+      } else {
+        await this.client.markAsRead(peer);
+      }
     } catch (error) {
       throw this.toClientError(error, 'Failed to mark as read.', 'markAsRead');
     }
@@ -988,6 +1003,9 @@ export class GramJsClientAdapter implements IGramClient {
 
     const lastMessage = dialog.message;
     const preview = lastMessage?.message;
+    // ── Read positions live on the raw TL dialog (same object the mute state
+    //    comes from), not on the GramJS wrapper or the peer entity. ──────────
+    const raw = dialog.dialog;
     return {
       id: dialog.id ? dialog.id.toString() : '',
       title: dialog.title ?? dialog.name ?? '',
@@ -998,6 +1016,12 @@ export class GramJsClientAdapter implements IGramClient {
       lastMessageDate: lastMessage?.date,
       muted: this.isDialogMuted(dialog),
       hasPhoto: this.entityHasPhoto(dialog.entity),
+      readInboxMaxId: raw?.readInboxMaxId,
+      readOutboxMaxId: raw?.readOutboxMaxId,
+      topMessageId: raw?.topMessage,
+      lastMessageOut: lastMessage ? Boolean(lastMessage.out) : undefined,
+      lastMessageSenderName: this.senderDisplayName(lastMessage?.sender),
+      lastMessageMediaKind: this.mapMediaInfo(lastMessage?.media)?.kind,
     };
   }
 
@@ -1108,6 +1132,8 @@ export class GramJsClientAdapter implements IGramClient {
       editDate,
       media: this.mapMediaInfo(message.media),
       senderName: this.senderDisplayName(message.sender),
+      // ── Album ids are random 64-bit values — stringify, never Number(). ───
+      groupedId: message.groupedId?.toString(),
     };
   }
 

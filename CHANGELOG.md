@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Each release also has full, auto-generated notes on the
 [GitHub Releases](https://github.com/Aborii/telenest/releases) page.
 
+## [Unreleased]
+
+### Added
+
+- Dialog read positions & last-message metadata: `GramDialog` now carries
+  `readInboxMaxId`, `readOutboxMaxId`, `topMessageId`, `lastMessageOut`,
+  `lastMessageSenderName`, and `lastMessageMediaKind` — the building blocks for
+  "open at first unread", outgoing read receipts, and rich list previews.
+- Album grouping: `GramMessage.groupedId` (decimal string) identifies messages
+  sent together as one media album.
+- Positioned history windows: `getMessages` accepts `offsetId` / `addOffset`
+  (negative `addOffset` slides toward newer messages — e.g. a window centered
+  on a dialog's `readInboxMaxId`).
+- Partial mark-as-read: `markAsRead(peer, { maxId })` marks a dialog read only
+  up to a message id (omitted params keep the whole-dialog behavior).
+
 ## [1.3.0] - 2026-06-25
 
 Conversations, broader inbound coverage, and telemetry — closing the v1.3 roadmap

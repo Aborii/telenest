@@ -30,6 +30,7 @@ import type {
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
+  GramMarkAsReadParams,
   GramMediaInfo,
   GramMediaRange,
   GramMessage,
@@ -172,8 +173,13 @@ export interface IGramClient {
   /**
    * Fetches recent messages from a peer.
    *
+   * Supports two paging styles (never mix them): id bounds (`minId`/`maxId`)
+   * or a positioned window (`offsetId` + `addOffset`, negative `addOffset`
+   * slides toward newer messages). See {@link GramGetMessagesParams} for the
+   * window math and the GramJS `offsetId`+`minId` empty-result trap.
+   *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
-   * @param params - Optional limit / pagination bounds.
+   * @param params - Optional limit / pagination bounds / window position.
    * @returns The messages, newest first.
    * @throws {import('../common').TelegramClientError} On failure.
    */
@@ -389,10 +395,12 @@ export interface IGramClient {
    * Marks a peer's history as read (clears the unread badge).
    *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - Optional `maxId` to mark read only up to (and including)
+   *   that message id; omitted marks the whole dialog read.
    * @returns Resolves once acknowledged.
    * @throws {import('../common').TelegramClientError} On failure.
    */
-  markAsRead(peer: GramPeer): Promise<void>;
+  markAsRead(peer: GramPeer, params?: GramMarkAsReadParams): Promise<void>;
 
   /**
    * Pins a message in a chat.

@@ -2048,7 +2048,7 @@ describe('GramJsClientAdapter', () => {
       expect(forwarded.map((m) => m.id)).toEqual([21]);
     });
 
-    it('getMessages forwards the positioned-window params', async () => {
+    it('getMessages forwards a positioned window WITHOUT undefined anchors', async () => {
       const mock = createMockClient({
         getMessages: jest.fn().mockResolvedValue([]),
       });
@@ -2057,13 +2057,38 @@ describe('GramJsClientAdapter', () => {
         offsetId: 100,
         addOffset: -21,
       });
+      // ── minId/maxId must be OMITTED, not passed as undefined: passing them
+      //    undefined overrides GramJS's default 0 and makes
+      //    `offsetId = Math.max(offsetId, maxId)` evaluate to NaN, discarding
+      //    the window. ─────────────────────────────────────────────────────
       expect(mock.getMessages).toHaveBeenCalledWith('me', {
         limit: 40,
-        minId: undefined,
-        maxId: undefined,
         offsetId: 100,
         addOffset: -21,
       });
+      const forwarded = mock.getMessages.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect('minId' in forwarded).toBe(false);
+      expect('maxId' in forwarded).toBe(false);
+    });
+
+    it('getMessages forwards a bounded older page via maxId only', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).getMessages('me', { limit: 30, maxId: 500 });
+      expect(mock.getMessages).toHaveBeenCalledWith('me', {
+        limit: 30,
+        maxId: 500,
+      });
+      const forwarded = mock.getMessages.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect('offsetId' in forwarded).toBe(false);
+      expect('minId' in forwarded).toBe(false);
     });
 
     it('markAsRead delegates to the client', async () => {

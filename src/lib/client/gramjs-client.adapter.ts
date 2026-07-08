@@ -419,12 +419,19 @@ export class GramJsClientAdapter implements IGramClient {
     params: GramGetMessagesParams = {},
   ): Promise<GramMessage[]> {
     try {
+      // ── Only forward the paging anchors that are actually set. Passing a
+      //    key as `undefined` OVERRIDES GramJS's own defaults (maxId/offsetId
+      //    default to 0) via the internal Object.assign, and its
+      //    `offsetId = Math.max(offsetId, maxId)` then evaluates to NaN
+      //    (which serializes as offsetId 0) — silently discarding a positioned
+      //    window and returning the newest slice instead. Omit undefined keys
+      //    so the library defaults survive. ──────────────────────────────────
       const messages = await this.client.getMessages(peer, {
         limit: params.limit,
-        minId: params.minId,
-        maxId: params.maxId,
-        offsetId: params.offsetId,
-        addOffset: params.addOffset,
+        ...(params.minId !== undefined && { minId: params.minId }),
+        ...(params.maxId !== undefined && { maxId: params.maxId }),
+        ...(params.offsetId !== undefined && { offsetId: params.offsetId }),
+        ...(params.addOffset !== undefined && { addOffset: params.addOffset }),
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {

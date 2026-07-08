@@ -531,14 +531,17 @@ fetch is a centered window around the dialog's `readInboxMaxId`:
 
 ```ts
 const dialogs = await this.user.getDialogs({ limit: 50 });
-const dialog = dialogs.find((d) => d.id === peerId);
+const anchor = dialogs.find((d) => d.id === peerId)?.readInboxMaxId;
 
-// ~20 newer + the anchor + ~19 older (limit 40), newest first:
-const around = await this.user.getMessages(peerId, {
-  limit: 40,
-  offsetId: dialog!.readInboxMaxId,
-  addOffset: -(Math.floor(40 / 2) + 1),
-});
+// ~20 newer + the anchor + ~19 older (limit 40), newest first. Guard the
+// anchor: `offsetId: undefined` silently degenerates to a newest-page fetch.
+const around = anchor
+  ? await this.user.getMessages(peerId, {
+      limit: 40,
+      offsetId: anchor,
+      addOffset: -(Math.floor(40 / 2) + 1),
+    })
+  : await this.user.getMessages(peerId, { limit: 40 }); // no read marker → newest page
 ```
 
 Two GramJS sharp edges (shape requests around them, don't fight them):

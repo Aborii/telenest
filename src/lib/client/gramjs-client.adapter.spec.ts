@@ -1054,6 +1054,86 @@ describe('GramJsClientAdapter', () => {
       const [dialog] = await createAdapter(mock).getDialogs();
       expect(dialog?.hasPhoto).toBeUndefined();
     });
+
+    it('maps read positions and the top message id from the raw TL dialog', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: { readInboxMaxId: 100, readOutboxMaxId: 90, topMessage: 120 },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.readInboxMaxId).toBe(100);
+      expect(dialog?.readOutboxMaxId).toBe(90);
+      expect(dialog?.topMessageId).toBe(120);
+    });
+
+    it('leaves read positions undefined when the raw TL dialog is absent', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([aDialog()]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.readInboxMaxId).toBeUndefined();
+      expect(dialog?.readOutboxMaxId).toBeUndefined();
+      expect(dialog?.topMessageId).toBeUndefined();
+    });
+
+    it('maps lastMessageOut from the last message direction', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ message: { message: 'mine', date: 1, out: true } }),
+          aDialog({ message: { message: 'theirs', date: 2 } }),
+        ]),
+      });
+      const [outgoing, incoming] = await createAdapter(mock).getDialogs();
+      expect(outgoing?.lastMessageOut).toBe(true);
+      expect(incoming?.lastMessageOut).toBe(false);
+    });
+
+    it('leaves lastMessageOut undefined when the dialog has no last message', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([aDialog()]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.lastMessageOut).toBeUndefined();
+    });
+
+    it('derives lastMessageSenderName from an already-resolved sender only', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            message: {
+              message: 'hi',
+              date: 1,
+              sender: asEntity(Api.User, { firstName: 'Ada', lastName: 'L' }),
+            },
+          }),
+          aDialog({ message: { message: 'hi', date: 2 } }),
+        ]),
+      });
+      const [resolved, unresolved] = await createAdapter(mock).getDialogs();
+      expect(resolved?.lastMessageSenderName).toBe('Ada L');
+      expect(unresolved?.lastMessageSenderName).toBeUndefined();
+    });
+
+    it('maps lastMessageMediaKind from the last message media (undefined for text)', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            message: {
+              message: '',
+              date: 1,
+              media: asEntity(Api.MessageMediaPhoto, {}),
+            },
+          }),
+          aDialog({ message: { message: 'text only', date: 2 } }),
+        ]),
+      });
+      const [photo, textOnly] = await createAdapter(mock).getDialogs();
+      expect(photo?.lastMessageMediaKind).toBe('photo');
+      expect(textOnly?.lastMessageMediaKind).toBeUndefined();
+    });
   });
 
   describe('enriched message fields', () => {
@@ -1162,6 +1242,26 @@ describe('GramJsClientAdapter', () => {
       });
       const [message] = await createAdapter(mock).getMessages('me');
       expect(message?.senderName).toBeUndefined();
+    });
+
+    it('stringifies a 64-bit album groupedId (never Number())', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([
+            aMsg({ groupedId: bigInt('13537855237972033634') }),
+          ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.groupedId).toBe('13537855237972033634');
+    });
+
+    it('leaves groupedId undefined for a non-album message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.groupedId).toBeUndefined();
     });
   });
 
@@ -1948,12 +2048,69 @@ describe('GramJsClientAdapter', () => {
       expect(forwarded.map((m) => m.id)).toEqual([21]);
     });
 
+    it('getMessages forwards a positioned window WITHOUT undefined anchors', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).getMessages('me', {
+        limit: 40,
+        offsetId: 100,
+        addOffset: -21,
+      });
+      // ── minId/maxId must be OMITTED, not passed as undefined: passing them
+      //    undefined overrides GramJS's default 0 and makes
+      //    `offsetId = Math.max(offsetId, maxId)` evaluate to NaN, discarding
+      //    the window. ─────────────────────────────────────────────────────
+      expect(mock.getMessages).toHaveBeenCalledWith('me', {
+        limit: 40,
+        offsetId: 100,
+        addOffset: -21,
+      });
+      const forwarded = mock.getMessages.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect('minId' in forwarded).toBe(false);
+      expect('maxId' in forwarded).toBe(false);
+    });
+
+    it('getMessages forwards a bounded older page via maxId only', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).getMessages('me', { limit: 30, maxId: 500 });
+      expect(mock.getMessages).toHaveBeenCalledWith('me', {
+        limit: 30,
+        maxId: 500,
+      });
+      const forwarded = mock.getMessages.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
+      expect('offsetId' in forwarded).toBe(false);
+      expect('minId' in forwarded).toBe(false);
+    });
+
     it('markAsRead delegates to the client', async () => {
       const mock = createMockClient({
         markAsRead: jest.fn().mockResolvedValue(true),
       });
       await createAdapter(mock).markAsRead('@g');
       expect(mock.markAsRead).toHaveBeenCalledWith('@g');
+      // ── Whole-dialog mode must stay a single-arg call. ──────────────────────
+      expect(mock.markAsRead.mock.calls[0]).toHaveLength(1);
+    });
+
+    it('markAsRead passes maxId positionally (never a params object)', async () => {
+      const mock = createMockClient({
+        markAsRead: jest.fn().mockResolvedValue(true),
+      });
+      await createAdapter(mock).markAsRead('@g', { maxId: 5 });
+      // ── Positional form avoids GramJS's inverted `clearMentions` flag, which
+      //    would fire an extra messages.ReadMentions RPC for any params object
+      //    with a falsy clearMentions. Exactly two args, id as the second. ────
+      expect(mock.markAsRead).toHaveBeenCalledWith('@g', 5);
+      expect(mock.markAsRead.mock.calls[0]).toHaveLength(2);
     });
 
     it('pinMessage forwards notify (default false)', async () => {

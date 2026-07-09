@@ -103,6 +103,45 @@ export interface GramDialog {
    * on the dialog object.
    */
   hasPhoto?: boolean;
+  /**
+   * Id of the last **incoming** message the account has read in this dialog.
+   * Messages with a greater id are unread — the anchor for "open at first
+   * unread". `undefined` when the raw TL dialog is not present on the object
+   * (e.g. a hand-built fake).
+   */
+  readInboxMaxId?: number;
+  /**
+   * Id of the last **outgoing** message the peer has read — drives read
+   * receipts (an outgoing message with `id <= readOutboxMaxId` has been seen).
+   * `undefined` when the raw TL dialog is not present on the object.
+   */
+  readOutboxMaxId?: number;
+  /**
+   * Id of the newest message in the dialog. Lets consumers detect when the
+   * latest slice of history is loaded (end of newer-direction paging).
+   * `undefined` when the raw TL dialog is not present on the object.
+   */
+  topMessageId?: number;
+  /**
+   * Whether the dialog's most recent message was sent by the logged-in
+   * account (for a "You:" list-preview prefix). `undefined` when the dialog
+   * carries no last message.
+   */
+  lastMessageOut?: boolean;
+  /**
+   * Best-effort display name of the last message's sender, populated **only**
+   * when GramJS already resolved the sender entity on the message (no extra
+   * network call — that would risk `FLOOD_WAIT`). `undefined` when the sender
+   * is unresolved or there is no last message.
+   */
+  lastMessageSenderName?: string;
+  /**
+   * Media kind of the dialog's most recent message, for a list-preview
+   * placeholder ("Photo", "Video", …) when the message has no text.
+   * `undefined` for text-only/service last messages or when no last message
+   * is available.
+   */
+  lastMessageMediaKind?: GramMediaKind;
 }
 
 /** Normalized Telegram message. */
@@ -153,6 +192,13 @@ export interface GramMessage {
    * sender is unresolved; callers should fall back to {@link GramMessage.senderId}.
    */
   senderName?: string;
+  /**
+   * Media-group (album) id as a decimal string — messages sent together as one
+   * album share the same value, letting consumers collapse them into a single
+   * grouped bubble. A **string** because the id is a random 64-bit value that
+   * can exceed `Number.MAX_SAFE_INTEGER`. Omitted for non-album messages.
+   */
+  groupedId?: string;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */
@@ -282,13 +328,53 @@ export interface GramGetDialogsParams {
   archived?: boolean;
 }
 
-/** Parameters for fetching messages from a peer. */
+/**
+ * Parameters for fetching messages from a peer.
+ *
+ * Two paging styles are supported and should not be mixed:
+ *
+ * - **Bounded** — `minId` / `maxId` return messages strictly inside the id
+ *   bounds, newest-first (the classic "older than X" page).
+ * - **Positioned window** — `offsetId` (+ `addOffset`) anchors the page at a
+ *   message id and shifts the window: `addOffset: 0` returns the `limit`
+ *   messages **older** than the anchor; a **negative** `addOffset` slides the
+ *   window toward **newer** messages (e.g. `offsetId: X, addOffset:
+ *   -(limit / 2 + 1), limit` yields a window centered on `X`).
+ *
+ * GramJS sharp edges (do not fight these — shape the request around them):
+ * - `maxId` is folded into `offsetId` via `Math.max(offsetId, maxId)`; passing
+ *   both is redundant at best.
+ * - Combining `offsetId` with `minId` returns an **empty result** whenever
+ *   `offsetId - minId <= 1` (an internal early-exit guard). Never pair them —
+ *   derive exclusivity from the `addOffset` math instead.
+ */
 export interface GramGetMessagesParams {
   /** Maximum number of messages to return. */
   limit?: number;
   /** Only return messages with an id greater than this (for pagination). */
   minId?: number;
   /** Only return messages with an id less than this (for pagination). */
+  maxId?: number;
+  /**
+   * Anchor message id for a positioned window (exclusive; pairs with
+   * {@link GramGetMessagesParams.addOffset}). See the interface docs for the
+   * window math and the GramJS `minId` interaction trap.
+   */
+  offsetId?: number;
+  /**
+   * Window shift relative to the anchor's position; `0` = the messages just
+   * older than `offsetId`, negative values include newer messages.
+   * Meaningless without {@link GramGetMessagesParams.offsetId}.
+   */
+  addOffset?: number;
+}
+
+/** Parameters for marking a dialog as read. */
+export interface GramMarkAsReadParams {
+  /**
+   * Mark read only up to (and including) this message id. Omitted = mark the
+   * entire dialog read up to its latest message.
+   */
   maxId?: number;
 }
 

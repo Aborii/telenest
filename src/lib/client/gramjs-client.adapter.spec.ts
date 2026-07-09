@@ -680,7 +680,14 @@ describe('GramJsClientAdapter', () => {
       ['AUTH_TOKEN_ALREADY_ACCEPTED', 'TOKEN_ALREADY_ACCEPTED'],
       ['AUTH_TOKEN_INVALID', 'TOKEN_INVALID'],
       ['AUTH_TOKEN_INVALIDX', 'TOKEN_INVALID'],
+      // ── The full definitive auth-loss set must classify as NOT_AUTHORIZED
+      //    (isAuthorizationLostError keys off it for session teardown). ──────
       ['AUTH_KEY_UNREGISTERED', 'NOT_AUTHORIZED'],
+      ['AUTH_KEY_INVALID', 'NOT_AUTHORIZED'],
+      ['SESSION_REVOKED', 'NOT_AUTHORIZED'],
+      ['SESSION_EXPIRED', 'NOT_AUTHORIZED'],
+      ['USER_DEACTIVATED', 'NOT_AUTHORIZED'],
+      ['USER_DEACTIVATED_BAN', 'NOT_AUTHORIZED'],
     ])('maps %s to auth code %s', async (rpcMessage, expectedCode) => {
       const invoke = jest.fn().mockRejectedValue(new Error(rpcMessage));
       const adapter = createAdapter(createMockClient({ invoke }));

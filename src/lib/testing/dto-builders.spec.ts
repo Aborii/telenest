@@ -8,6 +8,7 @@
  */
 
 import {
+  aGramAcceptedAuthorization,
   aGramChatInfo,
   aGramDialog,
   aGramMediaInfo,
@@ -146,6 +147,29 @@ describe('DTO builders', () => {
       expect(doc.mimeType).toBe('application/pdf');
       // Untouched fields keep their defaults.
       expect(doc.size).toBe(1_048_576);
+    });
+  });
+
+  describe('aGramAcceptedAuthorization', () => {
+    it('returns a QR-authorized web session by default', () => {
+      expect(aGramAcceptedAuthorization()).toEqual({
+        deviceModel: 'Chrome',
+        platform: 'Windows',
+        appName: 'Telegram Web',
+        appVersion: '2.2',
+        dateCreated: 1_700_000_000,
+      });
+    });
+
+    it('applies overrides (e.g. a desktop session)', () => {
+      const desktop = aGramAcceptedAuthorization({
+        appName: 'Telegram Desktop',
+        platform: 'macOS',
+      });
+      expect(desktop.appName).toBe('Telegram Desktop');
+      expect(desktop.platform).toBe('macOS');
+      // Untouched fields keep their defaults.
+      expect(desktop.deviceModel).toBe('Chrome');
     });
   });
 });

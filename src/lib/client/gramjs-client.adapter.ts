@@ -32,6 +32,7 @@ import {
 import type { Dialog } from 'telegram/tl/custom/dialog';
 
 import {
+  TELEGRAM_AUTH_LOSS_RPC_CODES,
   TelegramAuthError,
   TelegramClientError,
   type TelegramAuthErrorCode,
@@ -1634,7 +1635,14 @@ export class GramJsClientAdapter implements IGramClient {
     // ── Any other AUTH_TOKEN_* (e.g. AUTH_TOKEN_INVALID / _INVALIDX) is a
     //    malformed-token rejection. ─────────────────────────────────────────
     else if (message.startsWith('AUTH_TOKEN')) code = 'TOKEN_INVALID';
-    else if (message === 'AUTH_KEY_UNREGISTERED') code = 'NOT_AUTHORIZED';
+    // ── Every definitive auth-loss code (revoked/expired/deactivated session)
+    //    maps to NOT_AUTHORIZED so isAuthorizationLostError classifies auth-
+    //    path failures the same way it classifies TelegramClientError.rpcCode
+    //    on the non-auth paths. ─────────────────────────────────────────────
+    else if (
+      (TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message)
+    )
+      code = 'NOT_AUTHORIZED';
     else if (message.startsWith('FLOOD_WAIT')) {
       // ── Fallback for a non-typed error whose message embeds FLOOD_WAIT_N. ──
       code = 'FLOOD_WAIT';

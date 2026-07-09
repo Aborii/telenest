@@ -42,6 +42,7 @@ function createFakeClient(): IGramClient {
     signInWithCode: jest.fn(),
     signInWithPassword: jest.fn(),
     signInWithQrCode: jest.fn(),
+    acceptLoginToken: jest.fn(),
     signInAsBot: jest.fn(),
     updateTwoFactor: jest.fn(),
     logOut: jest.fn(),

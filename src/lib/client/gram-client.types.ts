@@ -297,6 +297,25 @@ export interface GramQrSignInCallbacks {
 }
 
 /**
+ * The remote session authorized by
+ * {@link import('./gram-client.interface').IGramClient.acceptLoginToken} — a
+ * safe-to-log summary of Telegram's `Authorization` for the newly accepted
+ * device. Carries no secrets (no auth key and no token material).
+ */
+export interface GramAcceptedAuthorization {
+  /** Device/browser model reported by the accepted session (e.g. `"Chrome"`). */
+  deviceModel: string;
+  /** OS/platform reported by the accepted session (e.g. `"Windows"`). */
+  platform: string;
+  /** Application name of the accepted session (e.g. `"Telegram Web"`). */
+  appName: string;
+  /** Application version of the accepted session. */
+  appVersion: string;
+  /** Unix timestamp (seconds) at which the authorization was created. */
+  dateCreated: number;
+}
+
+/**
  * Input for
  * {@link import('./gram-client.interface').IGramClient.updateTwoFactor}.
  *

@@ -629,6 +629,88 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('acceptLoginToken', () => {
+    /** A base64url token whose decoded bytes are asserted against `invoke`. */
+    const TOKEN_BYTES = Buffer.from('login-token-bytes');
+    const TOKEN = TOKEN_BYTES.toString('base64url');
+
+    /** An `Api.Authorization` fixture carrying the fields the adapter maps. */
+    function anAuthorization(): Api.Authorization {
+      return asEntity(Api.Authorization, {
+        deviceModel: 'Chrome',
+        platform: 'Windows',
+        appName: 'Telegram Web',
+        appVersion: '2.2 K',
+        dateCreated: 1_700_000_000,
+      });
+    }
+
+    it('decodes the base64url token and maps the accepted authorization', async () => {
+      const invoke = jest.fn().mockResolvedValue(anAuthorization());
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const accepted = await adapter.acceptLoginToken(TOKEN);
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+      const request = invoke.mock.calls[0][0] as Api.auth.AcceptLoginToken;
+      expect(request).toBeInstanceOf(Api.auth.AcceptLoginToken);
+      expect(Buffer.from(request.token).equals(TOKEN_BYTES)).toBe(true);
+      expect(accepted).toEqual({
+        deviceModel: 'Chrome',
+        platform: 'Windows',
+        appName: 'Telegram Web',
+        appVersion: '2.2 K',
+        dateCreated: 1_700_000_000,
+      });
+    });
+
+    it('rejects an empty token locally without calling Telegram', async () => {
+      const invoke = jest.fn();
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = await adapter.acceptLoginToken('').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect((error as TelegramAuthError).code).toBe('TOKEN_INVALID');
+      expect(invoke).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['AUTH_TOKEN_EXPIRED', 'TOKEN_EXPIRED'],
+      ['AUTH_TOKEN_ALREADY_ACCEPTED', 'TOKEN_ALREADY_ACCEPTED'],
+      ['AUTH_TOKEN_INVALID', 'TOKEN_INVALID'],
+      ['AUTH_TOKEN_INVALIDX', 'TOKEN_INVALID'],
+      ['AUTH_KEY_UNREGISTERED', 'NOT_AUTHORIZED'],
+    ])('maps %s to auth code %s', async (rpcMessage, expectedCode) => {
+      const invoke = jest.fn().mockRejectedValue(new Error(rpcMessage));
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = await adapter
+        .acceptLoginToken(TOKEN)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect((error as TelegramAuthError).code).toBe(expectedCode);
+    });
+
+    it('maps a flood wait to FLOOD_WAIT with the retry delay', async () => {
+      const flood = new errors.FloodWaitError({
+        request: new Api.auth.AcceptLoginToken({ token: TOKEN_BYTES }),
+        capture: 30,
+      });
+      const invoke = jest.fn().mockRejectedValue(flood);
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = await adapter
+        .acceptLoginToken(TOKEN)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect((error as TelegramAuthError).code).toBe('FLOOD_WAIT');
+      expect((error as TelegramAuthError).retryAfterSeconds).toBe(30);
+    });
+  });
+
   describe('signInAsBot', () => {
     it('passes the bot token and maps the returned bot user', async () => {
       const signInBot = jest

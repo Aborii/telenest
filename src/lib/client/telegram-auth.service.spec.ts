@@ -42,6 +42,7 @@ function createFakeClient(
       .mockResolvedValue({ status: 'authorized', user: FAKE_USER }),
     signInWithPassword: jest.fn().mockResolvedValue(FAKE_USER),
     signInWithQrCode: jest.fn().mockResolvedValue(FAKE_USER),
+    acceptLoginToken: jest.fn(),
     signInAsBot: jest.fn().mockResolvedValue(FAKE_USER),
     updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),

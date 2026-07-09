@@ -42,6 +42,7 @@ import {
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
+  type GramAcceptedAuthorization,
   type GramChatAction,
   type GramChatActionEvent,
   type GramChatInfo,
@@ -347,6 +348,29 @@ export class GramJsClientAdapter implements IGramClient {
           { cause: error },
         );
       throw this.toAuthError(capturedError ?? error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.acceptLoginToken} */
+  public async acceptLoginToken(
+    token: string,
+  ): Promise<GramAcceptedAuthorization> {
+    // ── `Buffer.from(…, 'base64url')` silently skips illegal characters, so an
+    //    empty or garbage string would reach Telegram as zero bytes and come
+    //    back as a generic error; reject it locally with the precise code. ────
+    const bytes = Buffer.from(token, 'base64url');
+    if (bytes.length === 0)
+      throw new TelegramAuthError(
+        'TOKEN_INVALID',
+        'The QR login token must be a non-empty base64url string.',
+      );
+    try {
+      const authorization = await this.client.invoke(
+        new Api.auth.AcceptLoginToken({ token: bytes }),
+      );
+      return this.mapAcceptedAuthorization(authorization);
+    } catch (error) {
+      throw this.toAuthError(error);
     }
   }
 
@@ -995,6 +1019,26 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /**
+   * Maps a GramJS {@link Api.Authorization} (the session just authorized via
+   * `auth.acceptLoginToken`) into a {@link GramAcceptedAuthorization}.
+   *
+   * @param authorization - The GramJS authorization to map.
+   * @returns The normalized, secret-free DTO.
+   * @throws Never.
+   */
+  private mapAcceptedAuthorization(
+    authorization: Api.Authorization,
+  ): GramAcceptedAuthorization {
+    return {
+      deviceModel: authorization.deviceModel,
+      platform: authorization.platform,
+      appName: authorization.appName,
+      appVersion: authorization.appVersion,
+      dateCreated: authorization.dateCreated,
+    };
+  }
+
+  /**
    * Maps a GramJS {@link Dialog} into a {@link GramDialog}.
    *
    * @param dialog - The GramJS dialog to map.
@@ -1584,6 +1628,13 @@ export class GramJsClientAdapter implements IGramClient {
     else if (message.startsWith('PHONE_CODE')) code = 'CODE_INVALID';
     else if (message === 'PASSWORD_HASH_INVALID') code = 'PASSWORD_INVALID';
     else if (message === 'SESSION_PASSWORD_NEEDED') code = 'PASSWORD_REQUIRED';
+    else if (message === 'AUTH_TOKEN_EXPIRED') code = 'TOKEN_EXPIRED';
+    else if (message === 'AUTH_TOKEN_ALREADY_ACCEPTED')
+      code = 'TOKEN_ALREADY_ACCEPTED';
+    // ── Any other AUTH_TOKEN_* (e.g. AUTH_TOKEN_INVALID / _INVALIDX) is a
+    //    malformed-token rejection. ─────────────────────────────────────────
+    else if (message.startsWith('AUTH_TOKEN')) code = 'TOKEN_INVALID';
+    else if (message === 'AUTH_KEY_UNREGISTERED') code = 'NOT_AUTHORIZED';
     else if (message.startsWith('FLOOD_WAIT')) {
       // ── Fallback for a non-typed error whose message embeds FLOOD_WAIT_N. ──
       code = 'FLOOD_WAIT';

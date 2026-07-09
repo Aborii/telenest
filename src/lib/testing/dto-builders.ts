@@ -29,11 +29,14 @@
  * - aGramDialog: Builds a {@link GramDialog} (a one-to-one user conversation).
  * - aGramChatInfo: Builds a {@link GramChatInfo} (extended group info).
  * - aGramMediaInfo: Builds a {@link GramMediaInfo} (a streamable video).
+ * - aGramAcceptedAuthorization: Builds a {@link GramAcceptedAuthorization}
+ *   (a freshly accepted QR-login web session).
  */
 
 import {
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
+  type GramAcceptedAuthorization,
   type GramChatInfo,
   type GramDialog,
   type GramMediaInfo,
@@ -165,6 +168,32 @@ export function aGramMediaInfo(
     width: 1280,
     height: 720,
     supportsStreaming: true,
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a representative {@link GramAcceptedAuthorization}. The defaults
+ * describe a freshly QR-authorized web session; pass `overrides` to model other
+ * devices or apps.
+ *
+ * @param overrides - Fields to replace on the default authorization.
+ * @returns A fully-typed {@link GramAcceptedAuthorization}.
+ * @throws Never.
+ * @example
+ * ```ts
+ * const desktop = aGramAcceptedAuthorization({ appName: 'Telegram Desktop' });
+ * ```
+ */
+export function aGramAcceptedAuthorization(
+  overrides: Partial<GramAcceptedAuthorization> = {},
+): GramAcceptedAuthorization {
+  return {
+    deviceModel: 'Chrome',
+    platform: 'Windows',
+    appName: 'Telegram Web',
+    appVersion: '2.2',
+    dateCreated: 1_700_000_000,
     ...overrides,
   };
 }

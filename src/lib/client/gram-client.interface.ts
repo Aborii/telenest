@@ -22,6 +22,7 @@
  */
 
 import type {
+  GramAcceptedAuthorization,
   GramChatActionEvent,
   GramChatInfo,
   GramDeletedMessages,
@@ -126,6 +127,28 @@ export interface IGramClient {
    *   account is scanned without an `onPassword` callback (`PASSWORD_REQUIRED`).
    */
   signInWithQrCode(callbacks: GramQrSignInCallbacks): Promise<GramUser>;
+
+  /**
+   * Accepts a QR login token exported by ANOTHER, not-yet-authorized client,
+   * authorizing that client as this account. This is the reverse of
+   * {@link IGramClient.signInWithQrCode}: there, this session is the one being
+   * authorized; here, this already-authorized session plays the role of the
+   * "phone that scans the QR code" and approves someone else's token.
+   *
+   * Telegram rotates export tokens roughly every 30 seconds — always pass the
+   * most recently issued token.
+   *
+   * @param token - The login token, base64url-encoded: the payload of the
+   *   other client's `tg://login?token=…` deep link (the same encoding as
+   *   {@link import('./gram-client.types').GramQrToken.token}).
+   * @returns A safe-to-log summary of the newly authorized session.
+   * @throws {import('../common').TelegramAuthError} `TOKEN_EXPIRED` when the
+   *   token rotated or expired before acceptance, `TOKEN_ALREADY_ACCEPTED` when
+   *   it was accepted before, `TOKEN_INVALID` when it is empty or malformed,
+   *   `FLOOD_WAIT` on rate limit, `NOT_AUTHORIZED` when this session is not
+   *   signed in.
+   */
+  acceptLoginToken(token: string): Promise<GramAcceptedAuthorization>;
 
   /**
    * Signs in as a bot using a BotFather token over the MTProto transport.

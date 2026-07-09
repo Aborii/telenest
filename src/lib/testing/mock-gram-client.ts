@@ -44,6 +44,7 @@ import type { IGramClient } from '../client/gram-client.interface';
 import { GRAM_SIGN_IN_STATUSES } from '../client/gram-client.types';
 import { TELEGRAM_GRAM_CLIENT } from '../client/telegram-client.constants';
 import {
+  aGramAcceptedAuthorization,
   aGramChatInfo,
   aGramMediaInfo,
   aGramMessage,
@@ -58,7 +59,8 @@ import {
  * `download*` calls resolve representative buffers, `getMediaInfo` resolves a
  * representative video descriptor, `streamMedia` yields one chunk, `getFullChat`
  * resolves a representative group, the alternative sign-ins (`signInWithQrCode`,
- * `signInAsBot`) resolve a representative account, and the void calls
+ * `signInAsBot`) resolve a representative account, `acceptLoginToken` resolves
+ * a representative accepted web session, and the void calls
  * (`join`/`leaveChannel`, `deleteMessages`, `markAsRead`, `pinMessage`,
  * `updateTwoFactor`) resolve. Pass `overrides` to change the behaviour of any
  * method per test.
@@ -97,6 +99,9 @@ export function createMockGramClient(
     }),
     signInWithPassword: jest.fn().mockResolvedValue(aGramUser()),
     signInWithQrCode: jest.fn().mockResolvedValue(aGramUser()),
+    acceptLoginToken: jest
+      .fn()
+      .mockResolvedValue(aGramAcceptedAuthorization()),
     signInAsBot: jest.fn().mockResolvedValue(aGramUser({ isBot: true })),
     updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),

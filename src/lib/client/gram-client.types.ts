@@ -276,6 +276,29 @@ export interface GramQrToken {
 }
 
 /**
+ * A secret-free summary of the web session authorized by
+ * {@link import('./gram-client.interface').IGramClient.acceptLoginToken}.
+ *
+ * Mapped from the MTProto `Authorization` object Telegram returns when an
+ * already-signed-in client approves another client's QR login token. It carries
+ * only display metadata describing the *newly authorized* session — never the
+ * token, session string, or any credential — so it is safe to log or surface to
+ * the operator who confirmed the login.
+ */
+export interface GramAcceptedLoginSession {
+  /** Name of the application that requested the login (e.g. `Telegram Web`). */
+  appName: string;
+  /** Device model reported by the authorized client (e.g. `Chrome`). */
+  deviceModel: string;
+  /** Platform the authorized client runs on (e.g. `Web`, `Windows`). */
+  platform: string;
+  /** OS/system version string reported by the authorized client, when set. */
+  systemVersion?: string;
+  /** Application version string reported by the authorized client, when set. */
+  appVersion?: string;
+}
+
+/**
  * Callbacks driving
  * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
  */

@@ -58,7 +58,8 @@ import {
  * `download*` calls resolve representative buffers, `getMediaInfo` resolves a
  * representative video descriptor, `streamMedia` yields one chunk, `getFullChat`
  * resolves a representative group, the alternative sign-ins (`signInWithQrCode`,
- * `signInAsBot`) resolve a representative account, and the void calls
+ * `signInAsBot`) resolve a representative account, `acceptLoginToken` resolves a
+ * representative accepted-web-session summary, and the void calls
  * (`join`/`leaveChannel`, `deleteMessages`, `markAsRead`, `pinMessage`,
  * `updateTwoFactor`) resolve. Pass `overrides` to change the behaviour of any
  * method per test.
@@ -98,6 +99,13 @@ export function createMockGramClient(
     signInWithPassword: jest.fn().mockResolvedValue(aGramUser()),
     signInWithQrCode: jest.fn().mockResolvedValue(aGramUser()),
     signInAsBot: jest.fn().mockResolvedValue(aGramUser({ isBot: true })),
+    acceptLoginToken: jest.fn().mockResolvedValue({
+      appName: 'Telegram Web',
+      deviceModel: 'Chrome',
+      platform: 'Web',
+      systemVersion: '1.0.0',
+      appVersion: '1.0.0',
+    }),
     updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(aGramUser()),

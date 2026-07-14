@@ -104,6 +104,12 @@ describe('Telegram error hierarchy', () => {
     );
   });
 
+  it('includes the QR login-token accept codes', () => {
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_EXPIRED');
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_INVALID');
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_ALREADY_ACCEPTED');
+  });
+
   describe('isTelegramError', () => {
     it('returns true for library errors', () => {
       expect(isTelegramError(new TelegramConfigError('x'))).toBe(true);

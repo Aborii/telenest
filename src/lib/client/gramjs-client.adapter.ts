@@ -1676,11 +1676,13 @@ export class GramJsClientAdapter implements IGramClient {
     if (message.startsWith('AUTH_TOKEN_EXPIRED')) code = 'TOKEN_EXPIRED';
     else if (message.startsWith('AUTH_TOKEN_ALREADY_ACCEPTED'))
       code = 'TOKEN_ALREADY_ACCEPTED';
-    // ── `AUTH_TOKEN_INVALID` (+ any `AUTH_TOKEN_INVALIDX` variant) and
-    //    `AUTH_TOKEN_EXCEPTION` (token failed to import) all mean "bad token". ──
+    // ── `AUTH_TOKEN_INVALID` and `AUTH_TOKEN_EXCEPTION` (token failed to import)
+    //    both mean "bad token". Prefix-matched, since Telegram suffixes RPC codes
+    //    (`AUTH_TOKEN_INVALIDX`) and a suffixed variant must not fall through to
+    //    UNKNOWN — the caller would lose the bad-token/unexpected distinction. ──
     else if (
       message.startsWith('AUTH_TOKEN_INVALID') ||
-      message === 'AUTH_TOKEN_EXCEPTION'
+      message.startsWith('AUTH_TOKEN_EXCEPTION')
     )
       code = 'TOKEN_INVALID';
     else if ((TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message))

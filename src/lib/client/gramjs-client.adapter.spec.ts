@@ -694,6 +694,10 @@ describe('GramJsClientAdapter', () => {
       ['AUTH_TOKEN_EXPIRED', 'TOKEN_EXPIRED'],
       ['AUTH_TOKEN_INVALID', 'TOKEN_INVALID'],
       ['AUTH_TOKEN_EXCEPTION', 'TOKEN_INVALID'],
+      // ── Telegram suffixes RPC codes; a suffixed bad-token variant must still
+      //    classify as TOKEN_INVALID rather than falling through to UNKNOWN. ────
+      ['AUTH_TOKEN_INVALIDX', 'TOKEN_INVALID'],
+      ['AUTH_TOKEN_EXCEPTION_X', 'TOKEN_INVALID'],
       ['AUTH_TOKEN_ALREADY_ACCEPTED', 'TOKEN_ALREADY_ACCEPTED'],
       ['AUTH_KEY_UNREGISTERED', 'NOT_AUTHORIZED'],
       ['SESSION_REVOKED', 'NOT_AUTHORIZED'],

@@ -43,6 +43,11 @@ function createFakeClient(
     signInWithPassword: jest.fn().mockResolvedValue(FAKE_USER),
     signInWithQrCode: jest.fn().mockResolvedValue(FAKE_USER),
     signInAsBot: jest.fn().mockResolvedValue(FAKE_USER),
+    acceptLoginToken: jest.fn().mockResolvedValue({
+      appName: 'Telegram Web',
+      deviceModel: 'Chrome',
+      platform: 'Web',
+    }),
     updateTwoFactor: jest.fn().mockResolvedValue(undefined),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),

@@ -22,6 +22,7 @@
  */
 
 import type {
+  GramAcceptedLoginSession,
   GramChatActionEvent,
   GramChatInfo,
   GramDeletedMessages,
@@ -135,6 +136,27 @@ export interface IGramClient {
    * @throws {import('../common').TelegramAuthError} If the token is rejected.
    */
   signInAsBot(botToken: string): Promise<GramUser>;
+
+  /**
+   * Approves a QR login token exported by *another* (typically web) client,
+   * authorizing that client's session. Runs on THIS already-authorized session
+   * (the equivalent of scanning the QR code with a signed-in Telegram app):
+   * invokes MTProto `auth.acceptLoginToken` and returns a secret-free summary
+   * of the session that was just authorized.
+   *
+   * @param token - The base64url-encoded QR login token the other client
+   *   exported (the same value carried in {@link GramQrToken.token}). It is a
+   *   short-lived credential — never log or echo it.
+   * @returns Display metadata describing the newly authorized web session.
+   * @throws {import('../common').TelegramAuthError} With `code`:
+   *   - `TOKEN_EXPIRED` — the token expired before it was accepted;
+   *   - `TOKEN_INVALID` — Telegram rejected the token as malformed/unknown;
+   *   - `TOKEN_ALREADY_ACCEPTED` — the token had already been accepted;
+   *   - `NOT_AUTHORIZED` — this session is no longer authorized (revoked/
+   *     expired/deactivated), so it cannot approve a login;
+   *   - `FLOOD_WAIT` — Telegram rate-limited the accept (retry after the delay).
+   */
+  acceptLoginToken(token: string): Promise<GramAcceptedLoginSession>;
 
   /**
    * Enables, changes, or removes the account's two-factor (2FA) password.

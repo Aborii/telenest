@@ -659,6 +659,89 @@ describe('GramJsClientAdapter', () => {
     });
   });
 
+  describe('acceptLoginToken', () => {
+    it('decodes the base64url token and maps the accepted session', async () => {
+      // ── Telegram returns the session-descriptor `Api.Authorization`. ────────
+      const authorization = asEntity(Api.Authorization, {
+        appName: 'Telegram Web',
+        deviceModel: 'Firefox',
+        platform: 'Web',
+        systemVersion: '134.0',
+        appVersion: '2.3.4',
+      });
+      const invoke = jest.fn().mockResolvedValue(authorization);
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      // ── Bytes that yield base64url-only chars ('-'/'_', never '+'/'/'). ─────
+      const token = Buffer.from([0xfb, 0xff, 0xbf]).toString('base64url');
+      const result = await adapter.acceptLoginToken(token);
+
+      expect(result).toEqual({
+        appName: 'Telegram Web',
+        deviceModel: 'Firefox',
+        platform: 'Web',
+        systemVersion: '134.0',
+        appVersion: '2.3.4',
+      });
+      // ── One AcceptLoginToken request carrying the DECODED token bytes. ──────
+      expect(invoke).toHaveBeenCalledTimes(1);
+      const request = invoke.mock.calls[0][0] as Api.auth.AcceptLoginToken;
+      expect(request).toBeInstanceOf(Api.auth.AcceptLoginToken);
+      expect((request.token as Buffer).toString('base64url')).toBe(token);
+    });
+
+    it.each([
+      ['AUTH_TOKEN_EXPIRED', 'TOKEN_EXPIRED'],
+      ['AUTH_TOKEN_INVALID', 'TOKEN_INVALID'],
+      ['AUTH_TOKEN_EXCEPTION', 'TOKEN_INVALID'],
+      ['AUTH_TOKEN_ALREADY_ACCEPTED', 'TOKEN_ALREADY_ACCEPTED'],
+      ['AUTH_KEY_UNREGISTERED', 'NOT_AUTHORIZED'],
+      ['SESSION_REVOKED', 'NOT_AUTHORIZED'],
+    ])('maps RPC %s to auth code %s', async (rpc, code) => {
+      const invoke = jest
+        .fn()
+        .mockRejectedValue(
+          new errors.RPCError(
+            rpc,
+            new Api.auth.AcceptLoginToken({ token: Buffer.alloc(0) }),
+            400,
+          ),
+        );
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = (await adapter
+        .acceptLoginToken('tok')
+        .catch((e: unknown) => e)) as TelegramAuthError;
+      expect(error).toBeInstanceOf(TelegramAuthError);
+      expect(error.code).toBe(code);
+    });
+
+    it('maps a typed FloodWaitError to FLOOD_WAIT with the delay', async () => {
+      const flood = new errors.FloodWaitError({
+        request: new Api.auth.AcceptLoginToken({ token: Buffer.alloc(0) }),
+        capture: 12,
+      });
+      const invoke = jest.fn().mockRejectedValue(flood);
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = (await adapter
+        .acceptLoginToken('tok')
+        .catch((e: unknown) => e)) as TelegramAuthError;
+      expect(error.code).toBe('FLOOD_WAIT');
+      expect(error.retryAfterSeconds).toBe(12);
+    });
+
+    it('maps an unrecognized failure to UNKNOWN', async () => {
+      const invoke = jest.fn().mockRejectedValue(new Error('SOMETHING_ELSE'));
+      const adapter = createAdapter(createMockClient({ invoke }));
+
+      const error = (await adapter
+        .acceptLoginToken('tok')
+        .catch((e: unknown) => e)) as TelegramAuthError;
+      expect(error.code).toBe('UNKNOWN');
+    });
+  });
+
   describe('updateTwoFactor', () => {
     it('forwards current/new password and hint to GramJS', async () => {
       const updateTwoFaSettings = jest.fn().mockResolvedValue(undefined);

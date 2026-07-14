@@ -32,6 +32,7 @@ import {
 import type { Dialog } from 'telegram/tl/custom/dialog';
 
 import {
+  TELEGRAM_AUTH_LOSS_RPC_CODES,
   TelegramAuthError,
   TelegramClientError,
   type TelegramAuthErrorCode,
@@ -42,6 +43,7 @@ import {
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
+  type GramAcceptedLoginSession,
   type GramChatAction,
   type GramChatActionEvent,
   type GramChatInfo,
@@ -359,6 +361,26 @@ export class GramJsClientAdapter implements IGramClient {
       return this.mapUser(user);
     } catch (error) {
       throw this.toAuthError(error);
+    }
+  }
+
+  /** {@inheritDoc IGramClient.acceptLoginToken} */
+  public async acceptLoginToken(
+    token: string,
+  ): Promise<GramAcceptedLoginSession> {
+    try {
+      // ── The web client exports the token base64url-encoded; MTProto expects
+      //    the raw bytes. `auth.acceptLoginToken` returns an `Api.Authorization`
+      //    (the session-descriptor variant, not `auth.Authorization`), whose
+      //    display fields we surface — never the token or any credential. ──────
+      const authorization = await this.client.invoke(
+        new Api.auth.AcceptLoginToken({
+          token: Buffer.from(token, 'base64url'),
+        }),
+      );
+      return this.mapAcceptedLoginSession(authorization);
+    } catch (error) {
+      throw this.toAcceptLoginTokenError(error);
     }
   }
 
@@ -995,6 +1017,29 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /**
+   * Maps the MTProto `Authorization` returned by `auth.acceptLoginToken` into a
+   * secret-free {@link GramAcceptedLoginSession}. Copies only display metadata
+   * about the newly authorized session — never the token or a session string.
+   *
+   * @param authorization - The `Api.auth.AcceptLoginToken` result. Telegram
+   *   returns the session-descriptor `Api.Authorization` (`appName` /
+   *   `deviceModel` / `platform` / …), not the user-wrapping `auth.Authorization`.
+   * @returns The normalized accepted-session summary DTO.
+   * @throws Never.
+   */
+  private mapAcceptedLoginSession(
+    authorization: Api.TypeAuthorization,
+  ): GramAcceptedLoginSession {
+    return {
+      appName: authorization.appName,
+      deviceModel: authorization.deviceModel,
+      platform: authorization.platform,
+      systemVersion: authorization.systemVersion,
+      appVersion: authorization.appVersion,
+    };
+  }
+
+  /**
    * Maps a GramJS {@link Dialog} into a {@link GramDialog}.
    *
    * @param dialog - The GramJS dialog to map.
@@ -1594,6 +1639,65 @@ export class GramJsClientAdapter implements IGramClient {
       retryAfterSeconds,
       cause: error,
     });
+  }
+
+  /**
+   * Maps an `auth.acceptLoginToken` failure into a typed {@link TelegramAuthError}.
+   *
+   * The accept runs on the LIVE (already-authorized) session, so its failure set
+   * differs from an interactive sign-in: it is dominated by the QR token's
+   * lifecycle (`AUTH_TOKEN_*`), plus the possibility that this very session has
+   * lost its authorization (an auth-loss RPC → `NOT_AUTHORIZED`, classified via
+   * the shared {@link TELEGRAM_AUTH_LOSS_RPC_CODES} set so
+   * {@link import('../common').isAuthorizationLostError} recognizes it) and
+   * Telegram's flood-wait rate limit.
+   *
+   * @param error - The caught value (typically a raw GramJS `RPCError`).
+   * @returns A {@link TelegramAuthError} with a precise code (`UNKNOWN` when the
+   *   failure matches none of the accept-specific cases).
+   * @throws Never.
+   */
+  private toAcceptLoginTokenError(error: unknown): TelegramAuthError {
+    if (error instanceof TelegramAuthError) return error;
+
+    // ── FloodWaitError carries the delay on `.seconds` (its `errorMessage` is
+    //    the bare "FLOOD"), so detect it by type before matching on text. ──────
+    if (error instanceof errors.FloodWaitError)
+      return new TelegramAuthError(
+        'FLOOD_WAIT',
+        `Telegram flood wait: ${error.seconds}s required`,
+        { retryAfterSeconds: error.seconds, cause: error },
+      );
+
+    const message = this.readErrorMessage(error);
+    let code: TelegramAuthErrorCode = 'UNKNOWN';
+    let retryAfterSeconds: number | undefined;
+
+    if (message.startsWith('AUTH_TOKEN_EXPIRED')) code = 'TOKEN_EXPIRED';
+    else if (message.startsWith('AUTH_TOKEN_ALREADY_ACCEPTED'))
+      code = 'TOKEN_ALREADY_ACCEPTED';
+    // ── `AUTH_TOKEN_INVALID` (+ any `AUTH_TOKEN_INVALIDX` variant) and
+    //    `AUTH_TOKEN_EXCEPTION` (token failed to import) all mean "bad token". ──
+    else if (
+      message.startsWith('AUTH_TOKEN_INVALID') ||
+      message === 'AUTH_TOKEN_EXCEPTION'
+    )
+      code = 'TOKEN_INVALID';
+    else if ((TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message))
+      // ── This session itself is dead (revoked/expired/deactivated): it cannot
+      //    approve a login. Surface NOT_AUTHORIZED so the caller can tear down. ─
+      code = 'NOT_AUTHORIZED';
+    else if (message.startsWith('FLOOD_WAIT')) {
+      // ── Fallback for a non-typed error whose message embeds FLOOD_WAIT_N. ──
+      code = 'FLOOD_WAIT';
+      retryAfterSeconds = this.readFloodSeconds(error, message);
+    }
+
+    return new TelegramAuthError(
+      code,
+      `Telegram QR login accept failed: ${message}`,
+      { retryAfterSeconds, cause: error },
+    );
   }
 
   /**

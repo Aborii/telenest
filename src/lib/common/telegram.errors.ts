@@ -55,6 +55,12 @@ export const TELEGRAM_AUTH_ERROR_CODES = {
   SIGN_UP_REQUIRED: 'SIGN_UP_REQUIRED',
   /** An operation needs an authorized session but none is active. */
   NOT_AUTHORIZED: 'NOT_AUTHORIZED',
+  /** A QR login token was accepted too late — it had already expired. */
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  /** A QR login token was malformed or rejected outright by Telegram. */
+  TOKEN_INVALID: 'TOKEN_INVALID',
+  /** A QR login token had already been accepted (a duplicate accept). */
+  TOKEN_ALREADY_ACCEPTED: 'TOKEN_ALREADY_ACCEPTED',
   /** Telegram imposed a flood-wait; retry after the delay it reported. */
   FLOOD_WAIT: 'FLOOD_WAIT',
   /** Any auth failure that does not map to a more specific code. */

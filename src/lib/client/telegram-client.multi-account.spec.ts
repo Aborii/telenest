@@ -61,6 +61,7 @@ function createFakeAccount(session = 'SESSION'): FakeAccount {
     signInWithPassword: jest.fn(),
     signInWithQrCode: jest.fn(),
     signInAsBot: jest.fn(),
+    acceptLoginToken: jest.fn(),
     updateTwoFactor: jest.fn(),
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue({ id: '1', isSelf: true }),

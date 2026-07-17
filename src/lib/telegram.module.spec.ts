@@ -31,6 +31,7 @@ function fakeClient(): IGramClient {
     logOut: jest.fn(),
     getMe: jest.fn(),
     getDialogs: jest.fn(),
+    getDialogFilters: jest.fn(),
     getMessages: jest.fn(),
     sendMessage: jest.fn(),
     sendFile: jest.fn(),

@@ -142,6 +142,27 @@ export interface GramDialog {
    * is available.
    */
   lastMessageMediaKind?: GramMediaKind;
+  /**
+   * Whether the peer is a bot account. Only meaningful for `user` dialogs
+   * (always `false` for groups/channels); `undefined` when the peer entity is
+   * not resolved on the dialog object. Drives the `bots` category of
+   * {@link GramDialogFilter} membership.
+   */
+  isBot?: boolean;
+  /**
+   * Whether the peer is in the account's contacts. Only meaningful for `user`
+   * dialogs (always `false` for groups/channels); `undefined` when the peer
+   * entity is not resolved. Drives the `contacts`/`nonContacts` categories of
+   * {@link GramDialogFilter} membership.
+   */
+  isContact?: boolean;
+  /**
+   * Whether the account manually marked this dialog as unread (independent of
+   * {@link GramDialog.unreadCount}). A dialog counts as "read" for
+   * {@link GramDialogFilter.excludeRead} only when `unreadCount` is `0` AND
+   * this flag is not set. `undefined` when the raw TL dialog is not present.
+   */
+  unreadMark?: boolean;
 }
 
 /** Normalized Telegram message. */
@@ -349,6 +370,75 @@ export interface GramGetDialogsParams {
   limit?: number;
   /** Include archived dialogs. Defaults to `false`. */
   archived?: boolean;
+}
+
+/**
+ * Closed set of dialog-filter (chat folder) kinds. Declared as an `as const`
+ * record (never an `enum`) so {@link GramDialogFilterType} can be derived.
+ */
+export const GRAM_DIALOG_FILTER_TYPES = {
+  /**
+   * The account's "All Chats" pseudo-folder. Telegram returns it inside the
+   * filter list purely to mark where the "All Chats" tab sits after the user
+   * reordered their folders; it has no id, title, or rules of its own.
+   */
+  DEFAULT: 'default',
+  /** A regular user-defined folder with category flags and peer lists. */
+  FILTER: 'filter',
+  /**
+   * A shared folder joined via a chat-folder invite link. Membership is
+   * defined ONLY by its `pinnedPeerIds`/`includePeerIds` — it has no category
+   * flags and no exclusions (those fields are always `false`/empty).
+   */
+  CHATLIST: 'chatlist',
+} as const;
+
+/** Union of the folder kinds in {@link GRAM_DIALOG_FILTER_TYPES}. */
+export type GramDialogFilterType =
+  (typeof GRAM_DIALOG_FILTER_TYPES)[keyof typeof GRAM_DIALOG_FILTER_TYPES];
+
+/**
+ * Normalized dialog filter (a "chat folder" in Telegram's UI), as returned by
+ * {@link import('./gram-client.interface').IGramClient.getDialogFilters}.
+ *
+ * A dialog belongs to the folder when it is NOT in `excludePeerIds`, and
+ * either appears in `pinnedPeerIds`/`includePeerIds` (which override every
+ * exclusion flag) or matches one of the enabled category flags without being
+ * knocked out by an `exclude*` flag. All peer ids use the same GramJS
+ * *marked* format as {@link GramDialog.id} (users unmarked, basic chats
+ * `-<id>`, channels/supergroups `-100<id>`), so they compare directly.
+ */
+export interface GramDialogFilter {
+  /** Which folder kind this entry is. */
+  type: GramDialogFilterType;
+  /** Telegram's folder id (`0` for the `default` "All Chats" entry). */
+  id: number;
+  /** Folder title as plain text (empty for the `default` entry). */
+  title: string;
+  /** Emoji chosen as the folder's icon, when set. */
+  emoticon?: string;
+  /** Include all contacts. */
+  contacts: boolean;
+  /** Include all non-contact users. */
+  nonContacts: boolean;
+  /** Include all groups (basic groups and supergroups). */
+  groups: boolean;
+  /** Include all broadcast channels. */
+  broadcasts: boolean;
+  /** Include all bots. */
+  bots: boolean;
+  /** Drop category-matched dialogs that are muted. */
+  excludeMuted: boolean;
+  /** Drop category-matched dialogs with nothing unread. */
+  excludeRead: boolean;
+  /** Drop category-matched dialogs that are archived. */
+  excludeArchived: boolean;
+  /** Peers pinned to the top of this folder (marked ids, in pin order). */
+  pinnedPeerIds: string[];
+  /** Peers explicitly added to this folder (marked ids). */
+  includePeerIds: string[];
+  /** Peers explicitly removed from this folder (marked ids). */
+  excludePeerIds: string[];
 }
 
 /**

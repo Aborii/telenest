@@ -107,7 +107,7 @@ Rather than hand-rolling fakes, import them from the dedicated **`telenest/testi
 | `createMockGramClient(overrides?)` | A `jest.Mocked<IGramClient>` with sensible, network-free defaults (an authorized "me" account). |
 | `provideMockGramClient(client?)` | A Nest `ValueProvider` binding a mock client to the `TELEGRAM_GRAM_CLIENT` token for a `TestingModule`. |
 | `createMockBotContext(partial?)` | A spyable Telegraf `Context` with the common reply/answer methods pre-stubbed as `jest.fn()`. |
-| `aGramUser` / `aGramMessage` / `aGramDialog` | Builders for the MTProto DTOs — sensible defaults merged with your overrides. |
+| `aGramUser` / `aGramMessage` / `aGramDialog` / `aGramDialogFilter` | Builders for the MTProto DTOs — sensible defaults merged with your overrides. |
 
 > **Subpath independence.** The subpath references Telegraf type-only and reads `jest.fn()` from the ambient global a Jest runtime provides — it never `import`s Telegraf, GramJS, or Jest. So importing it pulls **no** SDK or test runner into your module graph, and it adds no hard dependency to your `package.json`. The DTO builders run in any runtime; `createMockGramClient`/`createMockBotContext` (and `provideMockGramClient`'s default) build `jest.fn()` spies, so call them from inside Jest specs (you'll want `@types/jest` for the `jest.Mocked` typings).
 

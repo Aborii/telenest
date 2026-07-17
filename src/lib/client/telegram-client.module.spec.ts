@@ -48,6 +48,7 @@ function createFakeClient(): IGramClient {
     logOut: jest.fn(),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
     sendFile: jest.fn(),

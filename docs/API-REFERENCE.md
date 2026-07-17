@@ -958,6 +958,27 @@ chats.forEach((chat) => {
 });
 ```
 
+##### `getDialogFilters(): Promise<GramDialogFilter[]>`
+
+Lists your dialog filters (the "chat folders" shown as tabs in official clients), in tab
+order. Each entry is one of three kinds (`type`): a regular `'filter'` with category flags
+(`contacts` / `groups` / `bots` / …), exclusion flags (`excludeMuted` / `excludeRead` /
+`excludeArchived`) and peer lists; a `'chatlist'` (shared folder joined via invite link,
+peer lists only); or the `'default'` "All Chats" marker. Peer ids in
+`pinnedPeerIds` / `includePeerIds` / `excludePeerIds` use the same marked format as
+`GramDialog.id`, so they compare directly.
+
+**Returns:** Array of `GramDialogFilter` (empty when no folders are set up)
+
+**Example:**
+
+```typescript
+const folders = await user.getDialogFilters();
+folders
+  .filter((f) => f.type === 'filter')
+  .forEach((f) => console.log(f.title, f.includePeerIds.length));
+```
+
 ##### `getMessages(peer: GramPeer, params?: GramGetMessagesParams): Promise<GramMessage[]>`
 
 Fetches messages from a chat.

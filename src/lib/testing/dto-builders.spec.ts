@@ -10,6 +10,7 @@
 import {
   aGramChatInfo,
   aGramDialog,
+  aGramDialogFilter,
   aGramMediaInfo,
   aGramMessage,
   aGramUser,
@@ -91,6 +92,38 @@ describe('DTO builders', () => {
       expect(channel.title).toBe('News');
       expect(channel.unreadCount).toBe(9);
       expect(channel.pinned).toBe(true);
+    });
+  });
+
+  describe('aGramDialogFilter', () => {
+    it('returns a groups-only user-defined folder by default', () => {
+      expect(aGramDialogFilter()).toEqual({
+        type: 'filter',
+        id: 2,
+        title: 'Work',
+        contacts: false,
+        nonContacts: false,
+        groups: true,
+        broadcasts: false,
+        bots: false,
+        excludeMuted: false,
+        excludeRead: false,
+        excludeArchived: false,
+        pinnedPeerIds: [],
+        includePeerIds: [],
+        excludePeerIds: [],
+      });
+    });
+
+    it('applies overrides and never shares peer arrays between calls', () => {
+      const unread = aGramDialogFilter({ excludeRead: true, title: 'Unread' });
+      expect(unread.excludeRead).toBe(true);
+      expect(unread.title).toBe('Unread');
+
+      const a = aGramDialogFilter();
+      const b = aGramDialogFilter();
+      a.includePeerIds.push('42');
+      expect(b.includePeerIds).toEqual([]);
     });
   });
 

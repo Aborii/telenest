@@ -37,6 +37,7 @@ const CLIENT_METHODS: ReadonlyArray<keyof IGramClient> = [
   'logOut',
   'getMe',
   'getDialogs',
+  'getDialogFilters',
   'getMessages',
   'sendMessage',
   'sendFile',
@@ -76,6 +77,7 @@ describe('createMockGramClient', () => {
     await expect(client.logOut()).resolves.toBeUndefined();
     await expect(client.getMe()).resolves.toEqual(aGramUser());
     await expect(client.getDialogs()).resolves.toEqual([]);
+    await expect(client.getDialogFilters()).resolves.toEqual([]);
     await expect(client.getMessages('me')).resolves.toEqual([]);
     await expect(client.sendMessage('me', { message: 'x' })).resolves.toEqual(
       aGramMessage(),

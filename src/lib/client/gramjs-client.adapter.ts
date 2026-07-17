@@ -40,6 +40,7 @@ import {
 import type { IGramClient } from './gram-client.interface';
 import {
   GRAM_CHAT_ACTIONS,
+  GRAM_DIALOG_FILTER_TYPES,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
@@ -50,6 +51,7 @@ import {
   type GramDeletedMessages,
   type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogFilter,
   type GramDialogType,
   type GramGetDialogsParams,
   type GramGetMessagesParams,
@@ -432,6 +434,40 @@ export class GramJsClientAdapter implements IGramClient {
       return dialogs.map((dialog) => this.mapDialog(dialog));
     } catch (error) {
       throw this.toClientError(error, 'Failed to list dialogs.', 'getDialogs');
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getDialogFilters} */
+  public async getDialogFilters(): Promise<GramDialogFilter[]> {
+    try {
+      const result = await this.client.invoke(
+        new Api.messages.GetDialogFilters(),
+      );
+      // ── A folder can pin/include "Saved Messages" as InputPeerSelf, which
+      //    carries no id. Resolve the own account id once, only when some
+      //    filter actually references self (getMe() is cached by GramJS). ────
+      const needsSelf = result.filters.some(
+        (filter) =>
+          (filter instanceof Api.DialogFilter ||
+            filter instanceof Api.DialogFilterChatlist) &&
+          [
+            ...filter.pinnedPeers,
+            ...filter.includePeers,
+            ...(filter instanceof Api.DialogFilter ? filter.excludePeers : []),
+          ].some((peer) => peer instanceof Api.InputPeerSelf),
+      );
+      const selfId = needsSelf
+        ? this.mapUser(await this.client.getMe()).id
+        : undefined;
+      return result.filters.map((filter) =>
+        this.mapDialogFilter(filter, selfId),
+      );
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to list dialog filters.',
+        'getDialogFilters',
+      );
     }
   }
 
@@ -1058,6 +1094,22 @@ export class GramJsClientAdapter implements IGramClient {
     // ── Read positions live on the raw TL dialog (same object the mute state
     //    comes from), not on the GramJS wrapper or the peer entity. ──────────
     const raw = dialog.dialog;
+    // ── Bot/contact status lives on the resolved user entity; both are
+    //    definitionally false for groups/channels (resolved or not). ─────────
+    const entity = dialog.entity;
+    const isUserEntity = entity instanceof Api.User;
+    const isBot =
+      type === GRAM_DIALOG_TYPES.USER
+        ? isUserEntity
+          ? Boolean(entity.bot)
+          : undefined
+        : false;
+    const isContact =
+      type === GRAM_DIALOG_TYPES.USER
+        ? isUserEntity
+          ? Boolean(entity.contact)
+          : undefined
+        : false;
     return {
       id: dialog.id ? dialog.id.toString() : '',
       title: dialog.title ?? dialog.name ?? '',
@@ -1074,7 +1126,113 @@ export class GramJsClientAdapter implements IGramClient {
       lastMessageOut: lastMessage ? Boolean(lastMessage.out) : undefined,
       lastMessageSenderName: this.senderDisplayName(lastMessage?.sender),
       lastMessageMediaKind: this.mapMediaInfo(lastMessage?.media)?.kind,
+      isBot,
+      isContact,
+      unreadMark: raw ? Boolean(raw.unreadMark) : undefined,
     };
+  }
+
+  /**
+   * Maps a TL dialog filter into a {@link GramDialogFilter}.
+   *
+   * @param filter - The `Api.DialogFilter` / `DialogFilterChatlist` /
+   *   `DialogFilterDefault` to map.
+   * @param selfId - The own account id (marked format), required only to
+   *   resolve `InputPeerSelf` ("Saved Messages") peer entries.
+   * @returns The normalized filter DTO.
+   * @throws Never.
+   */
+  private mapDialogFilter(
+    filter: Api.TypeDialogFilter,
+    selfId?: string,
+  ): GramDialogFilter {
+    if (filter instanceof Api.DialogFilter) {
+      return {
+        type: GRAM_DIALOG_FILTER_TYPES.FILTER,
+        id: filter.id,
+        title: filter.title.text,
+        emoticon: filter.emoticon || undefined,
+        contacts: Boolean(filter.contacts),
+        nonContacts: Boolean(filter.nonContacts),
+        groups: Boolean(filter.groups),
+        broadcasts: Boolean(filter.broadcasts),
+        bots: Boolean(filter.bots),
+        excludeMuted: Boolean(filter.excludeMuted),
+        excludeRead: Boolean(filter.excludeRead),
+        excludeArchived: Boolean(filter.excludeArchived),
+        pinnedPeerIds: this.mapInputPeerIds(filter.pinnedPeers, selfId),
+        includePeerIds: this.mapInputPeerIds(filter.includePeers, selfId),
+        excludePeerIds: this.mapInputPeerIds(filter.excludePeers, selfId),
+      };
+    }
+    if (filter instanceof Api.DialogFilterChatlist) {
+      return {
+        type: GRAM_DIALOG_FILTER_TYPES.CHATLIST,
+        id: filter.id,
+        title: filter.title.text,
+        emoticon: filter.emoticon || undefined,
+        contacts: false,
+        nonContacts: false,
+        groups: false,
+        broadcasts: false,
+        bots: false,
+        excludeMuted: false,
+        excludeRead: false,
+        excludeArchived: false,
+        pinnedPeerIds: this.mapInputPeerIds(filter.pinnedPeers, selfId),
+        includePeerIds: this.mapInputPeerIds(filter.includePeers, selfId),
+        excludePeerIds: [],
+      };
+    }
+    // ── Api.DialogFilterDefault: a positional marker for "All Chats". ────────
+    return {
+      type: GRAM_DIALOG_FILTER_TYPES.DEFAULT,
+      id: 0,
+      title: '',
+      contacts: false,
+      nonContacts: false,
+      groups: false,
+      broadcasts: false,
+      bots: false,
+      excludeMuted: false,
+      excludeRead: false,
+      excludeArchived: false,
+      pinnedPeerIds: [],
+      includePeerIds: [],
+      excludePeerIds: [],
+    };
+  }
+
+  /**
+   * Maps TL `InputPeer`s from a dialog filter into GramJS *marked* id strings
+   * (users unmarked, basic chats `-<id>`, channels `-100<id>` — the same
+   * format {@link mapDialog} emits for {@link GramDialog.id}, so consumers can
+   * compare them directly). Unresolvable entries (`InputPeerEmpty`, the
+   * `*FromMessage` variants, or `InputPeerSelf` without a `selfId`) are
+   * dropped rather than emitted as garbage.
+   *
+   * @param peers - The filter's TL peer list.
+   * @param selfId - The own account id, to resolve `InputPeerSelf`.
+   * @returns Marked peer id strings, order preserved.
+   * @throws Never.
+   */
+  private mapInputPeerIds(
+    peers: Api.TypeInputPeer[],
+    selfId?: string,
+  ): string[] {
+    const ids: string[] = [];
+    for (const peer of peers) {
+      if (peer instanceof Api.InputPeerUser) ids.push(peer.userId.toString());
+      else if (peer instanceof Api.InputPeerChat)
+        ids.push(`-${peer.chatId.toString()}`);
+      // ── "-100" is a string concat, matching GramJS' own getPeerId marking
+      //    (NOT a numeric 1e12 offset — those differ for short channel ids). ──
+      else if (peer instanceof Api.InputPeerChannel)
+        ids.push(`-100${peer.channelId.toString()}`);
+      else if (peer instanceof Api.InputPeerSelf && selfId !== undefined)
+        ids.push(selfId);
+    }
+    return ids;
   }
 
   /**

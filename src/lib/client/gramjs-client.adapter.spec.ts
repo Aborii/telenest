@@ -866,6 +866,9 @@ describe('GramJsClientAdapter', () => {
           type: 'group',
           unreadCount: 3,
           pinned: true,
+          // Bot/contact status is definitionally false for non-user dialogs.
+          isBot: false,
+          isContact: false,
         },
       ]);
     });
@@ -1220,6 +1223,194 @@ describe('GramJsClientAdapter', () => {
       const [photo, textOnly] = await createAdapter(mock).getDialogs();
       expect(photo?.lastMessageMediaKind).toBe('photo');
       expect(textOnly?.lastMessageMediaKind).toBeUndefined();
+    });
+
+    it('maps isBot/isContact from a resolved user entity', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ entity: asEntity(Api.User, { bot: true }) }),
+          aDialog({ entity: asEntity(Api.User, { contact: true }) }),
+        ]),
+      });
+      const [bot, contact] = await createAdapter(mock).getDialogs();
+      expect(bot?.isBot).toBe(true);
+      expect(bot?.isContact).toBe(false);
+      expect(contact?.isBot).toBe(false);
+      expect(contact?.isContact).toBe(true);
+    });
+
+    it('leaves isBot/isContact undefined for an unresolved user entity', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([aDialog()]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.isBot).toBeUndefined();
+      expect(dialog?.isContact).toBeUndefined();
+    });
+
+    it('reports isBot/isContact false for group and channel dialogs', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ isUser: false, isGroup: true }),
+          aDialog({ isUser: false, isChannel: true }),
+        ]),
+      });
+      const [group, channel] = await createAdapter(mock).getDialogs();
+      expect(group?.isBot).toBe(false);
+      expect(group?.isContact).toBe(false);
+      expect(channel?.isBot).toBe(false);
+      expect(channel?.isContact).toBe(false);
+    });
+
+    it('maps unreadMark from the raw TL dialog (undefined when absent)', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ dialog: { unreadMark: true } }),
+          aDialog({ dialog: {} }),
+          aDialog(),
+        ]),
+      });
+      const [marked, unmarked, noRaw] = await createAdapter(mock).getDialogs();
+      expect(marked?.unreadMark).toBe(true);
+      expect(unmarked?.unreadMark).toBe(false);
+      expect(noRaw?.unreadMark).toBeUndefined();
+    });
+  });
+
+  describe('getDialogFilters', () => {
+    /** Builds a TL text-with-entities title. */
+    function aTitle(text: string): Api.TextWithEntities {
+      return asEntity(Api.TextWithEntities, { text, entities: [] });
+    }
+
+    it('maps a DialogFilter with flags and marked peer ids', async () => {
+      const filter = asEntity(Api.DialogFilter, {
+        id: 3,
+        title: aTitle('Work'),
+        emoticon: '💼',
+        groups: true,
+        excludeMuted: true,
+        pinnedPeers: [
+          asEntity(Api.InputPeerChannel, { channelId: bigInt('123') }),
+        ],
+        includePeers: [asEntity(Api.InputPeerUser, { userId: bigInt('42') })],
+        excludePeers: [asEntity(Api.InputPeerChat, { chatId: bigInt('99') })],
+      });
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            asEntity(Api.messages.DialogFilters, { filters: [filter] }),
+          ),
+      });
+
+      await expect(createAdapter(mock).getDialogFilters()).resolves.toEqual([
+        {
+          type: 'filter',
+          id: 3,
+          title: 'Work',
+          emoticon: '💼',
+          contacts: false,
+          nonContacts: false,
+          groups: true,
+          broadcasts: false,
+          bots: false,
+          excludeMuted: true,
+          excludeRead: false,
+          excludeArchived: false,
+          // Channel ids are "-100"-marked by string concat, chats "-"-negated,
+          // users unmarked — the same format mapDialog emits for GramDialog.id.
+          pinnedPeerIds: ['-100123'],
+          includePeerIds: ['42'],
+          excludePeerIds: ['-99'],
+        },
+      ]);
+    });
+
+    it('maps DialogFilterDefault and DialogFilterChatlist kinds', async () => {
+      const chatlist = asEntity(Api.DialogFilterChatlist, {
+        id: 7,
+        title: aTitle('Shared'),
+        pinnedPeers: [],
+        includePeers: [asEntity(Api.InputPeerUser, { userId: bigInt('8') })],
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          asEntity(Api.messages.DialogFilters, {
+            filters: [asEntity(Api.DialogFilterDefault, {}), chatlist],
+          }),
+        ),
+      });
+
+      const [dflt, shared] = await createAdapter(mock).getDialogFilters();
+      expect(dflt).toMatchObject({ type: 'default', id: 0, title: '' });
+      expect(shared).toMatchObject({
+        type: 'chatlist',
+        id: 7,
+        title: 'Shared',
+        includePeerIds: ['8'],
+        excludePeerIds: [],
+        contacts: false,
+        excludeRead: false,
+      });
+    });
+
+    it('resolves InputPeerSelf via getMe and drops unresolvable peers', async () => {
+      const filter = asEntity(Api.DialogFilter, {
+        id: 2,
+        title: aTitle('Personal'),
+        pinnedPeers: [asEntity(Api.InputPeerSelf, {})],
+        includePeers: [asEntity(Api.InputPeerEmpty, {})],
+        excludePeers: [],
+      });
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            asEntity(Api.messages.DialogFilters, { filters: [filter] }),
+          ),
+        getMe: jest
+          .fn()
+          .mockResolvedValue(asEntity(Api.User, { id: bigInt('777') })),
+      });
+
+      const [personal] = await createAdapter(mock).getDialogFilters();
+      expect(personal?.pinnedPeerIds).toEqual(['777']);
+      expect(personal?.includePeerIds).toEqual([]);
+      expect(mock.getMe).toHaveBeenCalled();
+    });
+
+    it('does not call getMe when no filter references self', async () => {
+      const filter = asEntity(Api.DialogFilter, {
+        id: 2,
+        title: aTitle('Bots'),
+        bots: true,
+        pinnedPeers: [],
+        includePeers: [],
+        excludePeers: [],
+      });
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            asEntity(Api.messages.DialogFilters, { filters: [filter] }),
+          ),
+      });
+
+      await createAdapter(mock).getDialogFilters();
+      expect(mock.getMe).not.toHaveBeenCalled();
+    });
+
+    it('wraps failures in TelegramClientError with the operation name', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockRejectedValue(new Error('rpc')),
+      });
+
+      const error = (await createAdapter(mock)
+        .getDialogFilters()
+        .catch((e: unknown) => e)) as TelegramClientError;
+      expect(error).toBeInstanceOf(TelegramClientError);
+      expect(error.operation).toBe('getDialogFilters');
     });
   });
 

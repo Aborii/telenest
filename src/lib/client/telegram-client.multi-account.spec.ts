@@ -66,6 +66,7 @@ function createFakeAccount(session = 'SESSION'): FakeAccount {
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue({ id: '1', isSelf: true }),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue({}),
     sendFile: jest.fn(),

@@ -52,6 +52,7 @@ function createFakeClient(
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
     sendFile: jest.fn(),

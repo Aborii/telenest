@@ -28,6 +28,7 @@ import type {
   GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
+  GramDialogFilter,
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
@@ -191,6 +192,17 @@ export interface IGramClient {
    * @throws {import('../common').TelegramClientError} On failure.
    */
   getDialogs(params?: GramGetDialogsParams): Promise<GramDialog[]>;
+
+  /**
+   * Lists the account's dialog filters (the "chat folders" shown as tabs in
+   * official clients), in the user's tab order. The `default` entry marks the
+   * position of the "All Chats" tab and is only present when the user
+   * reordered it away from the front.
+   *
+   * @returns The normalized filter list (empty when no folders are set up).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getDialogFilters(): Promise<GramDialogFilter[]>;
 
   /**
    * Fetches recent messages from a peer.

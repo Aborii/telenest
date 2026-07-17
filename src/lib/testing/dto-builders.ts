@@ -27,15 +27,18 @@
  * - aGramUser: Builds a {@link GramUser} (the logged-in account by default).
  * - aGramMessage: Builds a {@link GramMessage} (an outgoing text message).
  * - aGramDialog: Builds a {@link GramDialog} (a one-to-one user conversation).
+ * - aGramDialogFilter: Builds a {@link GramDialogFilter} (a groups-only folder).
  * - aGramChatInfo: Builds a {@link GramChatInfo} (extended group info).
  * - aGramMediaInfo: Builds a {@link GramMediaInfo} (a streamable video).
  */
 
 import {
+  GRAM_DIALOG_FILTER_TYPES,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   type GramChatInfo,
   type GramDialog,
+  type GramDialogFilter,
   type GramMediaInfo,
   type GramMessage,
   type GramUser,
@@ -110,6 +113,41 @@ export function aGramDialog(overrides: Partial<GramDialog> = {}): GramDialog {
     type: GRAM_DIALOG_TYPES.USER,
     unreadCount: 0,
     pinned: false,
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a representative {@link GramDialogFilter}. The defaults describe a
+ * user-defined "Work" folder that includes all groups; pass `overrides` to
+ * model category flags, peer lists, or the `default`/`chatlist` kinds.
+ *
+ * @param overrides - Fields to replace on the default dialog filter.
+ * @returns A fully-typed {@link GramDialogFilter}.
+ * @throws Never.
+ * @example
+ * ```ts
+ * const unreadOnly = aGramDialogFilter({ excludeRead: true, title: 'Unread' });
+ * ```
+ */
+export function aGramDialogFilter(
+  overrides: Partial<GramDialogFilter> = {},
+): GramDialogFilter {
+  return {
+    type: GRAM_DIALOG_FILTER_TYPES.FILTER,
+    id: 2,
+    title: 'Work',
+    contacts: false,
+    nonContacts: false,
+    groups: true,
+    broadcasts: false,
+    bots: false,
+    excludeMuted: false,
+    excludeRead: false,
+    excludeArchived: false,
+    pinnedPeerIds: [],
+    includePeerIds: [],
+    excludePeerIds: [],
     ...overrides,
   };
 }

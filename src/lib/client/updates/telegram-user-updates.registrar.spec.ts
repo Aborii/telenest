@@ -128,6 +128,7 @@ function createEmittableClient(): {
     logOut: jest.fn(),
     getMe: jest.fn(),
     getDialogs: jest.fn(),
+    getDialogFilters: jest.fn(),
     getMessages: jest.fn(),
     sendMessage,
     sendFile: jest.fn(),

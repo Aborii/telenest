@@ -52,6 +52,7 @@ function createFakeClient(
     logOut: jest.fn(),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(FAKE_MESSAGE),
     sendFile: jest.fn(),
@@ -94,6 +95,13 @@ describe('TelegramUserService', () => {
       limit: 10,
       archived: true,
     });
+  });
+
+  it('getDialogFilters delegates to the client', async () => {
+    const client = createFakeClient();
+    const service = new TelegramUserService(client);
+    await expect(service.getDialogFilters()).resolves.toEqual([]);
+    expect(client.getDialogFilters).toHaveBeenCalled();
   });
 
   it('getMessages forwards peer and params', async () => {

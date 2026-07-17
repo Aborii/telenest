@@ -110,6 +110,7 @@ export function createMockGramClient(
     logOut: jest.fn().mockResolvedValue(undefined),
     getMe: jest.fn().mockResolvedValue(aGramUser()),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(aGramMessage()),
     sendFile: jest.fn().mockResolvedValue(aGramMessage({ hasMedia: true })),

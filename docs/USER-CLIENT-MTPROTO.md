@@ -432,6 +432,7 @@ returns library DTOs; the service transparently connects the client on first use
 |---|---|---|
 | `getMe` | `() => Promise<GramUser>` | The logged-in account's profile. |
 | `getDialogs` | `(params?: GramGetDialogsParams) => Promise<GramDialog[]>` | The dialog (conversation) list. |
+| `getDialogFilters` | `() => Promise<GramDialogFilter[]>` | The account's dialog filters ("chat folders"), in tab order. |
 | `getMessages` | `(peer: GramPeer, params?: GramGetMessagesParams) => Promise<GramMessage[]>` | Recent messages from a peer, newest first. |
 | `sendMessage` | `(peer: GramPeer, text: string \| GramSendMessageParams) => Promise<GramMessage>` | Sends a message; returns the sent message. |
 | `sendToSelf` | `(text: string) => Promise<GramMessage>` | Convenience for messaging your own *Saved Messages* (peer `'me'`). |
@@ -856,6 +857,9 @@ interface GramDialog {
   lastMessageOut?: boolean;         // latest message was sent by the account ("You:")
   lastMessageSenderName?: string;   // resolved sender of the latest message, best-effort
   lastMessageMediaKind?: GramMediaKind; // media placeholder for a text-less preview
+  isBot?: boolean;                  // peer is a bot (user dialogs; false for groups/channels)
+  isContact?: boolean;              // peer is in the account's contacts (user dialogs)
+  unreadMark?: boolean;             // dialog was manually marked unread
 }
 ```
 
@@ -864,7 +868,53 @@ TL dialog and are the building blocks for "open at first unread" (fetch a window
 `readInboxMaxId`) and outgoing read receipts (an outgoing message with
 `id <= readOutboxMaxId` has been seen). `lastMessageSenderName` is populated only from an
 already-resolved sender — never via an extra fetch (flood-safe), same rule as
-`GramMessage.senderName`.
+`GramMessage.senderName`. `isBot` / `isContact` / `unreadMark` exist to evaluate
+`GramDialogFilter` membership locally (see below); the first two are `undefined` when the
+peer entity is not resolved on the dialog.
+
+### `GramDialogFilter`
+
+`getDialogFilters()` returns the account's dialog filters — the "chat folders" official
+clients show as tabs — normalized from the three TL variants into one shape:
+
+```ts
+type GramDialogFilterType = 'default' | 'filter' | 'chatlist';
+
+interface GramDialogFilter {
+  type: GramDialogFilterType; // which folder kind this entry is
+  id: number;                 // Telegram's folder id (0 for the 'default' entry)
+  title: string;              // folder title ('' for the 'default' entry)
+  emoticon?: string;          // emoji icon, when set
+  contacts: boolean;          // include all contacts
+  nonContacts: boolean;       // include all non-contact users
+  groups: boolean;            // include all groups (basic + supergroups)
+  broadcasts: boolean;        // include all broadcast channels
+  bots: boolean;              // include all bots
+  excludeMuted: boolean;      // drop category-matched dialogs that are muted
+  excludeRead: boolean;       // drop category-matched dialogs with nothing unread
+  excludeArchived: boolean;   // drop category-matched dialogs that are archived
+  pinnedPeerIds: string[];    // peers pinned to the top (marked ids, pin order)
+  includePeerIds: string[];   // peers explicitly added (marked ids)
+  excludePeerIds: string[];   // peers explicitly removed (marked ids)
+}
+```
+
+The three kinds:
+
+- **`filter`** — a regular user-defined folder with category flags and peer lists.
+- **`chatlist`** — a shared folder joined via a chat-folder invite link. Membership is
+  defined only by its `pinnedPeerIds` / `includePeerIds`; the category flags are always
+  `false` and `excludePeerIds` is always empty.
+- **`default`** — the "All Chats" pseudo-folder. Telegram includes it only to mark where
+  the "All Chats" tab sits after the user reordered their folders; it has no rules of its
+  own (all flags `false`, all lists empty, `id: 0`).
+
+A dialog belongs to a `filter` folder when it is **not** in `excludePeerIds`, and either
+appears in `pinnedPeerIds` / `includePeerIds` (which override every exclusion flag) or
+matches an enabled category flag without being knocked out by an `exclude*` flag. All peer
+ids use the same GramJS *marked* format as `GramDialog.id` (users unmarked, basic chats
+`-<id>`, channels/supergroups `-100<id>`), so they compare directly — including the
+"Saved Messages" entry, which is resolved to the account's own id.
 
 ### `GramMessage`
 
@@ -964,7 +1014,7 @@ Related sign-in DTOs you may encounter: `GramSendCodeResult`
 
 Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
 operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
-`signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
+`signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getDialogFilters`, `getMessages`,
 `sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `getMediaInfo`,
 `downloadMediaRange`, `streamMedia`, `joinChannel`,
 `leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,

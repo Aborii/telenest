@@ -47,6 +47,7 @@ import type {
   GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
+  GramDialogFilter,
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
@@ -301,6 +302,18 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
   ): Promise<GramDialog[]> {
     await this.ensureConnected();
     return this.client.getDialogs(params);
+  }
+
+  /**
+   * Lists the account's dialog filters (the "chat folders" shown as tabs in
+   * official clients), in the user's tab order.
+   *
+   * @returns The normalized filter list (empty when no folders are set up).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  public async getDialogFilters(): Promise<GramDialogFilter[]> {
+    await this.ensureConnected();
+    return this.client.getDialogFilters();
   }
 
   /**

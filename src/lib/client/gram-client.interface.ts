@@ -22,14 +22,17 @@
  */
 
 import type {
+  GramAcceptedLoginSession,
   GramChatActionEvent,
   GramChatInfo,
   GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
+  GramDialogFilter,
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
+  GramMarkAsReadParams,
   GramMediaInfo,
   GramMediaRange,
   GramMessage,
@@ -136,6 +139,27 @@ export interface IGramClient {
   signInAsBot(botToken: string): Promise<GramUser>;
 
   /**
+   * Approves a QR login token exported by *another* (typically web) client,
+   * authorizing that client's session. Runs on THIS already-authorized session
+   * (the equivalent of scanning the QR code with a signed-in Telegram app):
+   * invokes MTProto `auth.acceptLoginToken` and returns a secret-free summary
+   * of the session that was just authorized.
+   *
+   * @param token - The base64url-encoded QR login token the other client
+   *   exported (the same value carried in {@link GramQrToken.token}). It is a
+   *   short-lived credential — never log or echo it.
+   * @returns Display metadata describing the newly authorized web session.
+   * @throws {import('../common').TelegramAuthError} With `code`:
+   *   - `TOKEN_EXPIRED` — the token expired before it was accepted;
+   *   - `TOKEN_INVALID` — Telegram rejected the token as malformed/unknown;
+   *   - `TOKEN_ALREADY_ACCEPTED` — the token had already been accepted;
+   *   - `NOT_AUTHORIZED` — this session is no longer authorized (revoked/
+   *     expired/deactivated), so it cannot approve a login;
+   *   - `FLOOD_WAIT` — Telegram rate-limited the accept (retry after the delay).
+   */
+  acceptLoginToken(token: string): Promise<GramAcceptedLoginSession>;
+
+  /**
    * Enables, changes, or removes the account's two-factor (2FA) password.
    * Requires an already-authorized session.
    *
@@ -170,10 +194,26 @@ export interface IGramClient {
   getDialogs(params?: GramGetDialogsParams): Promise<GramDialog[]>;
 
   /**
+   * Lists the account's dialog filters (the "chat folders" shown as tabs in
+   * official clients), in the user's tab order. The `default` entry marks the
+   * position of the "All Chats" tab and is only present when the user
+   * reordered it away from the front.
+   *
+   * @returns The normalized filter list (empty when no folders are set up).
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  getDialogFilters(): Promise<GramDialogFilter[]>;
+
+  /**
    * Fetches recent messages from a peer.
    *
+   * Supports two paging styles (never mix them): id bounds (`minId`/`maxId`)
+   * or a positioned window (`offsetId` + `addOffset`, negative `addOffset`
+   * slides toward newer messages). See {@link GramGetMessagesParams} for the
+   * window math and the GramJS `offsetId`+`minId` empty-result trap.
+   *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
-   * @param params - Optional limit / pagination bounds.
+   * @param params - Optional limit / pagination bounds / window position.
    * @returns The messages, newest first.
    * @throws {import('../common').TelegramClientError} On failure.
    */
@@ -389,10 +429,12 @@ export interface IGramClient {
    * Marks a peer's history as read (clears the unread badge).
    *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
+   * @param params - Optional `maxId` to mark read only up to (and including)
+   *   that message id; omitted marks the whole dialog read.
    * @returns Resolves once acknowledged.
    * @throws {import('../common').TelegramClientError} On failure.
    */
-  markAsRead(peer: GramPeer): Promise<void>;
+  markAsRead(peer: GramPeer, params?: GramMarkAsReadParams): Promise<void>;
 
   /**
    * Pins a message in a chat.

@@ -432,6 +432,7 @@ returns library DTOs; the service transparently connects the client on first use
 |---|---|---|
 | `getMe` | `() => Promise<GramUser>` | The logged-in account's profile. |
 | `getDialogs` | `(params?: GramGetDialogsParams) => Promise<GramDialog[]>` | The dialog (conversation) list. |
+| `getDialogFilters` | `() => Promise<GramDialogFilter[]>` | The account's dialog filters ("chat folders"), in tab order. |
 | `getMessages` | `(peer: GramPeer, params?: GramGetMessagesParams) => Promise<GramMessage[]>` | Recent messages from a peer, newest first. |
 | `sendMessage` | `(peer: GramPeer, text: string \| GramSendMessageParams) => Promise<GramMessage>` | Sends a message; returns the sent message. |
 | `sendToSelf` | `(text: string) => Promise<GramMessage>` | Convenience for messaging your own *Saved Messages* (peer `'me'`). |
@@ -449,7 +450,7 @@ returns library DTOs; the service transparently connects the client on first use
 | `editMessage` | `(peer: GramPeer, messageId: number, text: string) => Promise<GramMessage>` | Edits a message's text; returns the edited message. |
 | `deleteMessages` | `(peer: GramPeer, messageIds: number[], params?: GramDeleteMessagesParams) => Promise<void>` | Deletes messages (for everyone by default). |
 | `forwardMessages` | `(toPeer: GramPeer, fromPeer: GramPeer, messageIds: number[]) => Promise<GramMessage[]>` | Forwards messages between peers. |
-| `markAsRead` | `(peer: GramPeer) => Promise<void>` | Marks a peer's history as read. |
+| `markAsRead` | `(peer: GramPeer, params?: GramMarkAsReadParams) => Promise<void>` | Marks a peer's history as read — the whole dialog, or only up to `params.maxId`. |
 | `pinMessage` | `(peer: GramPeer, messageId: number, params?: GramPinMessageParams) => Promise<void>` | Pins a message in a chat. |
 
 A `GramPeer` is `string | number`: the literal `'me'`, a public `@username`, or a numeric
@@ -518,7 +519,39 @@ await this.user.sendToSelf('Remember to renew the api credentials.');
 | `silent` | `boolean` | Send without a notification sound. |
 
 `GramGetDialogsParams` accepts `limit` and `archived`; `GramGetMessagesParams` accepts
-`limit`, `minId`, and `maxId` (for pagination).
+`limit`, `minId`, and `maxId` (id-bounded pagination) plus `offsetId` and `addOffset`
+(positioned windows).
+
+### History windows (`offsetId` / `addOffset`)
+
+Id bounds page strictly *older-than* / *newer-than* an id. A **positioned window**
+instead anchors the page at a message id and shifts it: `addOffset: 0` returns the
+`limit` messages just **older** than `offsetId`; a **negative** `addOffset` slides the
+window toward **newer** messages. The classic "open a chat at its first unread message"
+fetch is a centered window around the dialog's `readInboxMaxId`:
+
+```ts
+const dialogs = await this.user.getDialogs({ limit: 50 });
+const anchor = dialogs.find((d) => d.id === peerId)?.readInboxMaxId;
+
+// ~20 newer + the anchor + ~19 older (limit 40), newest first. Guard the
+// anchor: `offsetId: undefined` silently degenerates to a newest-page fetch.
+const around = anchor
+  ? await this.user.getMessages(peerId, {
+      limit: 40,
+      offsetId: anchor,
+      addOffset: -(Math.floor(40 / 2) + 1),
+    })
+  : await this.user.getMessages(peerId, { limit: 40 }); // no read marker → newest page
+```
+
+Two GramJS sharp edges (shape requests around them, don't fight them):
+
+- `maxId` is folded into `offsetId` via `Math.max(offsetId, maxId)` — passing both is
+  redundant at best.
+- Combining `offsetId` with `minId` returns an **empty result** whenever
+  `offsetId - minId <= 1` (an internal early-exit guard). Never pair them — derive
+  exclusivity from the `addOffset` math instead.
 
 ### Media, chats, and message operations
 
@@ -557,7 +590,8 @@ const info = await this.user.getFullChat('@my_group');
 const sent = await this.user.sendMessage('me', 'draft');
 await this.user.editMessage('me', sent.id, 'final');
 await this.user.pinMessage('me', sent.id, { notify: false });
-await this.user.markAsRead('@my_group');
+await this.user.markAsRead('@my_group');                  // whole dialog
+await this.user.markAsRead('@my_group', { maxId: 120 }); // only up to message 120
 await this.user.forwardMessages('me', '@my_group', [sent.id]);
 await this.user.deleteMessages('me', [sent.id]); // revoke: true by default
 ```
@@ -813,26 +847,100 @@ interface GramDialog {
   type: 'user' | 'group' | 'channel';
   unreadCount: number;
   pinned: boolean;
+  lastMessagePreview?: string;      // plain-text preview of the latest message
+  lastMessageDate?: number;         // unix seconds of the latest message
+  muted?: boolean;                  // notification mute state, when settings are present
+  hasPhoto?: boolean;               // peer has a fetchable profile/chat photo
+  readInboxMaxId?: number;          // last incoming id the account has read
+  readOutboxMaxId?: number;         // last outgoing id the peer has read (read receipts)
+  topMessageId?: number;            // newest message id in the dialog
+  lastMessageOut?: boolean;         // latest message was sent by the account ("You:")
+  lastMessageSenderName?: string;   // resolved sender of the latest message, best-effort
+  lastMessageMediaKind?: GramMediaKind; // media placeholder for a text-less preview
+  isBot?: boolean;                  // peer is a bot (user dialogs; false for groups/channels)
+  isContact?: boolean;              // peer is in the account's contacts (user dialogs)
+  unreadMark?: boolean;             // dialog was manually marked unread
 }
 ```
+
+The read positions (`readInboxMaxId` / `readOutboxMaxId` / `topMessageId`) come from the raw
+TL dialog and are the building blocks for "open at first unread" (fetch a window around
+`readInboxMaxId`) and outgoing read receipts (an outgoing message with
+`id <= readOutboxMaxId` has been seen). `lastMessageSenderName` is populated only from an
+already-resolved sender — never via an extra fetch (flood-safe), same rule as
+`GramMessage.senderName`. `isBot` / `isContact` / `unreadMark` exist to evaluate
+`GramDialogFilter` membership locally (see below); the first two are `undefined` when the
+peer entity is not resolved on the dialog.
+
+### `GramDialogFilter`
+
+`getDialogFilters()` returns the account's dialog filters — the "chat folders" official
+clients show as tabs — normalized from the three TL variants into one shape:
+
+```ts
+type GramDialogFilterType = 'default' | 'filter' | 'chatlist';
+
+interface GramDialogFilter {
+  type: GramDialogFilterType; // which folder kind this entry is
+  id: number;                 // Telegram's folder id (0 for the 'default' entry)
+  title: string;              // folder title ('' for the 'default' entry)
+  emoticon?: string;          // emoji icon, when set
+  contacts: boolean;          // include all contacts
+  nonContacts: boolean;       // include all non-contact users
+  groups: boolean;            // include all groups (basic + supergroups)
+  broadcasts: boolean;        // include all broadcast channels
+  bots: boolean;              // include all bots
+  excludeMuted: boolean;      // drop category-matched dialogs that are muted
+  excludeRead: boolean;       // drop category-matched dialogs with nothing unread
+  excludeArchived: boolean;   // drop category-matched dialogs that are archived
+  pinnedPeerIds: string[];    // peers pinned to the top (marked ids, pin order)
+  includePeerIds: string[];   // peers explicitly added (marked ids)
+  excludePeerIds: string[];   // peers explicitly removed (marked ids)
+}
+```
+
+The three kinds:
+
+- **`filter`** — a regular user-defined folder with category flags and peer lists.
+- **`chatlist`** — a shared folder joined via a chat-folder invite link. Membership is
+  defined only by its `pinnedPeerIds` / `includePeerIds`; the category flags are always
+  `false` and `excludePeerIds` is always empty.
+- **`default`** — the "All Chats" pseudo-folder. Telegram includes it only to mark where
+  the "All Chats" tab sits after the user reordered their folders; it has no rules of its
+  own (all flags `false`, all lists empty, `id: 0`).
+
+A dialog belongs to a `filter` folder when it is **not** in `excludePeerIds`, and either
+appears in `pinnedPeerIds` / `includePeerIds` (which override every exclusion flag) or
+matches an enabled category flag without being knocked out by an `exclude*` flag. All peer
+ids use the same GramJS *marked* format as `GramDialog.id` (users unmarked, basic chats
+`-<id>`, channels/supergroups `-100<id>`), so they compare directly — including the
+"Saved Messages" entry, which is resolved to the account's own id.
 
 ### `GramMessage`
 
 ```ts
 interface GramMessage {
-  id: number;          // message id within its chat
-  peerId: string;      // chat/user the message belongs to, as a decimal string
-  text: string;        // plain-text body ('' for non-text/service messages)
-  date: number;        // unix timestamp in seconds
-  out: boolean;        // true when sent by the logged-in account
-  senderId?: string;   // sender id as a decimal string, when known
-  hasMedia?: boolean;  // true when the message carries downloadable media
+  id: number;            // message id within its chat
+  peerId: string;        // chat/user the message belongs to, as a decimal string
+  text: string;          // plain-text body ('' for non-text/service messages)
+  date: number;          // unix timestamp in seconds
+  out: boolean;          // true when sent by the logged-in account
+  senderId?: string;     // sender id as a decimal string, when known
+  hasMedia?: boolean;    // true when the message carries downloadable media
+  replyToMsgId?: number; // id of the replied-to message, for message replies
+  edited?: boolean;      // present (true) only when editDate is set
+  editDate?: number;     // unix seconds of the last edit
+  media?: GramMediaInfo; // descriptor of downloadable media with a file body
+  senderName?: string;   // best-effort resolved sender name (no extra fetch)
+  groupedId?: string;    // album/media-group id (decimal string) — shared by album members
 }
 ```
 
 `hasMedia` is always populated on messages produced by the adapter (it is optional only so a
 hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
-`downloadMedia(message.peerId, message.id)`.
+`downloadMedia(message.peerId, message.id)`. `groupedId` is a **string** because album ids
+are random 64-bit values that can exceed `2^53`; messages sharing a value were sent together
+as one album and can be collapsed into a single grouped bubble.
 
 ### `GramDeletedMessages`
 
@@ -906,7 +1014,7 @@ Related sign-in DTOs you may encounter: `GramSendCodeResult`
 
 Every MTProto service depends only on **`IGramClient`**, an interface that mirrors the
 operations above (`connect`, `disconnect`, `isConnected`, `isAuthorized`, `sendCode`,
-`signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getMessages`,
+`signInWithCode`, `signInWithPassword`, `logOut`, `getMe`, `getDialogs`, `getDialogFilters`, `getMessages`,
 `sendMessage`, `sendFile`, `downloadMedia`, `downloadProfilePhoto`, `getMediaInfo`,
 `downloadMediaRange`, `streamMedia`, `joinChannel`,
 `leaveChannel`, `getParticipants`, `searchMessages`, `getFullChat`, `editMessage`,

@@ -47,10 +47,12 @@ function createFakeClient(
     signInWithPassword: jest.fn(),
     signInWithQrCode: jest.fn(),
     signInAsBot: jest.fn(),
+    acceptLoginToken: jest.fn(),
     updateTwoFactor: jest.fn(),
     logOut: jest.fn(),
     getMe: jest.fn().mockResolvedValue(FAKE_USER),
     getDialogs: jest.fn().mockResolvedValue([]),
+    getDialogFilters: jest.fn().mockResolvedValue([]),
     getMessages: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn().mockResolvedValue(FAKE_MESSAGE),
     sendFile: jest.fn(),
@@ -93,6 +95,13 @@ describe('TelegramUserService', () => {
       limit: 10,
       archived: true,
     });
+  });
+
+  it('getDialogFilters delegates to the client', async () => {
+    const client = createFakeClient();
+    const service = new TelegramUserService(client);
+    await expect(service.getDialogFilters()).resolves.toEqual([]);
+    expect(client.getDialogFilters).toHaveBeenCalled();
   });
 
   it('getMessages forwards peer and params', async () => {
@@ -249,7 +258,13 @@ describe('TelegramUserService', () => {
     it('markAsRead forwards the peer', async () => {
       const client = createFakeClient();
       await new TelegramUserService(client).markAsRead('@g');
-      expect(client.markAsRead).toHaveBeenCalledWith('@g');
+      expect(client.markAsRead).toHaveBeenCalledWith('@g', undefined);
+    });
+
+    it('markAsRead forwards a maxId params object', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).markAsRead('@g', { maxId: 7 });
+      expect(client.markAsRead).toHaveBeenCalledWith('@g', { maxId: 7 });
     });
 
     it('pinMessage forwards peer, id and params', async () => {

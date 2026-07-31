@@ -32,6 +32,7 @@ import {
 import type { Dialog } from 'telegram/tl/custom/dialog';
 
 import {
+  TELEGRAM_AUTH_LOSS_RPC_CODES,
   TelegramAuthError,
   TelegramClientError,
   type TelegramAuthErrorCode,
@@ -39,19 +40,23 @@ import {
 import type { IGramClient } from './gram-client.interface';
 import {
   GRAM_CHAT_ACTIONS,
+  GRAM_DIALOG_FILTER_TYPES,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
   GRAM_SIGN_IN_STATUSES,
+  type GramAcceptedLoginSession,
   type GramChatAction,
   type GramChatActionEvent,
   type GramChatInfo,
   type GramDeletedMessages,
   type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogFilter,
   type GramDialogType,
   type GramGetDialogsParams,
   type GramGetMessagesParams,
   type GramGetParticipantsParams,
+  type GramMarkAsReadParams,
   type GramMediaInfo,
   type GramMediaKind,
   type GramMediaRange,
@@ -111,6 +116,13 @@ function streamRequestSize(neededBytes: number): number {
   return Math.min(size, STREAM_REQUEST_SIZE);
 }
 
+/**
+ * Private sentinel the connect-timeout timer rejects with, so the race's catch
+ * can distinguish a deadline from a genuine connect failure without matching on
+ * a message. Module-private — never surfaced to callers.
+ */
+const CONNECT_TIMEOUT = Symbol('gramjs-connect-timeout');
+
 /** Application credentials needed by GramJS' `sendCode`. */
 interface ApiCredentials {
   /** Application api_id. */
@@ -135,18 +147,21 @@ export class GramJsClientAdapter implements IGramClient {
    * @param stringSession - The session instance, used to export the session
    *   string (the abstract `Session.save()` type erases the string return).
    * @param credentials - api_id / api_hash forwarded to `sendCode`.
+   * @param connectTimeoutMs - Optional per-attempt {@link connect} deadline; on
+   *   expiry the underlying client is disconnected and `connect` rejects.
    */
   public constructor(
     private readonly client: TelegramClient,
     private readonly stringSession: sessions.StringSession,
     private readonly credentials: ApiCredentials,
+    private readonly connectTimeoutMs?: number,
   ) {}
 
   /** {@inheritDoc IGramClient.connect} */
   public async connect(): Promise<void> {
     if (this._connected) return;
     try {
-      await this.client.connect();
+      await this.connectWithOptionalTimeout();
       this._connected = true;
     } catch (error) {
       throw this.toClientError(
@@ -154,6 +169,44 @@ export class GramJsClientAdapter implements IGramClient {
         'Failed to connect to Telegram.',
         'connect',
       );
+    }
+  }
+
+  /**
+   * Runs `client.connect()`, bounded by {@link connectTimeoutMs} when set. On
+   * timeout the underlying client is disconnected so the abandoned attempt
+   * cannot later resurrect a zombie connection, then a timeout error is thrown
+   * (wrapped into a `TelegramClientError` by the caller).
+   *
+   * @returns Resolves once connected.
+   * @throws {Error} On a connect failure, or a timeout when the deadline elapses.
+   */
+  private async connectWithOptionalTimeout(): Promise<void> {
+    if (!this.connectTimeoutMs || this.connectTimeoutMs <= 0) {
+      await this.client.connect();
+      return;
+    }
+
+    const timeoutMs = this.connectTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(CONNECT_TIMEOUT), timeoutMs);
+      // Never keep the process alive solely for this timer.
+      (timer as { unref?: () => void }).unref?.();
+    });
+
+    try {
+      await Promise.race([this.client.connect(), timeout]);
+    } catch (error) {
+      if (error === CONNECT_TIMEOUT) {
+        // ── Abort the still-pending attempt so it cannot flip `connected` true
+        //    after we have already given up. ────────────────────────────────
+        await this.client.disconnect().catch(() => undefined);
+        throw new Error(`Telegram connect timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -313,6 +366,26 @@ export class GramJsClientAdapter implements IGramClient {
     }
   }
 
+  /** {@inheritDoc IGramClient.acceptLoginToken} */
+  public async acceptLoginToken(
+    token: string,
+  ): Promise<GramAcceptedLoginSession> {
+    try {
+      // ── The web client exports the token base64url-encoded; MTProto expects
+      //    the raw bytes. `auth.acceptLoginToken` returns an `Api.Authorization`
+      //    (the session-descriptor variant, not `auth.Authorization`), whose
+      //    display fields we surface — never the token or any credential. ──────
+      const authorization = await this.client.invoke(
+        new Api.auth.AcceptLoginToken({
+          token: Buffer.from(token, 'base64url'),
+        }),
+      );
+      return this.mapAcceptedLoginSession(authorization);
+    } catch (error) {
+      throw this.toAcceptLoginTokenError(error);
+    }
+  }
+
   /** {@inheritDoc IGramClient.updateTwoFactor} */
   public async updateTwoFactor(input: GramUpdateTwoFactorInput): Promise<void> {
     try {
@@ -364,16 +437,59 @@ export class GramJsClientAdapter implements IGramClient {
     }
   }
 
+  /** {@inheritDoc IGramClient.getDialogFilters} */
+  public async getDialogFilters(): Promise<GramDialogFilter[]> {
+    try {
+      const result = await this.client.invoke(
+        new Api.messages.GetDialogFilters(),
+      );
+      // ── A folder can pin/include "Saved Messages" as InputPeerSelf, which
+      //    carries no id. Resolve the own account id once, only when some
+      //    filter actually references self (getMe() is cached by GramJS). ────
+      const needsSelf = result.filters.some(
+        (filter) =>
+          (filter instanceof Api.DialogFilter ||
+            filter instanceof Api.DialogFilterChatlist) &&
+          [
+            ...filter.pinnedPeers,
+            ...filter.includePeers,
+            ...(filter instanceof Api.DialogFilter ? filter.excludePeers : []),
+          ].some((peer) => peer instanceof Api.InputPeerSelf),
+      );
+      const selfId = needsSelf
+        ? this.mapUser(await this.client.getMe()).id
+        : undefined;
+      return result.filters.map((filter) =>
+        this.mapDialogFilter(filter, selfId),
+      );
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to list dialog filters.',
+        'getDialogFilters',
+      );
+    }
+  }
+
   /** {@inheritDoc IGramClient.getMessages} */
   public async getMessages(
     peer: GramPeer,
     params: GramGetMessagesParams = {},
   ): Promise<GramMessage[]> {
     try {
+      // ── Only forward the paging anchors that are actually set. Passing a
+      //    key as `undefined` OVERRIDES GramJS's own defaults (maxId/offsetId
+      //    default to 0) via the internal Object.assign, and its
+      //    `offsetId = Math.max(offsetId, maxId)` then evaluates to NaN
+      //    (which serializes as offsetId 0) — silently discarding a positioned
+      //    window and returning the newest slice instead. Omit undefined keys
+      //    so the library defaults survive. ──────────────────────────────────
       const messages = await this.client.getMessages(peer, {
         limit: params.limit,
-        minId: params.minId,
-        maxId: params.maxId,
+        ...(params.minId !== undefined && { minId: params.minId }),
+        ...(params.maxId !== undefined && { maxId: params.maxId }),
+        ...(params.offsetId !== undefined && { offsetId: params.offsetId }),
+        ...(params.addOffset !== undefined && { addOffset: params.addOffset }),
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
@@ -785,9 +901,21 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /** {@inheritDoc IGramClient.markAsRead} */
-  public async markAsRead(peer: GramPeer): Promise<void> {
+  public async markAsRead(
+    peer: GramPeer,
+    params: GramMarkAsReadParams = {},
+  ): Promise<void> {
     try {
-      await this.client.markAsRead(peer);
+      // ── maxId goes through the POSITIONAL `message` argument on purpose.
+      //    GramJS's MarkAsReadParams object has an inverted `clearMentions`
+      //    flag: passing any params object with a falsy `clearMentions` fires
+      //    an extra `messages.ReadMentions` RPC as a side effect. The
+      //    positional form sets maxId without that trap. ─────────────────────
+      if (params.maxId !== undefined) {
+        await this.client.markAsRead(peer, params.maxId);
+      } else {
+        await this.client.markAsRead(peer);
+      }
     } catch (error) {
       throw this.toClientError(error, 'Failed to mark as read.', 'markAsRead');
     }
@@ -925,6 +1053,29 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /**
+   * Maps the MTProto `Authorization` returned by `auth.acceptLoginToken` into a
+   * secret-free {@link GramAcceptedLoginSession}. Copies only display metadata
+   * about the newly authorized session — never the token or a session string.
+   *
+   * @param authorization - The `Api.auth.AcceptLoginToken` result. Telegram
+   *   returns the session-descriptor `Api.Authorization` (`appName` /
+   *   `deviceModel` / `platform` / …), not the user-wrapping `auth.Authorization`.
+   * @returns The normalized accepted-session summary DTO.
+   * @throws Never.
+   */
+  private mapAcceptedLoginSession(
+    authorization: Api.TypeAuthorization,
+  ): GramAcceptedLoginSession {
+    return {
+      appName: authorization.appName,
+      deviceModel: authorization.deviceModel,
+      platform: authorization.platform,
+      systemVersion: authorization.systemVersion,
+      appVersion: authorization.appVersion,
+    };
+  }
+
+  /**
    * Maps a GramJS {@link Dialog} into a {@link GramDialog}.
    *
    * @param dialog - The GramJS dialog to map.
@@ -938,13 +1089,187 @@ export class GramJsClientAdapter implements IGramClient {
         ? GRAM_DIALOG_TYPES.GROUP
         : GRAM_DIALOG_TYPES.USER;
 
+    const lastMessage = dialog.message;
+    const preview = lastMessage?.message;
+    // ── Read positions live on the raw TL dialog (same object the mute state
+    //    comes from), not on the GramJS wrapper or the peer entity. ──────────
+    const raw = dialog.dialog;
+    // ── Bot/contact status lives on the resolved user entity; both are
+    //    definitionally false for groups/channels (resolved or not). ─────────
+    const entity = dialog.entity;
+    const isUserEntity = entity instanceof Api.User;
+    const isBot =
+      type === GRAM_DIALOG_TYPES.USER
+        ? isUserEntity
+          ? Boolean(entity.bot)
+          : undefined
+        : false;
+    const isContact =
+      type === GRAM_DIALOG_TYPES.USER
+        ? isUserEntity
+          ? Boolean(entity.contact)
+          : undefined
+        : false;
     return {
       id: dialog.id ? dialog.id.toString() : '',
       title: dialog.title ?? dialog.name ?? '',
       type,
       unreadCount: dialog.unreadCount,
       pinned: dialog.pinned,
+      lastMessagePreview: preview ? preview : undefined,
+      lastMessageDate: lastMessage?.date,
+      muted: this.isDialogMuted(dialog),
+      hasPhoto: this.entityHasPhoto(dialog.entity),
+      readInboxMaxId: raw?.readInboxMaxId,
+      readOutboxMaxId: raw?.readOutboxMaxId,
+      topMessageId: raw?.topMessage,
+      lastMessageOut: lastMessage ? Boolean(lastMessage.out) : undefined,
+      lastMessageSenderName: this.senderDisplayName(lastMessage?.sender),
+      lastMessageMediaKind: this.mapMediaInfo(lastMessage?.media)?.kind,
+      isBot,
+      isContact,
+      unreadMark: raw ? Boolean(raw.unreadMark) : undefined,
     };
+  }
+
+  /**
+   * Maps a TL dialog filter into a {@link GramDialogFilter}.
+   *
+   * @param filter - The `Api.DialogFilter` / `DialogFilterChatlist` /
+   *   `DialogFilterDefault` to map.
+   * @param selfId - The own account id (marked format), required only to
+   *   resolve `InputPeerSelf` ("Saved Messages") peer entries.
+   * @returns The normalized filter DTO.
+   * @throws Never.
+   */
+  private mapDialogFilter(
+    filter: Api.TypeDialogFilter,
+    selfId?: string,
+  ): GramDialogFilter {
+    if (filter instanceof Api.DialogFilter) {
+      return {
+        type: GRAM_DIALOG_FILTER_TYPES.FILTER,
+        id: filter.id,
+        title: filter.title.text,
+        emoticon: filter.emoticon || undefined,
+        contacts: Boolean(filter.contacts),
+        nonContacts: Boolean(filter.nonContacts),
+        groups: Boolean(filter.groups),
+        broadcasts: Boolean(filter.broadcasts),
+        bots: Boolean(filter.bots),
+        excludeMuted: Boolean(filter.excludeMuted),
+        excludeRead: Boolean(filter.excludeRead),
+        excludeArchived: Boolean(filter.excludeArchived),
+        pinnedPeerIds: this.mapInputPeerIds(filter.pinnedPeers, selfId),
+        includePeerIds: this.mapInputPeerIds(filter.includePeers, selfId),
+        excludePeerIds: this.mapInputPeerIds(filter.excludePeers, selfId),
+      };
+    }
+    if (filter instanceof Api.DialogFilterChatlist) {
+      return {
+        type: GRAM_DIALOG_FILTER_TYPES.CHATLIST,
+        id: filter.id,
+        title: filter.title.text,
+        emoticon: filter.emoticon || undefined,
+        contacts: false,
+        nonContacts: false,
+        groups: false,
+        broadcasts: false,
+        bots: false,
+        excludeMuted: false,
+        excludeRead: false,
+        excludeArchived: false,
+        pinnedPeerIds: this.mapInputPeerIds(filter.pinnedPeers, selfId),
+        includePeerIds: this.mapInputPeerIds(filter.includePeers, selfId),
+        excludePeerIds: [],
+      };
+    }
+    // ── Api.DialogFilterDefault: a positional marker for "All Chats". ────────
+    return {
+      type: GRAM_DIALOG_FILTER_TYPES.DEFAULT,
+      id: 0,
+      title: '',
+      contacts: false,
+      nonContacts: false,
+      groups: false,
+      broadcasts: false,
+      bots: false,
+      excludeMuted: false,
+      excludeRead: false,
+      excludeArchived: false,
+      pinnedPeerIds: [],
+      includePeerIds: [],
+      excludePeerIds: [],
+    };
+  }
+
+  /**
+   * Maps TL `InputPeer`s from a dialog filter into GramJS *marked* id strings
+   * (users unmarked, basic chats `-<id>`, channels `-100<id>` — the same
+   * format {@link mapDialog} emits for {@link GramDialog.id}, so consumers can
+   * compare them directly). Unresolvable entries (`InputPeerEmpty`, the
+   * `*FromMessage` variants, or `InputPeerSelf` without a `selfId`) are
+   * dropped rather than emitted as garbage.
+   *
+   * @param peers - The filter's TL peer list.
+   * @param selfId - The own account id, to resolve `InputPeerSelf`.
+   * @returns Marked peer id strings, order preserved.
+   * @throws Never.
+   */
+  private mapInputPeerIds(
+    peers: Api.TypeInputPeer[],
+    selfId?: string,
+  ): string[] {
+    const ids: string[] = [];
+    for (const peer of peers) {
+      if (peer instanceof Api.InputPeerUser) ids.push(peer.userId.toString());
+      else if (peer instanceof Api.InputPeerChat)
+        ids.push(`-${peer.chatId.toString()}`);
+      // ── "-100" is a string concat, matching GramJS' own getPeerId marking
+      //    (NOT a numeric 1e12 offset — those differ for short channel ids). ──
+      else if (peer instanceof Api.InputPeerChannel)
+        ids.push(`-100${peer.channelId.toString()}`);
+      else if (peer instanceof Api.InputPeerSelf && selfId !== undefined)
+        ids.push(selfId);
+    }
+    return ids;
+  }
+
+  /**
+   * Reports whether the account has muted notifications for a dialog.
+   *
+   * Telegram stores the mute state as a `muteUntil` timestamp on the raw
+   * {@link Api.Dialog}'s notification settings (NOT on the peer entity): the
+   * dialog is muted while that timestamp is in the future. Returns `undefined`
+   * when the object carries no settings (e.g. a hand-built fake), so the field
+   * is simply omitted rather than reported as `false`.
+   *
+   * @param dialog - The GramJS dialog to inspect.
+   * @returns `true`/`false` when settings are present, else `undefined`.
+   * @throws Never.
+   */
+  private isDialogMuted(dialog: Dialog): boolean | undefined {
+    const settings = dialog.dialog?.notifySettings;
+    if (!settings) return undefined;
+    const muteUntil = settings.muteUntil;
+    if (muteUntil === undefined) return false;
+    return muteUntil > Math.floor(Date.now() / 1000);
+  }
+
+  /**
+   * Reports whether a resolved peer entity carries a non-empty profile/chat
+   * photo — a cheap hint that an avatar is fetchable, without downloading it.
+   *
+   * @param entity - The dialog's resolved entity, if any.
+   * @returns `true`/`false` when the entity is resolved, else `undefined`.
+   * @throws Never.
+   */
+  private entityHasPhoto(entity: Dialog['entity']): boolean | undefined {
+    if (!entity) return undefined;
+    const photo = 'photo' in entity ? entity.photo : undefined;
+    return (
+      photo instanceof Api.UserProfilePhoto || photo instanceof Api.ChatPhoto
+    );
   }
 
   /**
@@ -1003,6 +1328,7 @@ export class GramJsClientAdapter implements IGramClient {
    */
   private mapMessage(message: Api.Message): GramMessage {
     const sender = message.senderId;
+    const editDate = message.editDate;
     return {
       id: message.id,
       peerId: this.peerToString(message.peerId),
@@ -1011,7 +1337,56 @@ export class GramJsClientAdapter implements IGramClient {
       out: Boolean(message.out),
       senderId: sender ? sender.toString() : undefined,
       hasMedia: this.hasDownloadableMedia(message),
+      replyToMsgId: this.replyToMsgId(message),
+      edited: editDate !== undefined ? true : undefined,
+      editDate,
+      media: this.mapMediaInfo(message.media),
+      senderName: this.senderDisplayName(message.sender),
+      // ── Album ids are random 64-bit values — stringify, never Number(). ───
+      groupedId: message.groupedId?.toString(),
     };
+  }
+
+  /**
+   * Extracts the replied-to message id, when a message is a reply to another
+   * *message* (a reply to a story or other non-message target has no msg id).
+   *
+   * Reads the raw `replyTo` header rather than GramJS' `replyToMsgId` getter so
+   * the mapping also works on the plain fixture objects used in tests.
+   *
+   * @param message - The message to inspect.
+   * @returns The replied-to message id, or `undefined` when not a message reply.
+   * @throws Never.
+   */
+  private replyToMsgId(message: Api.Message): number | undefined {
+    const replyTo = message.replyTo;
+    return replyTo instanceof Api.MessageReplyHeader
+      ? replyTo.replyToMsgId
+      : undefined;
+  }
+
+  /**
+   * Derives a best-effort display name from an **already-resolved** sender
+   * entity. Never triggers a network fetch (the caller passes GramJS' cached
+   * `message.sender`), so it stays flood-safe; returns `undefined` when the
+   * sender is unresolved or nameless.
+   *
+   * @param sender - The resolved sender entity, if GramJS attached one.
+   * @returns The sender's display name, or `undefined`.
+   * @throws Never.
+   */
+  private senderDisplayName(
+    sender: Api.TypeUser | Api.TypeChat | undefined,
+  ): string | undefined {
+    if (sender instanceof Api.User) {
+      const fullName = [sender.firstName, sender.lastName]
+        .filter((part): part is string => Boolean(part))
+        .join(' ');
+      return fullName || sender.username || undefined;
+    }
+    if (sender instanceof Api.Chat || sender instanceof Api.Channel)
+      return sender.title || undefined;
+    return undefined;
   }
 
   /**
@@ -1315,14 +1690,30 @@ export class GramJsClientAdapter implements IGramClient {
     operation: string,
   ): TelegramClientError {
     if (error instanceof TelegramClientError) return error;
-    // ── Surface Telegram's FLOOD_WAIT delay (seconds) on the typed error so the
-    //    client retry helper can back off for exactly the requested interval.
-    //    Reading the GramJS error shape stays confined to this adapter. ────────
+    // ── Surface Telegram's FLOOD_WAIT delay (seconds) and the raw MTProto code
+    //    on the typed error so the retry helper can back off for exactly the
+    //    requested interval and callers can classify auth-loss without reaching
+    //    into `cause`. Reading the GramJS error shape stays confined here. ─────
     return new TelegramClientError(message, {
       operation,
       retryAfterSeconds: this.floodWaitSeconds(error),
+      rpcCode: this.rpcErrorCode(error),
       cause: error,
     });
+  }
+
+  /**
+   * Extracts the raw MTProto error code from a GramJS `RPCError` (its
+   * `errorMessage`, e.g. `AUTH_KEY_UNREGISTERED`), or `undefined` for a
+   * non-RPC (transport / generic) failure. Keeps the GramJS error shape
+   * confined to this adapter.
+   *
+   * @param error - The caught value (typically a raw GramJS error).
+   * @returns The RPC error code string, or `undefined`.
+   * @throws Never.
+   */
+  private rpcErrorCode(error: unknown): string | undefined {
+    return error instanceof errors.RPCError ? error.errorMessage : undefined;
   }
 
   /**
@@ -1409,6 +1800,67 @@ export class GramJsClientAdapter implements IGramClient {
   }
 
   /**
+   * Maps an `auth.acceptLoginToken` failure into a typed {@link TelegramAuthError}.
+   *
+   * The accept runs on the LIVE (already-authorized) session, so its failure set
+   * differs from an interactive sign-in: it is dominated by the QR token's
+   * lifecycle (`AUTH_TOKEN_*`), plus the possibility that this very session has
+   * lost its authorization (an auth-loss RPC → `NOT_AUTHORIZED`, classified via
+   * the shared {@link TELEGRAM_AUTH_LOSS_RPC_CODES} set so
+   * {@link import('../common').isAuthorizationLostError} recognizes it) and
+   * Telegram's flood-wait rate limit.
+   *
+   * @param error - The caught value (typically a raw GramJS `RPCError`).
+   * @returns A {@link TelegramAuthError} with a precise code (`UNKNOWN` when the
+   *   failure matches none of the accept-specific cases).
+   * @throws Never.
+   */
+  private toAcceptLoginTokenError(error: unknown): TelegramAuthError {
+    if (error instanceof TelegramAuthError) return error;
+
+    // ── FloodWaitError carries the delay on `.seconds` (its `errorMessage` is
+    //    the bare "FLOOD"), so detect it by type before matching on text. ──────
+    if (error instanceof errors.FloodWaitError)
+      return new TelegramAuthError(
+        'FLOOD_WAIT',
+        `Telegram flood wait: ${error.seconds}s required`,
+        { retryAfterSeconds: error.seconds, cause: error },
+      );
+
+    const message = this.readErrorMessage(error);
+    let code: TelegramAuthErrorCode = 'UNKNOWN';
+    let retryAfterSeconds: number | undefined;
+
+    if (message.startsWith('AUTH_TOKEN_EXPIRED')) code = 'TOKEN_EXPIRED';
+    else if (message.startsWith('AUTH_TOKEN_ALREADY_ACCEPTED'))
+      code = 'TOKEN_ALREADY_ACCEPTED';
+    // ── `AUTH_TOKEN_INVALID` and `AUTH_TOKEN_EXCEPTION` (token failed to import)
+    //    both mean "bad token". Prefix-matched, since Telegram suffixes RPC codes
+    //    (`AUTH_TOKEN_INVALIDX`) and a suffixed variant must not fall through to
+    //    UNKNOWN — the caller would lose the bad-token/unexpected distinction. ──
+    else if (
+      message.startsWith('AUTH_TOKEN_INVALID') ||
+      message.startsWith('AUTH_TOKEN_EXCEPTION')
+    )
+      code = 'TOKEN_INVALID';
+    else if ((TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message))
+      // ── This session itself is dead (revoked/expired/deactivated): it cannot
+      //    approve a login. Surface NOT_AUTHORIZED so the caller can tear down. ─
+      code = 'NOT_AUTHORIZED';
+    else if (message.startsWith('FLOOD_WAIT')) {
+      // ── Fallback for a non-typed error whose message embeds FLOOD_WAIT_N. ──
+      code = 'FLOOD_WAIT';
+      retryAfterSeconds = this.readFloodSeconds(error, message);
+    }
+
+    return new TelegramAuthError(
+      code,
+      `Telegram QR login accept failed: ${message}`,
+      { retryAfterSeconds, cause: error },
+    );
+  }
+
+  /**
    * Reads the flood-wait delay from a GramJS `FloodWaitError` or its message.
    *
    * @param error - The caught value (may carry a `seconds` field).
@@ -1461,8 +1913,10 @@ export function createGramJsClient(
     },
   );
 
-  return new GramJsClientAdapter(client, stringSession, {
-    apiId: options.apiId,
-    apiHash: options.apiHash,
-  });
+  return new GramJsClientAdapter(
+    client,
+    stringSession,
+    { apiId: options.apiId, apiHash: options.apiHash },
+    options.connectTimeoutMs,
+  );
 }

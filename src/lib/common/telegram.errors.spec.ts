@@ -9,8 +9,10 @@
  */
 
 import {
+  isAuthorizationLostError,
   isTelegramError,
   TELEGRAM_AUTH_ERROR_CODE_VALUES,
+  TELEGRAM_AUTH_LOSS_RPC_CODES,
   TelegramAuthError,
   TelegramBotApiError,
   TelegramClientError,
@@ -61,6 +63,16 @@ describe('Telegram error hierarchy', () => {
     expect(error.retryAfterSeconds).toBe(25);
   });
 
+  it('TelegramClientError carries an optional raw RPC code', () => {
+    const error = new TelegramClientError('Failed to list dialogs.', {
+      operation: 'getDialogs',
+      rpcCode: 'AUTH_KEY_UNREGISTERED',
+    });
+
+    expect(error.rpcCode).toBe('AUTH_KEY_UNREGISTERED');
+    expect(new TelegramClientError('x').rpcCode).toBeUndefined();
+  });
+
   it('TelegramAuthError carries a code and optional retry delay', () => {
     const error = new TelegramAuthError('FLOOD_WAIT', 'wait', {
       retryAfterSeconds: 30,
@@ -92,6 +104,12 @@ describe('Telegram error hierarchy', () => {
     );
   });
 
+  it('includes the QR login-token accept codes', () => {
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_EXPIRED');
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_INVALID');
+    expect(TELEGRAM_AUTH_ERROR_CODE_VALUES).toContain('TOKEN_ALREADY_ACCEPTED');
+  });
+
   describe('isTelegramError', () => {
     it('returns true for library errors', () => {
       expect(isTelegramError(new TelegramConfigError('x'))).toBe(true);
@@ -102,6 +120,51 @@ describe('Telegram error hierarchy', () => {
       expect(isTelegramError(new Error('x'))).toBe(false);
       expect(isTelegramError('nope')).toBe(false);
       expect(isTelegramError(undefined)).toBe(false);
+    });
+  });
+
+  describe('isAuthorizationLostError', () => {
+    it.each(TELEGRAM_AUTH_LOSS_RPC_CODES)(
+      'is true for a client error with rpcCode=%s',
+      (code) => {
+        expect(
+          isAuthorizationLostError(
+            new TelegramClientError('Failed to list dialogs.', {
+              rpcCode: code,
+            }),
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('is true for a NOT_AUTHORIZED auth error', () => {
+      expect(
+        isAuthorizationLostError(new TelegramAuthError('NOT_AUTHORIZED')),
+      ).toBe(true);
+    });
+
+    it('is false for a transient client error (flood / transport / no code)', () => {
+      expect(
+        isAuthorizationLostError(
+          new TelegramClientError('rate limited', {
+            rpcCode: 'FLOOD_WAIT_30',
+            retryAfterSeconds: 30,
+          }),
+        ),
+      ).toBe(false);
+      expect(
+        isAuthorizationLostError(new TelegramClientError('transport gone')),
+      ).toBe(false);
+    });
+
+    it('is false for other auth codes and non-library values', () => {
+      expect(
+        isAuthorizationLostError(new TelegramAuthError('CODE_INVALID')),
+      ).toBe(false);
+      expect(
+        isAuthorizationLostError(new Error('AUTH_KEY_UNREGISTERED')),
+      ).toBe(false);
+      expect(isAuthorizationLostError(undefined)).toBe(false);
     });
   });
 });

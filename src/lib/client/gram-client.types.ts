@@ -80,6 +80,89 @@ export interface GramDialog {
   unreadCount: number;
   /** Whether the dialog is pinned to the top of the list. */
   pinned: boolean;
+  /**
+   * Plain-text body of the dialog's most recent message, for a list preview.
+   * Omitted when the last message has no text (service/media-only) or is not
+   * available on the dialog object.
+   */
+  lastMessagePreview?: string;
+  /**
+   * Unix timestamp (seconds) of the dialog's most recent message, when
+   * available — used to sort/label the conversation list.
+   */
+  lastMessageDate?: number;
+  /**
+   * Whether the account has muted notifications for this dialog. `undefined`
+   * when the dialog object carries no notification settings (e.g. a hand-built
+   * fake); a `boolean` otherwise.
+   */
+  muted?: boolean;
+  /**
+   * Whether the peer has a (non-empty) profile/chat photo — a cheap hint that
+   * an avatar can be fetched. `undefined` when the peer entity is not resolved
+   * on the dialog object.
+   */
+  hasPhoto?: boolean;
+  /**
+   * Id of the last **incoming** message the account has read in this dialog.
+   * Messages with a greater id are unread — the anchor for "open at first
+   * unread". `undefined` when the raw TL dialog is not present on the object
+   * (e.g. a hand-built fake).
+   */
+  readInboxMaxId?: number;
+  /**
+   * Id of the last **outgoing** message the peer has read — drives read
+   * receipts (an outgoing message with `id <= readOutboxMaxId` has been seen).
+   * `undefined` when the raw TL dialog is not present on the object.
+   */
+  readOutboxMaxId?: number;
+  /**
+   * Id of the newest message in the dialog. Lets consumers detect when the
+   * latest slice of history is loaded (end of newer-direction paging).
+   * `undefined` when the raw TL dialog is not present on the object.
+   */
+  topMessageId?: number;
+  /**
+   * Whether the dialog's most recent message was sent by the logged-in
+   * account (for a "You:" list-preview prefix). `undefined` when the dialog
+   * carries no last message.
+   */
+  lastMessageOut?: boolean;
+  /**
+   * Best-effort display name of the last message's sender, populated **only**
+   * when GramJS already resolved the sender entity on the message (no extra
+   * network call — that would risk `FLOOD_WAIT`). `undefined` when the sender
+   * is unresolved or there is no last message.
+   */
+  lastMessageSenderName?: string;
+  /**
+   * Media kind of the dialog's most recent message, for a list-preview
+   * placeholder ("Photo", "Video", …) when the message has no text.
+   * `undefined` for text-only/service last messages or when no last message
+   * is available.
+   */
+  lastMessageMediaKind?: GramMediaKind;
+  /**
+   * Whether the peer is a bot account. Only meaningful for `user` dialogs
+   * (always `false` for groups/channels); `undefined` when the peer entity is
+   * not resolved on the dialog object. Drives the `bots` category of
+   * {@link GramDialogFilter} membership.
+   */
+  isBot?: boolean;
+  /**
+   * Whether the peer is in the account's contacts. Only meaningful for `user`
+   * dialogs (always `false` for groups/channels); `undefined` when the peer
+   * entity is not resolved. Drives the `contacts`/`nonContacts` categories of
+   * {@link GramDialogFilter} membership.
+   */
+  isContact?: boolean;
+  /**
+   * Whether the account manually marked this dialog as unread (independent of
+   * {@link GramDialog.unreadCount}). A dialog counts as "read" for
+   * {@link GramDialogFilter.excludeRead} only when `unreadCount` is `0` AND
+   * this flag is not set. `undefined` when the raw TL dialog is not present.
+   */
+  unreadMark?: boolean;
 }
 
 /** Normalized Telegram message. */
@@ -105,6 +188,38 @@ export interface GramMessage {
    * this message's `peerId` and `id`. Service/empty media never counts.
    */
   hasMedia?: boolean;
+  /**
+   * Id of the message this one replies to, when it is a reply. Omitted for
+   * non-reply messages (and for replies to non-message targets, e.g. stories).
+   */
+  replyToMsgId?: number;
+  /**
+   * Whether the message has been edited. Present (and `true`) only when an
+   * {@link GramMessage.editDate} is set; omitted otherwise.
+   */
+  edited?: boolean;
+  /** Unix timestamp (seconds) of the last edit, when the message was edited. */
+  editDate?: number;
+  /**
+   * GramJS-free descriptor of the message's media, when it carries downloadable
+   * media that resolves to a file body. Omitted for text-only or service
+   * messages (and for media with no byte body, e.g. a web-page preview).
+   */
+  media?: GramMediaInfo;
+  /**
+   * Best-effort display name of the sender, populated **only** when GramJS has
+   * already resolved the sender entity on the message object (no extra network
+   * call is made to fetch it — that would risk `FLOOD_WAIT`). Omitted when the
+   * sender is unresolved; callers should fall back to {@link GramMessage.senderId}.
+   */
+  senderName?: string;
+  /**
+   * Media-group (album) id as a decimal string — messages sent together as one
+   * album share the same value, letting consumers collapse them into a single
+   * grouped bubble. A **string** because the id is a random 64-bit value that
+   * can exceed `Number.MAX_SAFE_INTEGER`. Omitted for non-album messages.
+   */
+  groupedId?: string;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */
@@ -182,6 +297,29 @@ export interface GramQrToken {
 }
 
 /**
+ * A secret-free summary of the web session authorized by
+ * {@link import('./gram-client.interface').IGramClient.acceptLoginToken}.
+ *
+ * Mapped from the MTProto `Authorization` object Telegram returns when an
+ * already-signed-in client approves another client's QR login token. It carries
+ * only display metadata describing the *newly authorized* session — never the
+ * token, session string, or any credential — so it is safe to log or surface to
+ * the operator who confirmed the login.
+ */
+export interface GramAcceptedLoginSession {
+  /** Name of the application that requested the login (e.g. `Telegram Web`). */
+  appName: string;
+  /** Device model reported by the authorized client (e.g. `Chrome`). */
+  deviceModel: string;
+  /** Platform the authorized client runs on (e.g. `Web`, `Windows`). */
+  platform: string;
+  /** OS/system version string reported by the authorized client, when set. */
+  systemVersion?: string;
+  /** Application version string reported by the authorized client, when set. */
+  appVersion?: string;
+}
+
+/**
  * Callbacks driving
  * {@link import('./gram-client.interface').IGramClient.signInWithQrCode}.
  */
@@ -234,13 +372,122 @@ export interface GramGetDialogsParams {
   archived?: boolean;
 }
 
-/** Parameters for fetching messages from a peer. */
+/**
+ * Closed set of dialog-filter (chat folder) kinds. Declared as an `as const`
+ * record (never an `enum`) so {@link GramDialogFilterType} can be derived.
+ */
+export const GRAM_DIALOG_FILTER_TYPES = {
+  /**
+   * The account's "All Chats" pseudo-folder. Telegram returns it inside the
+   * filter list purely to mark where the "All Chats" tab sits after the user
+   * reordered their folders; it has no id, title, or rules of its own.
+   */
+  DEFAULT: 'default',
+  /** A regular user-defined folder with category flags and peer lists. */
+  FILTER: 'filter',
+  /**
+   * A shared folder joined via a chat-folder invite link. Membership is
+   * defined ONLY by its `pinnedPeerIds`/`includePeerIds` — it has no category
+   * flags and no exclusions (those fields are always `false`/empty).
+   */
+  CHATLIST: 'chatlist',
+} as const;
+
+/** Union of the folder kinds in {@link GRAM_DIALOG_FILTER_TYPES}. */
+export type GramDialogFilterType =
+  (typeof GRAM_DIALOG_FILTER_TYPES)[keyof typeof GRAM_DIALOG_FILTER_TYPES];
+
+/**
+ * Normalized dialog filter (a "chat folder" in Telegram's UI), as returned by
+ * {@link import('./gram-client.interface').IGramClient.getDialogFilters}.
+ *
+ * A dialog belongs to the folder when it is NOT in `excludePeerIds`, and
+ * either appears in `pinnedPeerIds`/`includePeerIds` (which override every
+ * exclusion flag) or matches one of the enabled category flags without being
+ * knocked out by an `exclude*` flag. All peer ids use the same GramJS
+ * *marked* format as {@link GramDialog.id} (users unmarked, basic chats
+ * `-<id>`, channels/supergroups `-100<id>`), so they compare directly.
+ */
+export interface GramDialogFilter {
+  /** Which folder kind this entry is. */
+  type: GramDialogFilterType;
+  /** Telegram's folder id (`0` for the `default` "All Chats" entry). */
+  id: number;
+  /** Folder title as plain text (empty for the `default` entry). */
+  title: string;
+  /** Emoji chosen as the folder's icon, when set. */
+  emoticon?: string;
+  /** Include all contacts. */
+  contacts: boolean;
+  /** Include all non-contact users. */
+  nonContacts: boolean;
+  /** Include all groups (basic groups and supergroups). */
+  groups: boolean;
+  /** Include all broadcast channels. */
+  broadcasts: boolean;
+  /** Include all bots. */
+  bots: boolean;
+  /** Drop category-matched dialogs that are muted. */
+  excludeMuted: boolean;
+  /** Drop category-matched dialogs with nothing unread. */
+  excludeRead: boolean;
+  /** Drop category-matched dialogs that are archived. */
+  excludeArchived: boolean;
+  /** Peers pinned to the top of this folder (marked ids, in pin order). */
+  pinnedPeerIds: string[];
+  /** Peers explicitly added to this folder (marked ids). */
+  includePeerIds: string[];
+  /** Peers explicitly removed from this folder (marked ids). */
+  excludePeerIds: string[];
+}
+
+/**
+ * Parameters for fetching messages from a peer.
+ *
+ * Two paging styles are supported and should not be mixed:
+ *
+ * - **Bounded** — `minId` / `maxId` return messages strictly inside the id
+ *   bounds, newest-first (the classic "older than X" page).
+ * - **Positioned window** — `offsetId` (+ `addOffset`) anchors the page at a
+ *   message id and shifts the window: `addOffset: 0` returns the `limit`
+ *   messages **older** than the anchor; a **negative** `addOffset` slides the
+ *   window toward **newer** messages (e.g. `offsetId: X, addOffset:
+ *   -(limit / 2 + 1), limit` yields a window centered on `X`).
+ *
+ * GramJS sharp edges (do not fight these — shape the request around them):
+ * - `maxId` is folded into `offsetId` via `Math.max(offsetId, maxId)`; passing
+ *   both is redundant at best.
+ * - Combining `offsetId` with `minId` returns an **empty result** whenever
+ *   `offsetId - minId <= 1` (an internal early-exit guard). Never pair them —
+ *   derive exclusivity from the `addOffset` math instead.
+ */
 export interface GramGetMessagesParams {
   /** Maximum number of messages to return. */
   limit?: number;
   /** Only return messages with an id greater than this (for pagination). */
   minId?: number;
   /** Only return messages with an id less than this (for pagination). */
+  maxId?: number;
+  /**
+   * Anchor message id for a positioned window (exclusive; pairs with
+   * {@link GramGetMessagesParams.addOffset}). See the interface docs for the
+   * window math and the GramJS `minId` interaction trap.
+   */
+  offsetId?: number;
+  /**
+   * Window shift relative to the anchor's position; `0` = the messages just
+   * older than `offsetId`, negative values include newer messages.
+   * Meaningless without {@link GramGetMessagesParams.offsetId}.
+   */
+  addOffset?: number;
+}
+
+/** Parameters for marking a dialog as read. */
+export interface GramMarkAsReadParams {
+  /**
+   * Mark read only up to (and including) this message id. Omitted = mark the
+   * entire dialog read up to its latest message.
+   */
   maxId?: number;
 }
 

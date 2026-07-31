@@ -7,8 +7,20 @@
  * Cut a versioned release end-to-end: bump the version, merge `dev` into
  * `main`, tag it, and publish a GitHub release — replacing the error-prone
  * manual sequence with a guided, repeatable flow. This mirrors the `dev`→`main`
- * release flow documented in the project `CLAUDE.md` (releases are GitHub-only,
- * never npm, and the repo stays private).
+ * release flow documented in the project `CLAUDE.md` ("Branching & releases").
+ *
+ * THIS PUBLISHES TO THE PUBLIC NPM REGISTRY — AND IS IRREVERSIBLE
+ * This repository is **public**, and pushing the `vX.Y.Z` tag (step 6 below)
+ * triggers the `Release (npm publish)` workflow in
+ * `.github/workflows/release.yml`, which runs `npm publish` and pushes
+ * `telenest@X.Y.Z` to the public npm registry at https://registry.npmjs.org.
+ * Authentication is npm Trusted Publishing (OIDC via `id-token: write`) — no
+ * npm token is stored anywhere, and a signed provenance attestation is attached
+ * automatically. A published version cannot be replaced or re-uploaded, and
+ * unpublishing is restricted by npm policy, so a mistaken release is corrected
+ * by cutting a **new** version, never by undoing this one. Everything before
+ * the tag push is still local or revertible; the tag push is the point of no
+ * return.
  *
  * USAGE
  * npm run git:release            # interactive
@@ -27,7 +39,8 @@
  * 3. Bump package.json on the source branch, commit, and push it.
  * 4. Gate on `npm run typecheck` (and optionally `npm test`).
  * 5. Merge source -> target (--no-ff) and push the target branch.
- * 6. Create an annotated tag and a GitHub release with generated notes.
+ * 6. Create an annotated tag, push it (**this starts the npm publish
+ *    workflow**), and create a GitHub release with generated notes.
  *
  * SAFETY GUARDS
  * - Aborts on a dirty working tree, unauthenticated gh, missing branches, a
@@ -37,7 +50,11 @@
  * - A merge conflict between source and target is aborted (`git merge
  *   --abort`), the source branch is restored, and the script exits without
  *   pushing — conflicts must be resolved manually.
- * - `--dry-run` performs every read-only check but skips all mutations.
+ * - `--dry-run` performs every read-only check but skips all mutations — no
+ *   commit, no push, no tag, and therefore no npm publish. Use it to preview a
+ *   release.
+ * - The confirmation prompt spells out the public-npm consequence before the
+ *   first mutation, so an operator who never opened this file still sees it.
  *
  * NOTE
  * This is an `.mts` (ESM TypeScript) file on purpose: this package is CommonJS
@@ -277,12 +294,27 @@ async function main(): Promise<void> {
       `branches ${DEV} → ${MAIN} (merge --no-ff)`,
       `tag      ${tag}`,
       `release  GitHub release with generated notes`,
+      `publish  ${name}@${next} → public npm registry (npmjs.com)`,
     ].join('\n'),
     'Release plan',
   );
 
+  // The tag push starts `.github/workflows/release.yml`, which runs
+  // `npm publish`. A published version can never be replaced, so this warning
+  // is the last cheap moment to back out — say so in the prompt itself rather
+  // than only in the file header nobody reads mid-release.
+  if (!DRY) {
+    p.log.warn(
+      `Pushing ${tag} publishes ${name}@${next} to the PUBLIC npm registry. ` +
+        'Published versions cannot be replaced or re-uploaded — a mistake is ' +
+        'fixed by releasing a new version, not by undoing this one.',
+    );
+  }
+
   const go = await p.confirm({
-    message: DRY ? 'Run dry-run?' : 'Cut this release?',
+    message: DRY
+      ? 'Run dry-run?'
+      : `Cut this release and publish ${name}@${next} to public npm?`,
   });
 
   if (p.isCancel(go) || !go) fail('Aborted.');
@@ -391,7 +423,9 @@ async function main(): Promise<void> {
   p.outro(
     DRY
       ? `Dry-run complete — nothing was changed. Would have released ${tag}.`
-      : `Released ${tag} 🎉 ${url}`,
+      : `Released ${tag} 🎉 ${url}\n` +
+          `Publishing ${name}@${next} to npm — watch it with ` +
+          '`gh run list --workflow=release.yml`.',
   );
 }
 

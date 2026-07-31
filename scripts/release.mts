@@ -53,8 +53,10 @@
  * - `--dry-run` performs every read-only check but skips all mutations — no
  *   commit, no push, no tag, and therefore no npm publish. Use it to preview a
  *   release.
- * - The confirmation prompt spells out the public-npm consequence before the
- *   first mutation, so an operator who never opened this file still sees it.
+ * - The confirmation prompt spells out the public-npm consequence before any
+ *   release mutation (version bump, merge, tag, publish), so an operator who
+ *   never opened this file still sees it. Note the preflight may already have
+ *   fast-forwarded or pushed the source branch under its own prompt.
  *
  * NOTE
  * This is an `.mts` (ESM TypeScript) file on purpose: this package is CommonJS

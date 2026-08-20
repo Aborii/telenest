@@ -1710,6 +1710,31 @@ describe('GramJsClientAdapter', () => {
       ]);
     });
 
+    it('carries a collapsed blockquote, and omits the flag otherwise', async () => {
+      // `collapsed` is a name-dependent read against a hand-written mapping: a
+      // wrong field name would leave every quote expanded while still emitting
+      // a well-formed blockquote entity, so nothing else would catch it.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityBlockquote, {
+                offset: 0,
+                length: 2,
+                collapsed: true,
+              }),
+              asEntity(Api.MessageEntityBlockquote, { offset: 3, length: 2 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'blockquote', offset: 0, length: 2, collapsed: true },
+        { type: 'blockquote', offset: 3, length: 2, collapsed: undefined },
+      ]);
+    });
+
     it('leaves entities undefined for plain text', async () => {
       const mock = createMockClient({
         getMessages: jest.fn().mockResolvedValue([aMsg({ entities: [] })]),

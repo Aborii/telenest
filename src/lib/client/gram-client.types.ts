@@ -69,6 +69,22 @@ export type GramDialogType =
   (typeof GRAM_DIALOG_TYPES)[keyof typeof GRAM_DIALOG_TYPES];
 
 /** Normalized entry from the account's dialog (conversation) list. */
+/**
+ * An unsent draft saved on a dialog — what every official client shows in the
+ * chat list ahead of the last message.
+ *
+ * Read-only: writing drafts (`messages.saveDraft`) is a separate surface. The
+ * point of exposing it is that a draft typed on another device shows up here.
+ */
+export interface GramDialogDraft {
+  /** The draft's plain text (empty for a media-only draft). */
+  text: string;
+  /** Unix timestamp (seconds) the draft was last edited. */
+  date: number;
+  /** Id of the message the draft replies to, when it is a reply. */
+  replyToMsgId?: number;
+}
+
 export interface GramDialog {
   /** Peer id rendered as a decimal string. */
   id: string;
@@ -163,9 +179,167 @@ export interface GramDialog {
    * this flag is not set. `undefined` when the raw TL dialog is not present.
    */
   unreadMark?: boolean;
+  /**
+   * The dialog's unsent draft, when it has one. Omitted for a dialog with no
+   * draft — and for an EMPTY draft (`draftMessageEmpty`), which Telegram uses
+   * to say a draft was cleared and which must not render as a "Draft:" row.
+   */
+  draft?: GramDialogDraft;
 }
 
 /** Normalized Telegram message. */
+/**
+ * Closed set of message-entity kinds — the formatting and semantic spans
+ * Telegram sends alongside a message's text. Declared as an `as const` record
+ * (never an `enum`) so {@link GramMessageEntityType} derives from it.
+ *
+ * Every `Api.MessageEntity*` variant telenest models has an entry; anything
+ * Telegram adds later maps to `UNKNOWN` with its offsets intact, so a renderer
+ * can skip the span rather than mis-styling it.
+ */
+export const GRAM_MESSAGE_ENTITY_TYPES = {
+  /** Bold text. */
+  BOLD: 'bold',
+  /** Italic text. */
+  ITALIC: 'italic',
+  /** Underlined text. */
+  UNDERLINE: 'underline',
+  /** Struck-through text. */
+  STRIKETHROUGH: 'strikethrough',
+  /** Inline monospace. */
+  CODE: 'code',
+  /** Preformatted block, optionally carrying a language hint. */
+  PRE: 'pre',
+  /** Hidden until tapped. */
+  SPOILER: 'spoiler',
+  /** Quoted block, optionally collapsed. */
+  BLOCKQUOTE: 'blockquote',
+  /** A bare URL written out in the text. */
+  URL: 'url',
+  /** Text hyperlinked to a URL the text itself does not contain. */
+  TEXT_URL: 'text-url',
+  /** An email address. */
+  EMAIL: 'email',
+  /** A phone number. */
+  PHONE: 'phone',
+  /** An `@username` mention. */
+  MENTION: 'mention',
+  /** A mention of a user by id, for accounts with no username. */
+  MENTION_NAME: 'mention-name',
+  /** A `#hashtag`. */
+  HASHTAG: 'hashtag',
+  /** A `$CASHTAG`. */
+  CASHTAG: 'cashtag',
+  /** A `/command`. */
+  BOT_COMMAND: 'bot-command',
+  /** A custom emoji, rendered from a document. */
+  CUSTOM_EMOJI: 'custom-emoji',
+  /** A bank-card number. */
+  BANK_CARD: 'bank-card',
+  /** A kind this version does not model; offsets are still accurate. */
+  UNKNOWN: 'unknown',
+} as const;
+
+/** Union of the entity kinds in {@link GRAM_MESSAGE_ENTITY_TYPES}. */
+export type GramMessageEntityType =
+  (typeof GRAM_MESSAGE_ENTITY_TYPES)[keyof typeof GRAM_MESSAGE_ENTITY_TYPES];
+
+/**
+ * One formatting or semantic span over a message's text.
+ *
+ * Offsets are **UTF-16 code units**, exactly as Telegram sends them, so they
+ * index into a JavaScript string directly — but an emoji or other astral
+ * character counts as two, which matters when slicing.
+ */
+export interface GramMessageEntity {
+  /** What the span is. */
+  type: GramMessageEntityType;
+  /** Start offset into {@link GramMessage.text}, in UTF-16 code units. */
+  offset: number;
+  /** Length of the span, in UTF-16 code units. */
+  length: number;
+  /**
+   * Target URL. Only on `text-url` — the one entity whose meaning is not
+   * recoverable from the text it covers.
+   */
+  url?: string;
+  /** Mentioned user id as a decimal string. Only on `mention-name`. */
+  userId?: string;
+  /** Syntax-highlighting hint. Only on `pre`, and only when Telegram sent one. */
+  language?: string;
+  /**
+   * Custom-emoji document id as a decimal string. Only on `custom-emoji`; a
+   * **string** because the id is 64-bit and can exceed `Number.MAX_SAFE_INTEGER`.
+   */
+  documentId?: string;
+  /** Whether the quote renders collapsed. Only on `blockquote`. */
+  collapsed?: boolean;
+}
+
+/**
+ * Closed set of reaction kinds. Declared as an `as const` record (never an
+ * `enum`) so {@link GramMessageReactionKind} derives from it.
+ */
+export const GRAM_MESSAGE_REACTION_KINDS = {
+  /** A standard emoji reaction. */
+  EMOJI: 'emoji',
+  /** A custom-emoji reaction. */
+  CUSTOM_EMOJI: 'custom-emoji',
+  /** A Telegram Stars paid reaction. */
+  PAID: 'paid',
+} as const;
+
+/** Union of the reaction kinds in {@link GRAM_MESSAGE_REACTION_KINDS}. */
+export type GramMessageReactionKind =
+  (typeof GRAM_MESSAGE_REACTION_KINDS)[keyof typeof GRAM_MESSAGE_REACTION_KINDS];
+
+/**
+ * One aggregated reaction under a message — the chip a client renders, with
+ * its total and whether this account is part of it.
+ *
+ * Who reacted (`recent_reactions`) is deliberately not modelled: the aggregate
+ * row is what every client shows by default, and the avatar list needs peer
+ * resolution this mapping does not do.
+ */
+export interface GramMessageReaction {
+  /** Which of the three reaction forms this is. */
+  kind: GramMessageReactionKind;
+  /** The emoji itself. Only on `emoji`. */
+  emoticon?: string;
+  /**
+   * Custom-emoji document id as a decimal string. Only on `custom-emoji`; a
+   * **string** for the same 64-bit reason as
+   * {@link GramMessageEntity.documentId}.
+   */
+  documentId?: string;
+  /** How many accounts chose this reaction. */
+  count: number;
+  /** Whether the logged-in account is one of them. */
+  chosen: boolean;
+}
+
+/**
+ * Where a forwarded message originally came from — what a client renders as
+ * the "Forwarded from X" header.
+ *
+ * {@link GramMessageForward.fromId} and {@link GramMessageForward.fromName} are
+ * separate on purpose: a name WITHOUT an id is Telegram's privacy case, where
+ * the original sender disallowed linking back, and a client must render the
+ * name as plain text rather than a link.
+ */
+export interface GramMessageForward {
+  /** Original sender's peer id as a decimal string, when not hidden. */
+  fromId?: string;
+  /** Original sender's display name, when Telegram sent one. */
+  fromName?: string;
+  /** Unix timestamp (seconds) of the ORIGINAL message, not the forward. */
+  date: number;
+  /** Original message id inside the source channel, for a channel post. */
+  channelPost?: number;
+  /** Signature carried over from a signed channel post. */
+  postAuthor?: string;
+}
+
 export interface GramMessage {
   /** Message id within its chat. */
   id: number;
@@ -220,6 +394,45 @@ export interface GramMessage {
    * can exceed `Number.MAX_SAFE_INTEGER`. Omitted for non-album messages.
    */
   groupedId?: string;
+  /**
+   * Formatting and semantic spans over {@link GramMessage.text}, in the order
+   * Telegram sent them. Omitted when the message carries none.
+   *
+   * Without these the text is only its characters: bold and spoilers vanish,
+   * and a `text-url` link loses its target entirely, since the URL lives on
+   * the entity rather than in the text it covers.
+   */
+  entities?: GramMessageEntity[];
+  /**
+   * Aggregated reactions in Telegram's display order. Omitted when the message
+   * has none.
+   *
+   * These are a SNAPSHOT from the read that produced this message: reaction
+   * changes arrive as `updateMessageReactions`, which is not a message edit,
+   * so they do not surface on the edit stream. A refetch refreshes them.
+   */
+  reactions?: GramMessageReaction[];
+  /**
+   * Where the message came from, when it was forwarded. Omitted otherwise.
+   *
+   * Without it a forward is indistinguishable from something the sender wrote,
+   * which misattributes the words rather than merely losing decoration.
+   */
+  forward?: GramMessageForward;
+  /**
+   * `@username` of the bot the message was sent through (an inline result),
+   * without the `@`. Omitted when the message did not come through a bot, or
+   * when the bot is not among the entities GramJS already resolved — the same
+   * no-extra-round-trip rule {@link GramMessage.senderName} follows.
+   */
+  viaBotUsername?: string;
+  /**
+   * Signature on a signed channel post ("— Jane"). Omitted elsewhere.
+   *
+   * A signed channel post is exactly the case where {@link GramMessage.senderId}
+   * is absent, so without this the post has no attribution at all.
+   */
+  postAuthor?: string;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */

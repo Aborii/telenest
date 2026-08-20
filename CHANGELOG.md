@@ -11,6 +11,25 @@ Each release also has full, auto-generated notes on the
 
 ### Added
 
+- Rich text: `GramMessage.entities` carries Telegram's formatting and semantic
+  spans (bold/italic/code/pre/spoiler/blockquote, links, mentions, hashtags,
+  custom emoji, …) with UTF-16 offsets. A kind this version does not model
+  still arrives as `'unknown'` with accurate offsets rather than being dropped.
+  Without these a `text-url` link lost its target entirely, since the URL lives
+  on the entity and not in the text it covers.
+- Reactions: `GramMessage.reactions` carries the aggregated chip row — emoji,
+  custom-emoji and paid reactions with their counts and whether this account
+  chose each. A snapshot from the read, since reaction changes arrive as
+  `updateMessageReactions` rather than as message edits.
+- Message provenance: `GramMessage.forward` (the "Forwarded from X" header,
+  including the original date, channel post and signature), `viaBotUsername`
+  for inline results, and `postAuthor` for signed channel posts. A forward
+  whose origin Telegram hides still arrives — dropping it would render the
+  message as the forwarder's own words.
+- Dialog drafts: `GramDialog.draft` carries the unsent draft every official
+  client shows ahead of the last message. A cleared draft (`draftMessageEmpty`)
+  maps to no draft rather than an empty one.
+
 - Dialog read positions & last-message metadata: `GramDialog` now carries
   `readInboxMaxId`, `readOutboxMaxId`, `topMessageId`, `lastMessageOut`,
   `lastMessageSenderName`, and `lastMessageMediaKind` — the building blocks for

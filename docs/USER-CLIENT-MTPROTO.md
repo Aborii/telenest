@@ -860,8 +860,23 @@ interface GramDialog {
   isBot?: boolean;                  // peer is a bot (user dialogs; false for groups/channels)
   isContact?: boolean;              // peer is in the account's contacts (user dialogs)
   unreadMark?: boolean;             // dialog was manually marked unread
+  draft?: GramDialogDraft;          // unsent draft, when the dialog has one
 }
 ```
+
+```ts
+interface GramDialogDraft {
+  text: string;          // the draft's plain text ('' for a media-only draft)
+  date: number;          // unix seconds of the last edit
+  replyToMsgId?: number; // message the draft replies to, when it is a reply
+}
+```
+
+The draft is what every official client shows in the chat list ahead of the last message
+("Draft: …"), and it is read-only here — the point is to render what another device typed.
+A CLEARED draft (`draftMessageEmpty`) maps to no draft at all rather than an empty one:
+Telegram uses it to say a draft was deleted, and taking it at face value would leave a
+permanent "Draft:" row on the dialog.
 
 The read positions (`readInboxMaxId` / `readOutboxMaxId` / `topMessageId`) come from the raw
 TL dialog and are the building blocks for "open at first unread" (fetch a window around
@@ -933,6 +948,11 @@ interface GramMessage {
   media?: GramMediaInfo; // descriptor of downloadable media with a file body
   senderName?: string;   // best-effort resolved sender name (no extra fetch)
   groupedId?: string;    // album/media-group id (decimal string) — shared by album members
+  entities?: GramMessageEntity[];    // formatting/semantic spans over `text`
+  reactions?: GramMessageReaction[]; // aggregated reaction chips
+  forward?: GramMessageForward;      // where a forwarded message came from
+  viaBotUsername?: string;           // bot an inline result was sent through
+  postAuthor?: string;               // signature on a signed channel post
 }
 ```
 
@@ -941,6 +961,72 @@ hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
 `downloadMedia(message.peerId, message.id)`. `groupedId` is a **string** because album ids
 are random 64-bit values that can exceed `2^53`; messages sharing a value were sent together
 as one album and can be collapsed into a single grouped bubble.
+
+#### `entities` — rich text
+
+```ts
+interface GramMessageEntity {
+  type: GramMessageEntityType; // 'bold' | 'text-url' | 'custom-emoji' | … | 'unknown'
+  offset: number;              // start, in UTF-16 code units
+  length: number;              // length, in UTF-16 code units
+  url?: string;                // 'text-url' only
+  userId?: string;             // 'mention-name' only
+  language?: string;           // 'pre' only
+  documentId?: string;         // 'custom-emoji' only (decimal string, 64-bit)
+  collapsed?: boolean;         // 'blockquote' only
+}
+```
+
+Offsets are **UTF-16 code units**, as Telegram sends them, so they index into a JavaScript
+string directly — but an emoji counts as two, which matters when slicing. Without these the
+text is only its characters: bold and spoilers disappear, and a `text-url` loses its target
+entirely, since the URL lives on the entity rather than in the text it covers. An entity kind
+this version does not model still arrives, as `'unknown'` with accurate offsets, so a renderer
+can leave that run alone instead of mis-styling it.
+
+#### `reactions` — the chip row
+
+```ts
+interface GramMessageReaction {
+  kind: 'emoji' | 'custom-emoji' | 'paid';
+  emoticon?: string;    // 'emoji' only
+  documentId?: string;  // 'custom-emoji' only (decimal string, 64-bit)
+  count: number;        // how many accounts chose it
+  chosen: boolean;      // whether this account is one of them
+}
+```
+
+A **snapshot** from the read that produced the message. Reaction changes arrive as
+`updateMessageReactions`, which is not a message edit, so they do not appear on
+`editedMessages$` — a refetch is what refreshes them. Who reacted (`recent_reactions`) is not
+modelled: the aggregate row is what clients show by default, and the avatar list would need
+peer resolution this mapping does not do.
+
+#### `forward` / `viaBotUsername` / `postAuthor` — provenance
+
+```ts
+interface GramMessageForward {
+  fromId?: string;      // original sender, MARKED decimal id, when not hidden
+  fromName?: string;    // original sender's name
+  date: number;         // unix seconds of the ORIGINAL message
+  channelPost?: number; // original message id inside the source channel
+  postAuthor?: string;  // signature carried over from a signed post
+}
+```
+
+A forward header with a `fromName` but **no** `fromId` is Telegram's privacy case: the
+original sender disallowed linking back, so render the name as plain text rather than a link.
+A header with neither still arrives rather than being dropped — without it the message reads
+as the forwarder's own words, which misattributes it.
+
+`fromId` is the **marked** form (`-100…` for a channel), matching `senderId` rather than
+`peerId`, because it is an id a client opens — the raw id would address an unrelated user.
+
+`viaBotUsername` is resolved only from a bot entity GramJS already attached to the message;
+an unresolved bot is omitted rather than looked up, since one extra round-trip per message is
+a flood-wait risk (the same rule `senderName` follows). `postAuthor` is the signature on a
+signed channel post — exactly the case where `senderId` is absent, so it is the message's
+only attribution.
 
 ### `GramDeletedMessages`
 

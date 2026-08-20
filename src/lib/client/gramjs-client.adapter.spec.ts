@@ -1275,6 +1275,62 @@ describe('GramJsClientAdapter', () => {
       expect(unmarked?.unreadMark).toBe(false);
       expect(noRaw?.unreadMark).toBeUndefined();
     });
+
+    // ── Drafts (#150) ────────────────────────────────────────────────────
+    it('maps an unsent draft off the raw TL dialog', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              draft: asEntity(Api.DraftMessage, {
+                message: 'half a thought',
+                date: 1700000900,
+              }),
+            },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.draft).toEqual({
+        text: 'half a thought',
+        date: 1700000900,
+        replyToMsgId: undefined,
+      });
+    });
+
+    it("carries the draft's reply target when it is a reply", async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              draft: asEntity(Api.DraftMessage, {
+                message: 'answering',
+                date: 1700000900,
+                replyTo: asEntity(Api.InputReplyToMessage, {
+                  replyToMsgId: 88,
+                }),
+              }),
+            },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.draft?.replyToMsgId).toBe(88);
+    });
+
+    it('treats a cleared draft as no draft at all', async () => {
+      // Telegram sends draftMessageEmpty to say a draft was DELETED. Taking it
+      // at face value would leave a permanent "Draft:" row on the dialog.
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ dialog: { draft: asEntity(Api.DraftMessageEmpty, {}) } }),
+          aDialog({ dialog: {} }),
+        ]),
+      });
+      const [cleared, none] = await createAdapter(mock).getDialogs();
+      expect(cleared?.draft).toBeUndefined();
+      expect(none?.draft).toBeUndefined();
+    });
   });
 
   describe('getDialogFilters', () => {
@@ -1540,6 +1596,305 @@ describe('GramJsClientAdapter', () => {
       });
       const [message] = await createAdapter(mock).getMessages('me');
       expect(message?.groupedId).toBeUndefined();
+    });
+
+    // ── Entities (#142) ──────────────────────────────────────────────────
+    it('maps every modelled entity kind with its offsets', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            message: 'bold italic code',
+            entities: [
+              asEntity(Api.MessageEntityBold, { offset: 0, length: 4 }),
+              asEntity(Api.MessageEntityItalic, { offset: 5, length: 6 }),
+              asEntity(Api.MessageEntityCode, { offset: 12, length: 4 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'bold', offset: 0, length: 4 },
+        { type: 'italic', offset: 5, length: 6 },
+        { type: 'code', offset: 12, length: 4 },
+      ]);
+    });
+
+    it('carries the payload of the entities that have one', async () => {
+      // These four are the entities whose meaning is NOT recoverable from the
+      // text they cover — dropping the payload silently loses the link, the
+      // mention target, or the emoji itself.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityTextUrl, {
+                offset: 0,
+                length: 2,
+                url: 'https://example.com',
+              }),
+              asEntity(Api.MessageEntityMentionName, {
+                offset: 2,
+                length: 2,
+                userId: bigInt('4242'),
+              }),
+              asEntity(Api.MessageEntityCustomEmoji, {
+                offset: 4,
+                length: 2,
+                documentId: bigInt('13537855237972033634'),
+              }),
+              asEntity(Api.MessageEntityPre, {
+                offset: 6,
+                length: 2,
+                language: 'ts',
+              }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        {
+          type: 'text-url',
+          offset: 0,
+          length: 2,
+          url: 'https://example.com',
+        },
+        { type: 'mention-name', offset: 2, length: 2, userId: '4242' },
+        {
+          type: 'custom-emoji',
+          offset: 4,
+          length: 2,
+          // 64-bit id kept as a string — Number() would round it.
+          documentId: '13537855237972033634',
+        },
+        { type: 'pre', offset: 6, length: 2, language: 'ts' },
+      ]);
+    });
+
+    it('drops an empty pre language rather than reporting one', async () => {
+      // Telegram sends '' when no language was given; passing that through
+      // would make a renderer label the block as an empty language.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityPre, {
+                offset: 0,
+                length: 2,
+                language: '',
+              }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities?.[0]?.language).toBeUndefined();
+    });
+
+    it('keeps an unmodelled entity as unknown with its offsets intact', async () => {
+      // Skipping the span entirely would lose a piece of the text a renderer
+      // still has to account for; 'unknown' lets it leave that run alone.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityUnknown, { offset: 3, length: 5 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'unknown', offset: 3, length: 5 },
+      ]);
+    });
+
+    it('carries a collapsed blockquote, and omits the flag otherwise', async () => {
+      // `collapsed` is a name-dependent read against a hand-written mapping: a
+      // wrong field name would leave every quote expanded while still emitting
+      // a well-formed blockquote entity, so nothing else would catch it.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityBlockquote, {
+                offset: 0,
+                length: 2,
+                collapsed: true,
+              }),
+              asEntity(Api.MessageEntityBlockquote, { offset: 3, length: 2 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'blockquote', offset: 0, length: 2, collapsed: true },
+        { type: 'blockquote', offset: 3, length: 2, collapsed: undefined },
+      ]);
+    });
+
+    it('leaves entities undefined for plain text', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg({ entities: [] })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toBeUndefined();
+    });
+
+    // ── Reactions (#144) ─────────────────────────────────────────────────
+    it('maps the three reaction forms with their counts', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            reactions: asEntity(Api.MessageReactions, {
+              results: [
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionEmoji, { emoticon: '👍' }),
+                  count: 12,
+                }),
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionCustomEmoji, {
+                    documentId: bigInt('13537855237972033634'),
+                  }),
+                  count: 3,
+                }),
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionPaid, {}),
+                  count: 5,
+                }),
+              ],
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions).toEqual([
+        { kind: 'emoji', emoticon: '👍', count: 12, chosen: false },
+        {
+          kind: 'custom-emoji',
+          documentId: '13537855237972033634',
+          count: 3,
+          chosen: false,
+        },
+        { kind: 'paid', count: 5, chosen: false },
+      ]);
+    });
+
+    it('treats a chosenOrder of 0 as chosen', async () => {
+      // The order is zero-based, so the account's FIRST reaction carries 0 —
+      // a truthiness test would report exactly that one as not chosen.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            reactions: asEntity(Api.MessageReactions, {
+              results: [
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionEmoji, { emoticon: '🔥' }),
+                  count: 1,
+                  chosenOrder: 0,
+                }),
+              ],
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions?.[0]?.chosen).toBe(true);
+    });
+
+    it('leaves reactions undefined when a message has none', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions).toBeUndefined();
+    });
+
+    // ── Provenance (#152) ────────────────────────────────────────────────
+    it('maps a forward header, including the original date and post', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            fwdFrom: asEntity(Api.MessageFwdHeader, {
+              fromId: new Api.PeerChannel({ channelId: bigInt('777') }),
+              date: 1690000000,
+              channelPost: 42,
+              postAuthor: 'Jane',
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward).toEqual({
+        fromId: '-100777',
+        fromName: undefined,
+        date: 1690000000,
+        channelPost: 42,
+        postAuthor: 'Jane',
+      });
+    });
+
+    it('keeps a hidden-origin forward rather than dropping it', async () => {
+      // Telegram sends a name with no id when the original sender disallows
+      // linking back. Dropping the header would render the message as the
+      // forwarder's own words — a misattribution, not a missing decoration.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            fwdFrom: asEntity(Api.MessageFwdHeader, {
+              fromName: 'Someone',
+              date: 1690000000,
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward?.fromId).toBeUndefined();
+      expect(message?.forward?.fromName).toBe('Someone');
+    });
+
+    it('leaves forward undefined for an original message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward).toBeUndefined();
+    });
+
+    it('resolves viaBotUsername only from an already-attached bot', async () => {
+      // Resolving it with a lookup would cost one round-trip per message.
+      const resolved = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            viaBotId: bigInt('55'),
+            viaBot: asEntity(Api.User, { username: 'gif' }),
+          }),
+        ]),
+      });
+      const [withBot] = await createAdapter(resolved).getMessages('me');
+      expect(withBot?.viaBotUsername).toBe('gif');
+
+      const unresolved = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ viaBotId: bigInt('55') })]),
+      });
+      const [withoutBot] = await createAdapter(unresolved).getMessages('me');
+      expect(withoutBot?.viaBotUsername).toBeUndefined();
+    });
+
+    it("maps a signed channel post's author", async () => {
+      // A signed post is exactly the case where senderId is absent, so this
+      // is the only attribution the message carries.
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ postAuthor: 'Jane' })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.postAuthor).toBe('Jane');
     });
   });
 

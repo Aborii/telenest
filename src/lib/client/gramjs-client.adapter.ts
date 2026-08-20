@@ -43,6 +43,8 @@ import {
   GRAM_DIALOG_FILTER_TYPES,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
+  GRAM_MESSAGE_ENTITY_TYPES,
+  GRAM_MESSAGE_REACTION_KINDS,
   GRAM_SIGN_IN_STATUSES,
   type GramAcceptedLoginSession,
   type GramChatAction,
@@ -51,6 +53,7 @@ import {
   type GramDeletedMessages,
   type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogDraft,
   type GramDialogFilter,
   type GramDialogType,
   type GramGetDialogsParams,
@@ -61,6 +64,9 @@ import {
   type GramMediaKind,
   type GramMediaRange,
   type GramMessage,
+  type GramMessageEntity,
+  type GramMessageForward,
+  type GramMessageReaction,
   type GramPeer,
   type GramPinMessageParams,
   type GramQrSignInCallbacks,
@@ -1129,6 +1135,34 @@ export class GramJsClientAdapter implements IGramClient {
       isBot,
       isContact,
       unreadMark: raw ? Boolean(raw.unreadMark) : undefined,
+      draft: this.mapDraft(raw?.draft),
+    };
+  }
+
+  /**
+   * Maps a dialog's unsent draft into a {@link GramDialogDraft}.
+   *
+   * `draftMessageEmpty` maps to `undefined` rather than an empty draft:
+   * Telegram uses it to say a draft was CLEARED, and a client that took it at
+   * face value would leave a permanent "Draft:" row on a dialog whose draft
+   * the reader already deleted.
+   *
+   * @param draft - The raw draft on the TL dialog, if any.
+   * @returns The mapped draft, or `undefined` when there is none.
+   * @throws Never.
+   */
+  private mapDraft(
+    draft: Api.TypeDraftMessage | undefined,
+  ): GramDialogDraft | undefined {
+    if (!(draft instanceof Api.DraftMessage)) return undefined;
+    const replyTo = draft.replyTo;
+    return {
+      text: draft.message,
+      date: draft.date,
+      replyToMsgId:
+        replyTo instanceof Api.InputReplyToMessage
+          ? replyTo.replyToMsgId
+          : undefined,
     };
   }
 
@@ -1344,7 +1378,204 @@ export class GramJsClientAdapter implements IGramClient {
       senderName: this.senderDisplayName(message.sender),
       // ── Album ids are random 64-bit values — stringify, never Number(). ───
       groupedId: message.groupedId?.toString(),
+      entities: this.mapEntities(message.entities),
+      reactions: this.mapReactions(message.reactions),
+      forward: this.mapForward(message.fwdFrom),
+      viaBotUsername: this.viaBotUsername(message),
+      postAuthor: message.postAuthor ?? undefined,
     };
+  }
+
+  /**
+   * Maps a message's formatting spans into {@link GramMessageEntity}s.
+   *
+   * Offsets pass through untouched — they are UTF-16 code units on both sides,
+   * which is exactly what a JavaScript consumer needs to slice the text.
+   *
+   * An entity kind this version does not model still maps through, as
+   * `unknown` with its offsets intact: a renderer can then leave that span
+   * alone, whereas dropping the entry would shift nothing but silently lose a
+   * span the text still contains.
+   *
+   * @param entities - The raw entities on the message, if any.
+   * @returns The mapped spans, or `undefined` when the message has none.
+   * @throws Never.
+   */
+  private mapEntities(
+    entities: Api.TypeMessageEntity[] | undefined,
+  ): GramMessageEntity[] | undefined {
+    if (!entities?.length) return undefined;
+    return entities.map((entity) => {
+      const base = { offset: entity.offset, length: entity.length };
+      if (entity instanceof Api.MessageEntityBold)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BOLD };
+      if (entity instanceof Api.MessageEntityItalic)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.ITALIC };
+      if (entity instanceof Api.MessageEntityUnderline)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.UNDERLINE };
+      if (entity instanceof Api.MessageEntityStrike)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.STRIKETHROUGH };
+      if (entity instanceof Api.MessageEntityCode)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.CODE };
+      if (entity instanceof Api.MessageEntityPre)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.PRE,
+          // Telegram sends an empty string when no language was given.
+          language: entity.language || undefined,
+        };
+      if (entity instanceof Api.MessageEntitySpoiler)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.SPOILER };
+      if (entity instanceof Api.MessageEntityBlockquote)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.BLOCKQUOTE,
+          collapsed: entity.collapsed ? true : undefined,
+        };
+      if (entity instanceof Api.MessageEntityUrl)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.URL };
+      if (entity instanceof Api.MessageEntityTextUrl)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.TEXT_URL,
+          url: entity.url,
+        };
+      if (entity instanceof Api.MessageEntityEmail)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.EMAIL };
+      if (entity instanceof Api.MessageEntityPhone)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.PHONE };
+      if (entity instanceof Api.MessageEntityMention)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.MENTION };
+      if (entity instanceof Api.MessageEntityMentionName)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.MENTION_NAME,
+          userId: entity.userId.toString(),
+        };
+      if (entity instanceof Api.MessageEntityHashtag)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.HASHTAG };
+      if (entity instanceof Api.MessageEntityCashtag)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.CASHTAG };
+      if (entity instanceof Api.MessageEntityBotCommand)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BOT_COMMAND };
+      if (entity instanceof Api.MessageEntityCustomEmoji)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.CUSTOM_EMOJI,
+          // 64-bit document id — stringify, never Number().
+          documentId: entity.documentId.toString(),
+        };
+      if (entity instanceof Api.MessageEntityBankCard)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BANK_CARD };
+      return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.UNKNOWN };
+    });
+  }
+
+  /**
+   * Maps a message's aggregated reactions into {@link GramMessageReaction}s.
+   *
+   * `chosen` tests whether `chosenOrder` is PRESENT rather than truthy: the
+   * order is zero-based, so the account's first reaction carries `0`, and a
+   * truthiness test would report that one as not chosen.
+   *
+   * @param reactions - The raw reactions block on the message, if any.
+   * @returns The mapped chips, or `undefined` when the message has none.
+   * @throws Never.
+   */
+  private mapReactions(
+    reactions: Api.MessageReactions | undefined,
+  ): GramMessageReaction[] | undefined {
+    const results = reactions?.results;
+    if (!results?.length) return undefined;
+    return results.map((result) => {
+      const chosen = result.chosenOrder !== undefined;
+      const reaction = result.reaction;
+      if (reaction instanceof Api.ReactionEmoji)
+        return {
+          kind: GRAM_MESSAGE_REACTION_KINDS.EMOJI,
+          emoticon: reaction.emoticon,
+          count: result.count,
+          chosen,
+        };
+      if (reaction instanceof Api.ReactionCustomEmoji)
+        return {
+          kind: GRAM_MESSAGE_REACTION_KINDS.CUSTOM_EMOJI,
+          // 64-bit document id — stringify, never Number().
+          documentId: reaction.documentId.toString(),
+          count: result.count,
+          chosen,
+        };
+      return {
+        kind: GRAM_MESSAGE_REACTION_KINDS.PAID,
+        count: result.count,
+        chosen,
+      };
+    });
+  }
+
+  /**
+   * Maps a forward header into a {@link GramMessageForward}.
+   *
+   * A header with NEITHER an id nor a name still maps through: Telegram sends
+   * exactly that when the original sender is fully hidden, and dropping it
+   * would render the message as the forwarder's own words.
+   *
+   * @param fwdFrom - The raw forward header, when the message is a forward.
+   * @returns The mapped provenance, or `undefined` for an original message.
+   * @throws Never.
+   */
+  private mapForward(
+    fwdFrom: Api.TypeMessageFwdHeader | undefined,
+  ): GramMessageForward | undefined {
+    if (!(fwdFrom instanceof Api.MessageFwdHeader)) return undefined;
+    return {
+      fromId: fwdFrom.fromId ? this.markedPeerId(fwdFrom.fromId) : undefined,
+      fromName: fwdFrom.fromName,
+      date: fwdFrom.date,
+      channelPost: fwdFrom.channelPost,
+      postAuthor: fwdFrom.postAuthor,
+    };
+  }
+
+  /**
+   * Renders a peer as its MARKED decimal id — a channel as `-100<id>`, a small
+   * group as `-<id>`, a user as its plain id.
+   *
+   * Deliberately not {@link GramjsClientAdapter.peerToString}, which returns
+   * the RAW id: these two forms both exist in the DTOs already
+   * ({@link GramMessage.peerId} is raw, {@link GramMessage.senderId} is marked,
+   * because GramJS marks it), and the difference is not cosmetic. A forward's
+   * origin is something a client OPENS, and only the marked form addresses a
+   * channel — the raw id would resolve to an unrelated user.
+   *
+   * @param peer - The peer to render.
+   * @returns The marked decimal id, or `''` for an unrecognised peer.
+   * @throws Never.
+   */
+  private markedPeerId(peer: Api.TypePeer): string {
+    if (peer instanceof Api.PeerUser) return peer.userId.toString();
+    if (peer instanceof Api.PeerChat) return `-${peer.chatId.toString()}`;
+    if (peer instanceof Api.PeerChannel)
+      return `-100${peer.channelId.toString()}`;
+    return '';
+  }
+
+  /**
+   * Resolves the `@username` of the bot an inline result was sent through.
+   *
+   * Reads only the entity GramJS already attached to the message, never a
+   * lookup, for the same reason {@link GramjsClientAdapter.senderDisplayName}
+   * does: one extra round-trip per message is a flood-wait risk. An unresolved
+   * bot is omitted rather than guessed at.
+   *
+   * @param message - The message to inspect.
+   * @returns The bot username without its `@`, or `undefined`.
+   * @throws Never.
+   */
+  private viaBotUsername(message: Api.Message): string | undefined {
+    if (message.viaBotId === undefined) return undefined;
+    const bot = message.viaBot;
+    return bot instanceof Api.User ? (bot.username ?? undefined) : undefined;
   }
 
   /**

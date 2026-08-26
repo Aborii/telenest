@@ -34,6 +34,23 @@ updates:
         dependency-type: 'production'
       development-dependencies:
         dependency-type: 'development'
+        # `typescript` is kept OUT of this group deliberately.
+        #
+        # A grouped PR installs as one unit, so a single member that cannot
+        # resolve takes the whole batch down with it. That happened: #136
+        # carried 15 dev-dependency updates including a TypeScript 7 major,
+        # while `@typescript-eslint` still declares a peer range of
+        # `>=4.8.4 <6.1.0`. `npm install` died with ERESOLVE on both Node 20 and
+        # 22, no rebase could help because the versions are genuinely
+        # incompatible, and the other 14 updates stayed blocked behind it until
+        # the PR was closed.
+        #
+        # Excluded rather than ignored, so TypeScript still gets its own PR: a
+        # major the linter cannot take yet is then visible and red on its own
+        # instead of holding a batch hostage. Drop this once
+        # `@typescript-eslint` supports TypeScript 7.
+        exclude-patterns:
+          - 'typescript'
 
   # ── GitHub Actions used by the CI/CodeQL workflows ────────────────────────
   - package-ecosystem: 'github-actions'

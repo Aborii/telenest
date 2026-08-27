@@ -993,7 +993,8 @@ ids use the same GramJS *marked* format as `GramDialog.id` (users unmarked, basi
 ```ts
 interface GramMessage {
   id: number;            // message id within its chat
-  peerId: string;        // chat/user the message belongs to, as a decimal string
+  peerId: string;        // chat/user the message belongs to — the RAW id
+  peerIdMarked?: string; // the same peer in the MARKED form: the id that OPENS the chat
   text: string;          // plain-text body ('' for non-text/service messages)
   date: number;          // unix timestamp in seconds
   out: boolean;          // true when sent by the logged-in account
@@ -1015,9 +1016,17 @@ interface GramMessage {
 
 `hasMedia` is always populated on messages produced by the adapter (it is optional only so a
 hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
-`downloadMedia(message.peerId, message.id)`. `groupedId` is a **string** because album ids
+`downloadMedia(message.peerIdMarked, message.id)`. `groupedId` is a **string** because album ids
 are random 64-bit values that can exceed `2^53`; messages sharing a value were sent together
 as one album and can be collapsed into a single grouped bubble.
+
+> [!IMPORTANT]
+> `peerId` is the **raw** id and `peerIdMarked` is the **marked** one — a channel is
+> `1005640892` in the first and `-1001005640892` in the second. Only the marked form opens
+> a chat or matches `GramDialog.id`; the raw id of a channel addresses an unrelated *user*.
+> It never mattered for `searchMessages` or `getMessages`, where the caller supplied the peer,
+> but a `searchGlobal` result names a chat the caller has not seen — and the DTO carries no
+> peer type with which to convert one form into the other, so reach for `peerIdMarked` there.
 
 #### `entities` — rich text
 

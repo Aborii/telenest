@@ -86,6 +86,9 @@ export function aGramMessage(
   return {
     id: 1,
     peerId: '1000',
+    // A user id, so the marked and raw forms coincide — the fixture stays
+    // realistic without inviting a reader to treat the two as interchangeable.
+    peerIdMarked: '1000',
     text: 'test message',
     date: 1_700_000_000,
     out: true,

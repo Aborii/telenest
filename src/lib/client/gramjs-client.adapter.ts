@@ -1627,6 +1627,7 @@ export class GramJsClientAdapter implements IGramClient {
     return {
       id: message.id,
       peerId: this.peerToString(message.peerId),
+      peerIdMarked: this.markedPeerId(message.peerId),
       text: message.message ?? '',
       date: message.date,
       out: Boolean(message.out),

@@ -343,8 +343,29 @@ export interface GramMessageForward {
 export interface GramMessage {
   /** Message id within its chat. */
   id: number;
-  /** Peer id (chat/user the message belongs to) as a decimal string. */
+  /**
+   * Peer id (chat/user the message belongs to) as a decimal string, in the
+   * RAW form — a channel appears as `1005640892`, not `-1001005640892`. Safe
+   * to pair with the peer the caller already passed in; to OPEN a chat the
+   * caller did not already know, use {@link GramMessage.peerIdMarked}.
+   */
   peerId: string;
+  /**
+   * Peer id in the MARKED form (`-100…` for a channel, `-…` for a basic
+   * group, plain for a user) — the id that OPENS the chat, and the one that
+   * matches {@link GramDialog.id}.
+   *
+   * Always prefer this when the peer was not already known to the caller,
+   * which is every result of
+   * {@link import('./gram-client.interface').IGramClient.searchGlobal}: the
+   * raw id of a channel addresses an unrelated user, and the DTO carries no
+   * peer TYPE with which a consumer could convert one form to the other.
+   *
+   * Always populated by the GramJS adapter; optional on the DTO because a
+   * hand-built {@link import('./gram-client.interface').IGramClient} fake may
+   * omit it, as {@link GramMessage.hasMedia} is.
+   */
+  peerIdMarked?: string;
   /** Plain-text body (empty for non-text/service messages). */
   text: string;
   /** Unix timestamp (seconds) the message was sent. */
@@ -359,7 +380,9 @@ export interface GramMessage {
    * a hand-built {@link import('./gram-client.interface').IGramClient} fake may
    * omit it. When `true`, the media can be fetched with
    * {@link import('./gram-client.interface').IGramClient.downloadMedia} using
-   * this message's `peerId` and `id`. Service/empty media never counts.
+   * this message's {@link GramMessage.peerIdMarked} and `id` — the marked
+   * form, since the raw one does not address a channel. Service/empty media
+   * never counts.
    */
   hasMedia?: boolean;
   /**
@@ -945,8 +968,9 @@ export interface GramTopPeer {
 /** Parameters for reading a rating list. */
 export interface GramGetTopPeersParams {
   /**
-   * Maximum number of rated peers to return. Omitted means Telegram's own
-   * page; official clients ask for 30 and trim locally.
+   * Maximum number of rated peers to return. Defaults to 30 — what the
+   * official clients ask for before trimming the strip locally.
+   * `contacts.getTopPeers` requires the field, so something is always sent.
    */
   limit?: number;
 }

@@ -892,6 +892,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 7,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'hi',
           date: 1700000000,
           out: true,
@@ -919,6 +920,7 @@ describe('GramJsClientAdapter', () => {
       ).resolves.toEqual({
         id: 9,
         peerId: '222',
+        peerIdMarked: '-100222',
         text: 'sent',
         date: 1700000001,
         out: true,
@@ -1948,6 +1950,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 7,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'hi there',
           date: 5,
           out: false,
@@ -2000,6 +2003,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 8,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'edited',
           date: 9,
           out: false,
@@ -2579,6 +2583,33 @@ describe('GramJsClientAdapter', () => {
         limit: 50,
       });
     });
+
+    it.each([
+      ['a user', new Api.PeerUser({ userId: bigInt('5') }), '5', '5'],
+      ['a basic group', new Api.PeerChat({ chatId: bigInt('9') }), '9', '-9'],
+      [
+        'a channel',
+        new Api.PeerChannel({ channelId: bigInt('77') }),
+        '77',
+        '-10077',
+      ],
+    ])(
+      'maps both id forms of %s onto a message',
+      async (_label, peer, raw, marked) => {
+        // The two coincide for a user and diverge for everything else, which
+        // is exactly why a global result needs the marked one: it is the only
+        // form that opens the chat, and the DTO carries no peer type to
+        // convert with.
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ peerId: peer })]),
+        });
+        const [message] = await createAdapter(mock).searchGlobal('q');
+        expect(message?.peerId).toBe(raw);
+        expect(message?.peerIdMarked).toBe(marked);
+      },
+    );
 
     it('searchContacts splits the account own peers from the public ones', async () => {
       const ada = asEntity(Api.User, {

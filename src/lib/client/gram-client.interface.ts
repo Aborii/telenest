@@ -408,8 +408,9 @@ export interface IGramClient {
    * exact `@username` — typing half a name finds nothing through the latter.
    *
    * @param query - The name or username prefix to search for.
-   * @param limit - Maximum peers per half of the result. Defaults to
-   *   Telegram's own page when omitted.
+   * @param limit - Maximum peers per half of the result. Defaults to 20,
+   *   which is what the official clients request for a search-as-you-type;
+   *   `contacts.search` requires the field, so something is always sent.
    * @returns The account's own matching peers and the public ones, apart.
    * @throws {import('../common').TelegramClientError} On failure.
    */
@@ -451,7 +452,6 @@ export interface IGramClient {
    * @throws {import('../common').TelegramClientError} On failure.
    */
   resetTopPeerRating(type: GramTopPeerType, peer: GramPeer): Promise<void>;
-
 
   /**
    * Fetches extended ("full") information about a chat, channel, or user.

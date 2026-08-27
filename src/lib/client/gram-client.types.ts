@@ -772,9 +772,182 @@ export interface GramGetParticipantsParams {
   search?: string;
 }
 
+/**
+ * Closed set of content filters a message search can narrow to — the media,
+ * links, files, music and voice tabs every official client shows. Declared as
+ * an `as const` record (never an `enum`) so {@link GramSearchFilter} derives
+ * from it; each entry names the `inputMessagesFilter*` constructor it maps to.
+ */
+export const GRAM_SEARCH_FILTERS = {
+  /** Photos only (`inputMessagesFilterPhotos`). */
+  PHOTOS: 'photos',
+  /** Videos only (`inputMessagesFilterVideo`). */
+  VIDEOS: 'videos',
+  /** Photos and videos together (`inputMessagesFilterPhotoVideo`). */
+  PHOTO_VIDEO: 'photo-video',
+  /** Documents / files (`inputMessagesFilterDocument`). */
+  DOCUMENTS: 'documents',
+  /** Messages containing a link (`inputMessagesFilterUrl`). */
+  LINKS: 'links',
+  /** Music tracks (`inputMessagesFilterMusic`). */
+  MUSIC: 'music',
+  /** Voice notes (`inputMessagesFilterVoice`). */
+  VOICE: 'voice',
+  /** Animated GIFs (`inputMessagesFilterGif`). */
+  GIFS: 'gifs',
+  /** Pinned messages (`inputMessagesFilterPinned`). */
+  PINNED: 'pinned',
+} as const;
+
+/** Union of the search filters in {@link GRAM_SEARCH_FILTERS}. */
+export type GramSearchFilter =
+  (typeof GRAM_SEARCH_FILTERS)[keyof typeof GRAM_SEARCH_FILTERS];
+
+/**
+ * Every value of {@link GRAM_SEARCH_FILTERS} as a readonly array, for
+ * validating a filter that arrived from outside the process (a query string,
+ * a config file) without hand-maintaining a second list.
+ */
+export const GRAM_SEARCH_FILTER_VALUES = Object.values(
+  GRAM_SEARCH_FILTERS,
+) as readonly GramSearchFilter[];
+
 /** Parameters for searching messages within a peer. */
 export interface GramSearchMessagesParams {
   /** Maximum number of matching messages to return. */
+  limit?: number;
+  /**
+   * Narrow the results to one kind of content. An EMPTY query combined with a
+   * filter is explicitly supported — that pairing is the canonical "list this
+   * chat's photos / files / music" call behind the shared-media tabs, not a
+   * degenerate search.
+   */
+  filter?: GramSearchFilter;
+  /**
+   * Paging anchor: return only messages OLDER than this id (exclusive), the
+   * same meaning {@link GramGetMessagesParams.offsetId} carries. Pass the id
+   * of the oldest message of the page you already have.
+   */
+  offsetId?: number;
+}
+
+/**
+ * Parameters for
+ * {@link import('./gram-client.interface').IGramClient.searchGlobal}.
+ *
+ * The same three knobs {@link GramSearchMessagesParams} has, kept as its own
+ * type because `offsetId` means something weaker here. Telegram pages a global
+ * search by the triple `(offsetRate, offsetPeer, offsetId)`, and only the last
+ * of the three is exposed; a caller that walks pages with `offsetId` alone
+ * will get an approximation of the next page rather than an exact continuation
+ * once results span many peers.
+ */
+export interface GramSearchGlobalParams {
+  /** Maximum number of matching messages to return. */
+  limit?: number;
+  /** Narrow the results to one kind of content. */
+  filter?: GramSearchFilter;
+  /** Approximate paging anchor — see the note on this interface. */
+  offsetId?: number;
+}
+
+/**
+ * Minimal reference to a peer, as returned by a peer search. A deliberate
+ * subset of {@link GramDialog}: a search result names a peer the account may
+ * have no dialog with at all, so there is no unread count, pin state or last
+ * message to report.
+ */
+export interface GramDialogRef {
+  /** Peer id rendered as a decimal string, as {@link GramDialog.id} is. */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public `@username` without the leading `@`, or `null` when it has none. */
+  username: string | null;
+  /** Whether the peer has a profile/chat photo — a cheap "an avatar exists". */
+  hasPhoto: boolean;
+}
+
+/**
+ * The two halves of a peer search, kept apart because they answer different
+ * questions and clients label them differently: the first is "chats you are
+ * already in", the second is "everyone else on Telegram".
+ */
+export interface GramContactsSearchResult {
+  /** Peers the account already has a relationship with (its chats, contacts). */
+  myResults: GramDialogRef[];
+  /** Publicly resolvable peers the account has no relationship with. */
+  globalResults: GramDialogRef[];
+}
+
+/**
+ * Closed set of the rating lists Telegram keeps for an account, mirroring the
+ * flags of `contacts.getTopPeers`. Declared as an `as const` record (never an
+ * `enum`) so {@link GramTopPeerType} derives from it.
+ */
+export const GRAM_TOP_PEER_TYPES = {
+  /** People the account messages most — the search panel's People strip. */
+  CORRESPONDENTS: 'correspondents',
+  /** Bots the account chats with privately. */
+  BOTS_PM: 'bots-pm',
+  /** Bots the account uses through inline queries. */
+  BOTS_INLINE: 'bots-inline',
+  /** Groups the account is most active in. */
+  GROUPS: 'groups',
+  /** Channels the account reads most. */
+  CHANNELS: 'channels',
+  /** People the account calls most. */
+  PHONE_CALLS: 'phone-calls',
+  /** People the account forwards messages to most. */
+  FORWARD_USERS: 'forward-users',
+  /** Chats the account forwards messages to most. */
+  FORWARD_CHATS: 'forward-chats',
+} as const;
+
+/** Union of the rating lists in {@link GRAM_TOP_PEER_TYPES}. */
+export type GramTopPeerType =
+  (typeof GRAM_TOP_PEER_TYPES)[keyof typeof GRAM_TOP_PEER_TYPES];
+
+/**
+ * Every value of {@link GRAM_TOP_PEER_TYPES} as a readonly array, for
+ * validating a list name that arrived from outside the process.
+ */
+export const GRAM_TOP_PEER_TYPE_VALUES = Object.values(
+  GRAM_TOP_PEER_TYPES,
+) as readonly GramTopPeerType[];
+
+/**
+ * One peer from a rating list, with the score Telegram itself assigned.
+ *
+ * The rating is the whole point of the type: it answers "how OFTEN do you deal
+ * with this peer", which is a different question from the dialog list's "when
+ * did you last speak". A client that derives this strip from `getDialogs` is
+ * showing recency under a frequency label.
+ */
+export interface GramTopPeer {
+  /**
+   * Peer id rendered as a decimal string, marked the way {@link GramDialog.id}
+   * is — so it can be passed straight back as a {@link GramPeer}.
+   */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public `@username` without the leading `@`, or `null` when it has none. */
+  username: string | null;
+  /** Telegram's own frequency rating; higher means more frequent. */
+  rating: number;
+}
+
+/** Parameters for reading a rating list. */
+export interface GramGetTopPeersParams {
+  /**
+   * Maximum number of rated peers to return. Omitted means Telegram's own
+   * page; official clients ask for 30 and trim locally.
+   */
   limit?: number;
 }
 

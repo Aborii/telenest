@@ -53,7 +53,8 @@ import {
 /**
  * Builds a fully-mocked {@link IGramClient}. Every method is a `jest.fn()` with a
  * sensible default: the client reports itself connected and authorized, `getMe`
- * resolves a representative account, list/search calls resolve empty arrays,
+ * resolves a representative account, list/search calls resolve empty arrays (including the global search and the
+ * top-peer lists),
  * `sendMessage` / `sendFile` / `editMessage` echo a representative message,
  * `download*` calls resolve representative buffers, `getMediaInfo` resolves a
  * representative video descriptor, `streamMedia` yields one chunk, `getFullChat`
@@ -131,6 +132,12 @@ export function createMockGramClient(
     leaveChannel: jest.fn().mockResolvedValue(undefined),
     getParticipants: jest.fn().mockResolvedValue([]),
     searchMessages: jest.fn().mockResolvedValue([]),
+    searchGlobal: jest.fn().mockResolvedValue([]),
+    searchContacts: jest
+      .fn()
+      .mockResolvedValue({ myResults: [], globalResults: [] }),
+    getTopPeers: jest.fn().mockResolvedValue([]),
+    resetTopPeerRating: jest.fn().mockResolvedValue(undefined),
     getFullChat: jest.fn().mockResolvedValue(aGramChatInfo()),
     editMessage: jest.fn().mockResolvedValue(aGramMessage()),
     deleteMessages: jest.fn().mockResolvedValue(undefined),

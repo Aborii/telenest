@@ -2476,6 +2476,389 @@ describe('GramJsClientAdapter', () => {
       });
     });
 
+    it('searchMessages translates a filter and forwards the paging anchor', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchMessages('@g', 'find', {
+        limit: 3,
+        filter: 'photos',
+        offsetId: 90,
+      });
+      expect(mock.getMessages).toHaveBeenCalledWith('@g', {
+        search: 'find',
+        limit: 3,
+        filter: expect.any(Api.InputMessagesFilterPhotos),
+        offsetId: 90,
+      });
+    });
+
+    it('searchMessages OMITS offsetId entirely when the caller gave none', async () => {
+      // GramJS merges the caller's object over its defaults with
+      // `Object.assign`, so an explicit `offsetId: undefined` would replace its
+      // `0` default and poison the offset arithmetic. The key must be absent,
+      // which `toHaveBeenCalledWith` cannot see (it equates undefined/missing).
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchMessages('@g', 'find');
+      const args = mock.getMessages.mock.calls[0]?.[1] as Record<
+        string,
+        unknown
+      >;
+      expect(Object.keys(args)).not.toContain('offsetId');
+      expect(Object.keys(args)).not.toContain('filter');
+    });
+
+    it('searchMessages allows an EMPTY query with a filter (shared media)', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 4, message: '' })]),
+      });
+      const found = await createAdapter(mock).searchMessages('@g', '', {
+        filter: 'music',
+      });
+      expect(found).toHaveLength(1);
+      expect(mock.getMessages).toHaveBeenCalledWith('@g', {
+        search: '',
+        limit: undefined,
+        filter: expect.any(Api.InputMessagesFilterMusic),
+      });
+    });
+
+    it.each([
+      ['photos', Api.InputMessagesFilterPhotos],
+      ['videos', Api.InputMessagesFilterVideo],
+      ['photo-video', Api.InputMessagesFilterPhotoVideo],
+      ['documents', Api.InputMessagesFilterDocument],
+      ['links', Api.InputMessagesFilterUrl],
+      ['music', Api.InputMessagesFilterMusic],
+      ['voice', Api.InputMessagesFilterVoice],
+      ['gifs', Api.InputMessagesFilterGif],
+      ['pinned', Api.InputMessagesFilterPinned],
+    ] as const)('maps the %s filter to its TL constructor', async (
+      filter,
+      ctor,
+    ) => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchGlobal('q', { filter });
+      const args = mock.getMessages.mock.calls[0]?.[1] as {
+        filter?: unknown;
+      };
+      expect(args.filter).toBeInstanceOf(ctor);
+    });
+
+    it('searchGlobal searches with NO entity, which is what reaches searchGlobal', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 12, message: 'anywhere' })]),
+      });
+      const [message] = await createAdapter(mock).searchGlobal('any', {
+        limit: 7,
+        offsetId: 40,
+      });
+      expect(message?.text).toBe('anywhere');
+      expect(mock.getMessages).toHaveBeenCalledWith(undefined, {
+        search: 'any',
+        limit: 7,
+        offsetId: 40,
+      });
+    });
+
+    it('searchGlobal defaults the limit rather than letting GramJS fetch every match', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchGlobal('any');
+      expect(mock.getMessages).toHaveBeenCalledWith(undefined, {
+        search: 'any',
+        limit: 50,
+      });
+    });
+
+    it('searchContacts splits the account own peers from the public ones', async () => {
+      const ada = asEntity(Api.User, {
+        id: bigInt('5'),
+        firstName: 'Ada',
+        lastName: 'L',
+        username: 'ada',
+        photo: asEntity(Api.UserProfilePhoto, {}),
+      });
+      const news = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'News',
+        username: 'news',
+        megagroup: false,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerUser({ userId: bigInt('5') })],
+            results: [new Api.PeerChannel({ channelId: bigInt('77') })],
+            chats: [news],
+            users: [ada],
+          }),
+        ),
+      });
+
+      const found = await createAdapter(mock).searchContacts('ad', 5);
+
+      expect(found.myResults).toEqual([
+        {
+          id: '5',
+          type: 'user',
+          title: 'Ada L',
+          username: 'ada',
+          hasPhoto: true,
+        },
+      ]);
+      // ── A channel is addressed by its MARKED id; the raw one would open an
+      //    unrelated user. ──────────────────────────────────────────────────
+      expect(found.globalResults).toEqual([
+        {
+          id: '-10077',
+          type: 'channel',
+          title: 'News',
+          username: 'news',
+          hasPhoto: false,
+        },
+      ]);
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'ad', limit: 5 }),
+      );
+    });
+
+    it('searchContacts drops a peer whose entity the response did not carry', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerUser({ userId: bigInt('999') })],
+            results: [],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('ghost');
+      expect(found.myResults).toEqual([]);
+    });
+
+    it('searchContacts reads a COLLECTIBLE username out of the usernames vector', async () => {
+      // Telegram leaves the legacy scalar empty for a Fragment username and
+      // puts it in `usernames` instead; reading only the scalar reports the
+      // peer as having no username at all.
+      const collectible = asEntity(Api.Channel, {
+        id: bigInt('88'),
+        title: 'Telegram',
+        username: undefined,
+        usernames: [
+          asEntity(Api.Username, { username: 'stale', active: false }),
+          asEntity(Api.Username, { username: 'telegram', active: true }),
+        ],
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [],
+            results: [new Api.PeerChannel({ channelId: bigInt('88') })],
+            chats: [collectible],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('telegram');
+      expect(found.globalResults[0]?.username).toBe('telegram');
+    });
+
+    it('searchContacts reports a basic group as having no username', async () => {
+      const group = asEntity(Api.Chat, { id: bigInt('9'), title: 'Team' });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerChat({ chatId: bigInt('9') })],
+            results: [],
+            chats: [group],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('team');
+      expect(found.myResults[0]).toEqual({
+        id: '-9',
+        type: 'group',
+        title: 'Team',
+        username: null,
+        hasPhoto: false,
+      });
+    });
+
+    it('searchContacts defaults the limit when the caller names none', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [],
+            results: [],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await createAdapter(mock).searchContacts('q');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 20 }),
+      );
+    });
+
+    it('getTopPeers maps the requested category with Telegram own ratings', async () => {
+      const ada = asEntity(Api.User, {
+        id: bigInt('5'),
+        firstName: 'Ada',
+        username: 'ada',
+      });
+      const room = asEntity(Api.Channel, {
+        id: bigInt('31'),
+        title: 'Room',
+        megagroup: true,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryCorrespondents(),
+                count: 2,
+                peers: [
+                  new Api.TopPeer({
+                    peer: new Api.PeerUser({ userId: bigInt('5') }),
+                    rating: 9.5,
+                  }),
+                  new Api.TopPeer({
+                    peer: new Api.PeerChannel({ channelId: bigInt('31') }),
+                    rating: 2,
+                  }),
+                ],
+              }),
+            ],
+            chats: [room],
+            users: [ada],
+          }),
+        ),
+      });
+
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents', { limit: 4 }),
+      ).resolves.toEqual([
+        { id: '5', type: 'user', title: 'Ada', username: 'ada', rating: 9.5 },
+        {
+          id: '-10031',
+          type: 'group',
+          title: 'Room',
+          username: null,
+          rating: 2,
+        },
+      ]);
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ correspondents: true, offset: 0, limit: 4 }),
+      );
+    });
+
+    it.each([
+      ['topPeersDisabled', new Api.contacts.TopPeersDisabled()],
+      ['topPeersNotModified', new Api.contacts.TopPeersNotModified()],
+    ])('getTopPeers answers [] for %s rather than throwing', async (
+      _label,
+      response,
+    ) => {
+      // Suggestions switched off in privacy settings is "nothing to show", not
+      // a failure — a client should render an empty strip either way.
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(response),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers answers [] when the response carries no matching category', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryGroups(),
+                count: 0,
+                peers: [],
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers drops a rated peer whose entity was not sent back', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryCorrespondents(),
+                count: 1,
+                peers: [
+                  new Api.TopPeer({
+                    peer: new Api.PeerUser({ userId: bigInt('404') }),
+                    rating: 1,
+                  }),
+                ],
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers defaults the limit and asks with an empty hash', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(new Api.contacts.TopPeersNotModified()),
+      });
+      await createAdapter(mock).getTopPeers('bots-pm');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ botsPm: true, limit: 30 }),
+      );
+      const request = mock.invoke.mock.calls[0]?.[0] as { hash: unknown };
+      expect(bigInt.isInstance(request.hash)).toBe(true);
+    });
+
+    it('resetTopPeerRating names the list the peer is forgotten from', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(true),
+      });
+      await createAdapter(mock).resetTopPeerRating('correspondents', '@ada');
+      const request = mock.invoke.mock.calls[0]?.[0] as {
+        category: unknown;
+        peer: unknown;
+      };
+      expect(request.category).toBeInstanceOf(
+        Api.TopPeerCategoryCorrespondents,
+      );
+      expect(request.peer).toBe('@ada');
+    });
+
     it('getFullChat maps a user (bio from GetFullUser)', async () => {
       const user = asEntity(Api.User, {
         id: bigInt('5'),
@@ -2782,6 +3165,28 @@ describe('GramJsClientAdapter', () => {
         'getMessages',
         (a: GramJsClientAdapter): Promise<unknown> =>
           a.searchMessages('@x', 'q'),
+      ],
+      [
+        'searchGlobal',
+        'getMessages',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchGlobal('q'),
+      ],
+      [
+        'searchContacts',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchContacts('q'),
+      ],
+      [
+        'getTopPeers',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.getTopPeers('correspondents'),
+      ],
+      [
+        'resetTopPeerRating',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.resetTopPeerRating('correspondents', '@x'),
       ],
       [
         'editMessage',

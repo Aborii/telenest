@@ -2539,6 +2539,7 @@ describe('GramJsClientAdapter', () => {
       ['links', Api.InputMessagesFilterUrl],
       ['music', Api.InputMessagesFilterMusic],
       ['voice', Api.InputMessagesFilterVoice],
+      ['round-voice', Api.InputMessagesFilterRoundVoice],
       ['gifs', Api.InputMessagesFilterGif],
       ['pinned', Api.InputMessagesFilterPinned],
     ] as const)('maps the %s filter to its TL constructor', async (

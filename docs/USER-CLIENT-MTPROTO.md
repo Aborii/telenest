@@ -658,7 +658,7 @@ await this.user.resetTopPeerRating('correspondents', people[0]!.id);
 ```
 
 `GramSearchFilter` is one of `'photos' | 'videos' | 'photo-video' | 'documents' |
-'links' | 'music' | 'voice' | 'gifs' | 'pinned'`, each mapping to the
+'links' | 'music' | 'voice' | 'round-voice' | 'gifs' | 'pinned'`, each mapping to the
 `inputMessagesFilter*` the official clients use for that tab.
 `GRAM_SEARCH_FILTER_VALUES` exports the list for validating a filter that arrived
 from outside the process.

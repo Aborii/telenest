@@ -155,6 +155,8 @@ const SEARCH_FILTER_FACTORIES: Record<
   [GRAM_SEARCH_FILTERS.LINKS]: () => new Api.InputMessagesFilterUrl(),
   [GRAM_SEARCH_FILTERS.MUSIC]: () => new Api.InputMessagesFilterMusic(),
   [GRAM_SEARCH_FILTERS.VOICE]: () => new Api.InputMessagesFilterVoice(),
+  [GRAM_SEARCH_FILTERS.ROUND_VOICE]: () =>
+    new Api.InputMessagesFilterRoundVoice(),
   [GRAM_SEARCH_FILTERS.GIFS]: () => new Api.InputMessagesFilterGif(),
   [GRAM_SEARCH_FILTERS.PINNED]: () => new Api.InputMessagesFilterPinned(),
 };

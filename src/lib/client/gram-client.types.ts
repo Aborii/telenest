@@ -816,6 +816,13 @@ export const GRAM_SEARCH_FILTERS = {
   MUSIC: 'music',
   /** Voice notes (`inputMessagesFilterVoice`). */
   VOICE: 'voice',
+  /**
+   * Voice notes AND round video notes together
+   * (`inputMessagesFilterRoundVoice`) — the pairing the official clients
+   * put behind their single "Voice" tab. {@link GRAM_SEARCH_FILTERS.VOICE}
+   * alone omits the round videos.
+   */
+  ROUND_VOICE: 'round-voice',
   /** Animated GIFs (`inputMessagesFilterGif`). */
   GIFS: 'gifs',
   /** Pinned messages (`inputMessagesFilterPinned`). */

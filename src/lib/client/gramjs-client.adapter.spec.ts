@@ -2643,6 +2643,63 @@ describe('GramJsClientAdapter', () => {
       );
     });
 
+    it('names a public post by its channel, which no entity attachment provides', async () => {
+      // A raw `invoke` gets none, so `message.sender` is empty and every post
+      // would be nameless — the whole identity of a result from a channel the
+      // reader has never seen. The response ships the channels beside them.
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'Telegram Tips',
+      });
+      const post = asEntity(Api.Message, {
+        id: 4,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram',
+        date: 1,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [channel],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram');
+      expect(found?.senderName).toBe('Telegram Tips');
+    });
+
+    it('leaves a sender name the message already carried alone', async () => {
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'Telegram Tips',
+      });
+      const post = asEntity(Api.Message, {
+        id: 4,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram',
+        date: 1,
+      });
+      // `sender` is a getter on the real class, so it has to be defined
+      // rather than assigned.
+      Object.defineProperty(post, 'sender', {
+        value: asEntity(Api.User, { firstName: 'Ada', lastName: 'L' }),
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [channel],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram');
+      expect(found?.senderName).toBe('Ada L');
+    });
     it('searchPublicPosts skips service and empty entries in the vector', async () => {
       // `channels.searchPosts` answers with a raw `messages.TypeMessages`, so
       // unlike a GramJS-iterated search the vector can hold non-messages.

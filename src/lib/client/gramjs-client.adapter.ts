@@ -974,11 +974,25 @@ export class GramJsClientAdapter implements IGramClient {
       // ── `messagesNotModified` carries no `messages` vector at all; it is a
       //    hash-based "nothing changed", not a failure. ────────────────────
       if (result instanceof Api.messages.MessagesNotModified) return [];
+
+      // ── A raw `invoke` gets no entity attachment, so `message.sender` is
+      //    empty and every post would be nameless — which is the whole
+      //    identity of a result from a channel the reader has never seen.
+      //    The response ships the channels beside the posts, so the name is
+      //    right there; this is what GramJS would have done for us. ───────
+      const index = this.indexPeerEntities(result.users, result.chats);
       return result.messages
         .filter(
           (message): message is Api.Message => message instanceof Api.Message,
         )
-        .map((message) => this.mapMessage(message));
+        .map((message) => {
+          const mapped = this.mapMessage(message);
+          if (mapped.senderName) return mapped;
+          const peer = this.resolvePeerEntity(message.peerId, index);
+          return peer
+            ? { ...mapped, senderName: this.entityTitle(peer) }
+            : mapped;
+        });
     } catch (error) {
       throw this.toClientError(
         error,
@@ -2523,7 +2537,9 @@ export class GramJsClientAdapter implements IGramClient {
       message.startsWith('AUTH_TOKEN_EXCEPTION')
     )
       code = 'TOKEN_INVALID';
-    else if ((TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message))
+    else if (
+      (TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message)
+    )
       // ── This session itself is dead (revoked/expired/deactivated): it cannot
       //    approve a login. Surface NOT_AUTHORIZED so the caller can tear down. ─
       code = 'NOT_AUTHORIZED';

@@ -43,35 +43,51 @@ import {
   GRAM_DIALOG_FILTER_TYPES,
   GRAM_DIALOG_TYPES,
   GRAM_MEDIA_KINDS,
+  GRAM_MESSAGE_ENTITY_TYPES,
+  GRAM_MESSAGE_REACTION_KINDS,
+  GRAM_SEARCH_FILTERS,
   GRAM_SIGN_IN_STATUSES,
+  GRAM_TOP_PEER_TYPES,
   type GramAcceptedLoginSession,
   type GramChatAction,
   type GramChatActionEvent,
   type GramChatInfo,
+  type GramContactsSearchResult,
   type GramDeletedMessages,
   type GramDeleteMessagesParams,
   type GramDialog,
+  type GramDialogDraft,
   type GramDialogFilter,
+  type GramDialogRef,
   type GramDialogType,
   type GramGetDialogsParams,
   type GramGetMessagesParams,
   type GramGetParticipantsParams,
+  type GramGetTopPeersParams,
   type GramMarkAsReadParams,
   type GramMediaInfo,
   type GramMediaKind,
   type GramMediaRange,
   type GramMessage,
+  type GramMessageEntity,
+  type GramMessageForward,
+  type GramMessageReaction,
   type GramPeer,
   type GramPinMessageParams,
   type GramQrSignInCallbacks,
   type GramQrToken,
+  type GramSearchFilter,
+  type GramSearchGlobalParams,
   type GramSearchMessagesParams,
+  type GramSearchPublicPostsParams,
   type GramSendCodeResult,
   type GramSendFileParams,
   type GramSendMessageParams,
   type GramSignInResult,
   type GramSignInWithCodeInput,
   type GramStreamMediaOptions,
+  type GramTopPeer,
+  type GramTopPeerType,
   type GramUpdateTwoFactorInput,
   type GramUser,
 } from './gram-client.types';
@@ -96,6 +112,127 @@ const STREAM_REQUEST_SIZE = 512 * 1024;
  * is valid for both of GramJS' direct and generic download iterators.
  */
 const MEDIA_OFFSET_ALIGN = 4096;
+
+/**
+ * Page size {@link GramjsClientAdapter.searchGlobal} asks for when the caller
+ * names none. Unlike a per-chat search, a global one is not bounded by a
+ * conversation, and GramJS reads "no limit" as *every* match in the account's
+ * entire history — so a default is a guard rail, not a preference. 50 is a
+ * screenful and change, which is what the official clients request.
+ */
+const GLOBAL_SEARCH_DEFAULT_LIMIT = 50;
+
+/**
+ * Peers per half {@link GramjsClientAdapter.searchContacts} asks for when the
+ * caller names none. `contacts.search` requires the field, so something has to
+ * be sent; 20 matches what the official clients ask for a search-as-you-type.
+ */
+const CONTACTS_SEARCH_DEFAULT_LIMIT = 20;
+
+/**
+ * Rated peers {@link GramjsClientAdapter.getTopPeers} asks for when the caller
+ * names none. `contacts.getTopPeers` requires the field; 30 is what the
+ * official clients request before trimming the strip locally.
+ */
+const TOP_PEERS_DEFAULT_LIMIT = 30;
+
+/**
+ * Builds the `inputMessagesFilter*` instance for each {@link GramSearchFilter}.
+ *
+ * A `Record` keyed by the union rather than a `switch`, so adding a filter to
+ * {@link GRAM_SEARCH_FILTERS} without mapping it here is a compile error.
+ * Values are factories because every TL filter is a fresh instance.
+ */
+const SEARCH_FILTER_FACTORIES: Record<
+  GramSearchFilter,
+  () => Api.TypeMessagesFilter
+> = {
+  [GRAM_SEARCH_FILTERS.PHOTOS]: () => new Api.InputMessagesFilterPhotos(),
+  [GRAM_SEARCH_FILTERS.VIDEOS]: () => new Api.InputMessagesFilterVideo(),
+  [GRAM_SEARCH_FILTERS.PHOTO_VIDEO]: () =>
+    new Api.InputMessagesFilterPhotoVideo(),
+  [GRAM_SEARCH_FILTERS.DOCUMENTS]: () => new Api.InputMessagesFilterDocument(),
+  [GRAM_SEARCH_FILTERS.LINKS]: () => new Api.InputMessagesFilterUrl(),
+  [GRAM_SEARCH_FILTERS.MUSIC]: () => new Api.InputMessagesFilterMusic(),
+  [GRAM_SEARCH_FILTERS.VOICE]: () => new Api.InputMessagesFilterVoice(),
+  [GRAM_SEARCH_FILTERS.ROUND_VOICE]: () =>
+    new Api.InputMessagesFilterRoundVoice(),
+  [GRAM_SEARCH_FILTERS.GIFS]: () => new Api.InputMessagesFilterGif(),
+  [GRAM_SEARCH_FILTERS.PINNED]: () => new Api.InputMessagesFilterPinned(),
+};
+
+/**
+ * The boolean flags `contacts.getTopPeers` accepts, one per rating list. Only
+ * the requested one is set; the rest are left off so Telegram returns a single
+ * category.
+ */
+interface TopPeerRequestFlags {
+  /** People the account messages most. */
+  correspondents?: boolean;
+  /** Bots the account chats with privately. */
+  botsPm?: boolean;
+  /** Bots the account uses through inline queries. */
+  botsInline?: boolean;
+  /** Groups the account is most active in. */
+  groups?: boolean;
+  /** Channels the account reads most. */
+  channels?: boolean;
+  /** People the account calls most. */
+  phoneCalls?: boolean;
+  /** People the account forwards messages to most. */
+  forwardUsers?: boolean;
+  /** Chats the account forwards messages to most. */
+  forwardChats?: boolean;
+}
+
+/**
+ * Maps each {@link GramTopPeerType} to the request flag that selects it.
+ * A `Record` keyed by the union, so a new list must be mapped here to compile.
+ */
+const TOP_PEER_REQUEST_FLAGS: Record<GramTopPeerType, TopPeerRequestFlags> = {
+  [GRAM_TOP_PEER_TYPES.CORRESPONDENTS]: { correspondents: true },
+  [GRAM_TOP_PEER_TYPES.BOTS_PM]: { botsPm: true },
+  [GRAM_TOP_PEER_TYPES.BOTS_INLINE]: { botsInline: true },
+  [GRAM_TOP_PEER_TYPES.GROUPS]: { groups: true },
+  [GRAM_TOP_PEER_TYPES.CHANNELS]: { channels: true },
+  [GRAM_TOP_PEER_TYPES.PHONE_CALLS]: { phoneCalls: true },
+  [GRAM_TOP_PEER_TYPES.FORWARD_USERS]: { forwardUsers: true },
+  [GRAM_TOP_PEER_TYPES.FORWARD_CHATS]: { forwardChats: true },
+};
+
+/**
+ * Builds the `topPeerCategory*` instance for each {@link GramTopPeerType} —
+ * used both to pick the right category out of a response and to name one when
+ * resetting a rating.
+ */
+const TOP_PEER_CATEGORY_FACTORIES: Record<
+  GramTopPeerType,
+  () => Api.TypeTopPeerCategory
+> = {
+  [GRAM_TOP_PEER_TYPES.CORRESPONDENTS]: () =>
+    new Api.TopPeerCategoryCorrespondents(),
+  [GRAM_TOP_PEER_TYPES.BOTS_PM]: () => new Api.TopPeerCategoryBotsPM(),
+  [GRAM_TOP_PEER_TYPES.BOTS_INLINE]: () => new Api.TopPeerCategoryBotsInline(),
+  [GRAM_TOP_PEER_TYPES.GROUPS]: () => new Api.TopPeerCategoryGroups(),
+  [GRAM_TOP_PEER_TYPES.CHANNELS]: () => new Api.TopPeerCategoryChannels(),
+  [GRAM_TOP_PEER_TYPES.PHONE_CALLS]: () => new Api.TopPeerCategoryPhoneCalls(),
+  [GRAM_TOP_PEER_TYPES.FORWARD_USERS]: () =>
+    new Api.TopPeerCategoryForwardUsers(),
+  [GRAM_TOP_PEER_TYPES.FORWARD_CHATS]: () =>
+    new Api.TopPeerCategoryForwardChats(),
+};
+
+/**
+ * The `users` and `chats` a peer-carrying response ships alongside its bare
+ * `Api.Peer*` references, indexed by RAW id so a peer can be turned into a
+ * titled DTO without another round trip.
+ */
+interface PeerEntityIndex {
+  /** Resolved users, keyed by their raw (unmarked) id. */
+  users: Map<string, Api.User>;
+  /** Resolved groups and channels, keyed by their raw (unmarked) id. */
+  chats: Map<string, Api.Chat | Api.Channel>;
+}
 
 /**
  * Picks a per-request download size for a bounded read of `neededBytes`.
@@ -769,9 +906,16 @@ export class GramJsClientAdapter implements IGramClient {
     params: GramSearchMessagesParams = {},
   ): Promise<GramMessage[]> {
     try {
+      const filter = this.toInputFilter(params.filter);
       const messages = await this.client.getMessages(peer, {
         search: query,
         limit: params.limit,
+        // ── Spread rather than assigned: GramJS merges the caller's object
+        //    over its defaults with `Object.assign`, so an explicit
+        //    `offsetId: undefined` would REPLACE its `0` default with
+        //    `undefined` and poison the offset arithmetic. ──────────────────
+        ...(filter ? { filter } : {}),
+        ...(params.offsetId === undefined ? {} : { offsetId: params.offsetId }),
       });
       return messages.map((message) => this.mapMessage(message));
     } catch (error) {
@@ -779,6 +923,180 @@ export class GramJsClientAdapter implements IGramClient {
         error,
         'Failed to search messages.',
         'searchMessages',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchGlobal} */
+  public async searchGlobal(
+    query: string,
+    params: GramSearchGlobalParams = {},
+  ): Promise<GramMessage[]> {
+    try {
+      // ── A message search with NO entity is how GramJS reaches
+      //    `messages.searchGlobal`, so this stays ONE request and the peer /
+      //    sender entities arrive resolved with it — which a hand-rolled
+      //    `invoke` would then have to look up per result. ──────────────────
+      const filter = this.toInputFilter(params.filter);
+      const messages = await this.client.getMessages(undefined, {
+        search: query,
+        limit: params.limit ?? GLOBAL_SEARCH_DEFAULT_LIMIT,
+        ...(filter ? { filter } : {}),
+        ...(params.offsetId === undefined ? {} : { offsetId: params.offsetId }),
+      });
+      return messages.map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to search messages globally.',
+        'searchGlobal',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchPublicPosts} */
+  public async searchPublicPosts(
+    hashtag: string,
+    params: GramSearchPublicPostsParams = {},
+  ): Promise<GramMessage[]> {
+    try {
+      const result = await this.client.invoke(
+        new Api.channels.SearchPosts({
+          // ── Without the `#`, as Telegram wants it and as the official
+          //    clients send it (they slice the sigil off the query). ────────
+          hashtag,
+          offsetRate: 0,
+          offsetPeer: new Api.InputPeerEmpty(),
+          offsetId: params.offsetId ?? 0,
+          limit: params.limit ?? GLOBAL_SEARCH_DEFAULT_LIMIT,
+        }),
+      );
+      // ── `messagesNotModified` carries no `messages` vector at all; it is a
+      //    hash-based "nothing changed", not a failure. ────────────────────
+      if (result instanceof Api.messages.MessagesNotModified) return [];
+
+      // ── A raw `invoke` gets no entity attachment, so `message.sender` is
+      //    empty and every post would be nameless — which is the whole
+      //    identity of a result from a channel the reader has never seen.
+      //    The response ships the channels beside the posts, so the name is
+      //    right there; this is what GramJS would have done for us. ───────
+      const index = this.indexPeerEntities(result.users, result.chats);
+      return result.messages
+        .filter(
+          (message): message is Api.Message => message instanceof Api.Message,
+        )
+        .map((message) => {
+          const mapped = this.mapMessage(message);
+          if (mapped.senderName) return mapped;
+          const peer = this.resolvePeerEntity(message.peerId, index);
+          return peer
+            ? { ...mapped, senderName: this.entityTitle(peer) }
+            : mapped;
+        });
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to search public posts.',
+        'searchPublicPosts',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchContacts} */
+  public async searchContacts(
+    query: string,
+    limit: number = CONTACTS_SEARCH_DEFAULT_LIMIT,
+  ): Promise<GramContactsSearchResult> {
+    try {
+      const found = await this.client.invoke(
+        new Api.contacts.Search({ q: query, limit }),
+      );
+      const index = this.indexPeerEntities(found.users, found.chats);
+      return {
+        myResults: this.mapPeerRefs(found.myResults, index),
+        globalResults: this.mapPeerRefs(found.results, index),
+      };
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to search contacts.',
+        'searchContacts',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.getTopPeers} */
+  public async getTopPeers(
+    type: GramTopPeerType,
+    params: GramGetTopPeersParams = {},
+  ): Promise<GramTopPeer[]> {
+    try {
+      const result = await this.client.invoke(
+        new Api.contacts.GetTopPeers({
+          ...TOP_PEER_REQUEST_FLAGS[type],
+          offset: 0,
+          limit: params.limit ?? TOP_PEERS_DEFAULT_LIMIT,
+          // ── `hash: 0` means "I hold nothing, send the list". Honouring the
+          //    incremental hash would mean caching the previous answer, which
+          //    belongs to the caller, not to a stateless adapter. ───────────
+          hash: bigInt.zero,
+        }),
+      );
+
+      // ── `topPeersDisabled` (the account switched suggestions off in its
+      //    privacy settings) and `topPeersNotModified` both mean "nothing to
+      //    show". Neither is a failure, and a client should render an empty
+      //    strip for either — so both resolve to `[]` rather than throw. ────
+      if (!(result instanceof Api.contacts.TopPeers)) return [];
+
+      const index = this.indexPeerEntities(result.users, result.chats);
+      const wanted = TOP_PEER_CATEGORY_FACTORIES[type]();
+      const category = result.categories.find(
+        (entry) => entry.category.CONSTRUCTOR_ID === wanted.CONSTRUCTOR_ID,
+      );
+      if (!category) return [];
+
+      // ── `flatMap` over `map` so a peer whose entity Telegram did not send
+      //    back drops out instead of becoming a blank row. ─────────────────
+      return category.peers.flatMap((entry) => {
+        const ref = this.mapPeerRef(entry.peer, index);
+        if (!ref) return [];
+        return [
+          {
+            id: ref.id,
+            type: ref.type,
+            title: ref.title,
+            username: ref.username,
+            rating: entry.rating,
+          },
+        ];
+      });
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to list top peers.',
+        'getTopPeers',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.resetTopPeerRating} */
+  public async resetTopPeerRating(
+    type: GramTopPeerType,
+    peer: GramPeer,
+  ): Promise<void> {
+    try {
+      await this.client.invoke(
+        new Api.contacts.ResetTopPeerRating({
+          category: TOP_PEER_CATEGORY_FACTORIES[type](),
+          peer,
+        }),
+      );
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to reset the top-peer rating.',
+        'resetTopPeerRating',
       );
     }
   }
@@ -1129,6 +1447,34 @@ export class GramJsClientAdapter implements IGramClient {
       isBot,
       isContact,
       unreadMark: raw ? Boolean(raw.unreadMark) : undefined,
+      draft: this.mapDraft(raw?.draft),
+    };
+  }
+
+  /**
+   * Maps a dialog's unsent draft into a {@link GramDialogDraft}.
+   *
+   * `draftMessageEmpty` maps to `undefined` rather than an empty draft:
+   * Telegram uses it to say a draft was CLEARED, and a client that took it at
+   * face value would leave a permanent "Draft:" row on a dialog whose draft
+   * the reader already deleted.
+   *
+   * @param draft - The raw draft on the TL dialog, if any.
+   * @returns The mapped draft, or `undefined` when there is none.
+   * @throws Never.
+   */
+  private mapDraft(
+    draft: Api.TypeDraftMessage | undefined,
+  ): GramDialogDraft | undefined {
+    if (!(draft instanceof Api.DraftMessage)) return undefined;
+    const replyTo = draft.replyTo;
+    return {
+      text: draft.message,
+      date: draft.date,
+      replyToMsgId:
+        replyTo instanceof Api.InputReplyToMessage
+          ? replyTo.replyToMsgId
+          : undefined,
     };
   }
 
@@ -1332,6 +1678,7 @@ export class GramJsClientAdapter implements IGramClient {
     return {
       id: message.id,
       peerId: this.peerToString(message.peerId),
+      peerIdMarked: this.markedPeerId(message.peerId),
       text: message.message ?? '',
       date: message.date,
       out: Boolean(message.out),
@@ -1344,7 +1691,204 @@ export class GramJsClientAdapter implements IGramClient {
       senderName: this.senderDisplayName(message.sender),
       // ── Album ids are random 64-bit values — stringify, never Number(). ───
       groupedId: message.groupedId?.toString(),
+      entities: this.mapEntities(message.entities),
+      reactions: this.mapReactions(message.reactions),
+      forward: this.mapForward(message.fwdFrom),
+      viaBotUsername: this.viaBotUsername(message),
+      postAuthor: message.postAuthor ?? undefined,
     };
+  }
+
+  /**
+   * Maps a message's formatting spans into {@link GramMessageEntity}s.
+   *
+   * Offsets pass through untouched — they are UTF-16 code units on both sides,
+   * which is exactly what a JavaScript consumer needs to slice the text.
+   *
+   * An entity kind this version does not model still maps through, as
+   * `unknown` with its offsets intact: a renderer can then leave that span
+   * alone, whereas dropping the entry would shift nothing but silently lose a
+   * span the text still contains.
+   *
+   * @param entities - The raw entities on the message, if any.
+   * @returns The mapped spans, or `undefined` when the message has none.
+   * @throws Never.
+   */
+  private mapEntities(
+    entities: Api.TypeMessageEntity[] | undefined,
+  ): GramMessageEntity[] | undefined {
+    if (!entities?.length) return undefined;
+    return entities.map((entity) => {
+      const base = { offset: entity.offset, length: entity.length };
+      if (entity instanceof Api.MessageEntityBold)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BOLD };
+      if (entity instanceof Api.MessageEntityItalic)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.ITALIC };
+      if (entity instanceof Api.MessageEntityUnderline)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.UNDERLINE };
+      if (entity instanceof Api.MessageEntityStrike)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.STRIKETHROUGH };
+      if (entity instanceof Api.MessageEntityCode)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.CODE };
+      if (entity instanceof Api.MessageEntityPre)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.PRE,
+          // Telegram sends an empty string when no language was given.
+          language: entity.language || undefined,
+        };
+      if (entity instanceof Api.MessageEntitySpoiler)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.SPOILER };
+      if (entity instanceof Api.MessageEntityBlockquote)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.BLOCKQUOTE,
+          collapsed: entity.collapsed ? true : undefined,
+        };
+      if (entity instanceof Api.MessageEntityUrl)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.URL };
+      if (entity instanceof Api.MessageEntityTextUrl)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.TEXT_URL,
+          url: entity.url,
+        };
+      if (entity instanceof Api.MessageEntityEmail)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.EMAIL };
+      if (entity instanceof Api.MessageEntityPhone)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.PHONE };
+      if (entity instanceof Api.MessageEntityMention)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.MENTION };
+      if (entity instanceof Api.MessageEntityMentionName)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.MENTION_NAME,
+          userId: entity.userId.toString(),
+        };
+      if (entity instanceof Api.MessageEntityHashtag)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.HASHTAG };
+      if (entity instanceof Api.MessageEntityCashtag)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.CASHTAG };
+      if (entity instanceof Api.MessageEntityBotCommand)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BOT_COMMAND };
+      if (entity instanceof Api.MessageEntityCustomEmoji)
+        return {
+          ...base,
+          type: GRAM_MESSAGE_ENTITY_TYPES.CUSTOM_EMOJI,
+          // 64-bit document id — stringify, never Number().
+          documentId: entity.documentId.toString(),
+        };
+      if (entity instanceof Api.MessageEntityBankCard)
+        return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.BANK_CARD };
+      return { ...base, type: GRAM_MESSAGE_ENTITY_TYPES.UNKNOWN };
+    });
+  }
+
+  /**
+   * Maps a message's aggregated reactions into {@link GramMessageReaction}s.
+   *
+   * `chosen` tests whether `chosenOrder` is PRESENT rather than truthy: the
+   * order is zero-based, so the account's first reaction carries `0`, and a
+   * truthiness test would report that one as not chosen.
+   *
+   * @param reactions - The raw reactions block on the message, if any.
+   * @returns The mapped chips, or `undefined` when the message has none.
+   * @throws Never.
+   */
+  private mapReactions(
+    reactions: Api.MessageReactions | undefined,
+  ): GramMessageReaction[] | undefined {
+    const results = reactions?.results;
+    if (!results?.length) return undefined;
+    return results.map((result) => {
+      const chosen = result.chosenOrder !== undefined;
+      const reaction = result.reaction;
+      if (reaction instanceof Api.ReactionEmoji)
+        return {
+          kind: GRAM_MESSAGE_REACTION_KINDS.EMOJI,
+          emoticon: reaction.emoticon,
+          count: result.count,
+          chosen,
+        };
+      if (reaction instanceof Api.ReactionCustomEmoji)
+        return {
+          kind: GRAM_MESSAGE_REACTION_KINDS.CUSTOM_EMOJI,
+          // 64-bit document id — stringify, never Number().
+          documentId: reaction.documentId.toString(),
+          count: result.count,
+          chosen,
+        };
+      return {
+        kind: GRAM_MESSAGE_REACTION_KINDS.PAID,
+        count: result.count,
+        chosen,
+      };
+    });
+  }
+
+  /**
+   * Maps a forward header into a {@link GramMessageForward}.
+   *
+   * A header with NEITHER an id nor a name still maps through: Telegram sends
+   * exactly that when the original sender is fully hidden, and dropping it
+   * would render the message as the forwarder's own words.
+   *
+   * @param fwdFrom - The raw forward header, when the message is a forward.
+   * @returns The mapped provenance, or `undefined` for an original message.
+   * @throws Never.
+   */
+  private mapForward(
+    fwdFrom: Api.TypeMessageFwdHeader | undefined,
+  ): GramMessageForward | undefined {
+    if (!(fwdFrom instanceof Api.MessageFwdHeader)) return undefined;
+    return {
+      fromId: fwdFrom.fromId ? this.markedPeerId(fwdFrom.fromId) : undefined,
+      fromName: fwdFrom.fromName,
+      date: fwdFrom.date,
+      channelPost: fwdFrom.channelPost,
+      postAuthor: fwdFrom.postAuthor,
+    };
+  }
+
+  /**
+   * Renders a peer as its MARKED decimal id — a channel as `-100<id>`, a small
+   * group as `-<id>`, a user as its plain id.
+   *
+   * Deliberately not {@link GramjsClientAdapter.peerToString}, which returns
+   * the RAW id: these two forms both exist in the DTOs already
+   * ({@link GramMessage.peerId} is raw, {@link GramMessage.senderId} is marked,
+   * because GramJS marks it), and the difference is not cosmetic. A forward's
+   * origin is something a client OPENS, and only the marked form addresses a
+   * channel — the raw id would resolve to an unrelated user.
+   *
+   * @param peer - The peer to render.
+   * @returns The marked decimal id, or `''` for an unrecognised peer.
+   * @throws Never.
+   */
+  private markedPeerId(peer: Api.TypePeer): string {
+    if (peer instanceof Api.PeerUser) return peer.userId.toString();
+    if (peer instanceof Api.PeerChat) return `-${peer.chatId.toString()}`;
+    if (peer instanceof Api.PeerChannel)
+      return `-100${peer.channelId.toString()}`;
+    return '';
+  }
+
+  /**
+   * Resolves the `@username` of the bot an inline result was sent through.
+   *
+   * Reads only the entity GramJS already attached to the message, never a
+   * lookup, for the same reason {@link GramjsClientAdapter.senderDisplayName}
+   * does: one extra round-trip per message is a flood-wait risk. An unresolved
+   * bot is omitted rather than guessed at.
+   *
+   * @param message - The message to inspect.
+   * @returns The bot username without its `@`, or `undefined`.
+   * @throws Never.
+   */
+  private viaBotUsername(message: Api.Message): string | undefined {
+    if (message.viaBotId === undefined) return undefined;
+    const bot = message.viaBot;
+    return bot instanceof Api.User ? (bot.username ?? undefined) : undefined;
   }
 
   /**
@@ -1479,6 +2023,12 @@ export class GramJsClientAdapter implements IGramClient {
    * Maps a GramJS resolved entity into a {@link GramChatInfo}, merging in the
    * description / participant count read from a matching "full" request.
    *
+   * Classification, title and username all come from the shared entity
+   * readers, so a peer described here and the same peer described by a search
+   * result cannot disagree — which they did while this read the legacy
+   * `username` scalar directly and reported collectible (Fragment) usernames
+   * as absent.
+   *
    * @param entity - The resolved `Api.User` / `Api.Chat` / `Api.Channel`.
    * @param about - The bio/description from the full request, when present.
    * @param participantsCount - Member count from the full request, when present.
@@ -1490,41 +2040,185 @@ export class GramJsClientAdapter implements IGramClient {
     about: string | undefined,
     participantsCount: number | undefined,
   ): GramChatInfo {
-    if (entity instanceof Api.User) {
-      const fullName = [entity.firstName, entity.lastName]
-        .filter((part): part is string => Boolean(part))
-        .join(' ');
-      return {
-        id: entity.id.toString(),
-        type: GRAM_DIALOG_TYPES.USER,
-        title: fullName,
-        username: entity.username,
-        about,
-        participantsCount: undefined,
-        verified: Boolean(entity.verified),
-      };
-    }
-
-    // ── A basic group (`Api.Chat`) is always a group; a `Api.Channel` is a
-    //    channel unless its `megagroup` flag marks it as a supergroup. ────────
-    const type: GramDialogType =
-      entity instanceof Api.Chat
-        ? GRAM_DIALOG_TYPES.GROUP
-        : entity.megagroup
-          ? GRAM_DIALOG_TYPES.GROUP
-          : GRAM_DIALOG_TYPES.CHANNEL;
-
     return {
       id: entity.id.toString(),
-      type,
-      title: entity.title,
-      // ── Basic groups have no username; only channels/supergroups do. ───────
-      username: entity instanceof Api.Channel ? entity.username : undefined,
+      type: this.entityDialogType(entity),
+      title: this.entityTitle(entity),
+      // ── `?? undefined` because this DTO's field is optional, while the
+      //    shared reader answers `null` for "the peer has none". ────────────
+      username: this.entityUsername(entity) ?? undefined,
       about,
-      participantsCount,
-      verified:
-        entity instanceof Api.Channel ? Boolean(entity.verified) : false,
+      // ── A user never has a member count, whatever the caller passed. ─────
+      participantsCount:
+        entity instanceof Api.User ? undefined : participantsCount,
+      // ── Only users and channels carry the badge; a basic group cannot. ───
+      verified: entity instanceof Api.Chat ? false : Boolean(entity.verified),
     };
+  }
+  /**
+   * Turns a library search filter into the TL `inputMessagesFilter*` it names.
+   *
+   * @param filter - The filter to translate, if the caller named one.
+   * @returns The TL filter instance, or `undefined` for an unfiltered search.
+   * @throws Never.
+   */
+  private toInputFilter(
+    filter: GramSearchFilter | undefined,
+  ): Api.TypeMessagesFilter | undefined {
+    return filter ? SEARCH_FILTER_FACTORIES[filter]() : undefined;
+  }
+
+  /**
+   * Indexes the `users`/`chats` a peer-carrying response ships beside its bare
+   * peer references, so each reference can be titled without a round trip.
+   *
+   * Keys are RAW ids because that is what an `Api.Peer*` carries; the marked
+   * form is built later by {@link GramjsClientAdapter.markedPeerId}.
+   *
+   * @param users - The response's `users` vector.
+   * @param chats - The response's `chats` vector.
+   * @returns The two lookup maps.
+   * @throws Never.
+   */
+  private indexPeerEntities(
+    users: Api.TypeUser[],
+    chats: Api.TypeChat[],
+  ): PeerEntityIndex {
+    const userIndex = new Map<string, Api.User>();
+    for (const user of users)
+      if (user instanceof Api.User) userIndex.set(user.id.toString(), user);
+
+    const chatIndex = new Map<string, Api.Chat | Api.Channel>();
+    for (const chat of chats)
+      if (chat instanceof Api.Chat || chat instanceof Api.Channel)
+        chatIndex.set(chat.id.toString(), chat);
+
+    return { users: userIndex, chats: chatIndex };
+  }
+
+  /**
+   * Looks a bare peer reference up in an index built by
+   * {@link GramjsClientAdapter.indexPeerEntities}.
+   *
+   * @param peer - The peer reference to resolve.
+   * @param index - The entities that came with the same response.
+   * @returns The resolved entity, or `undefined` when the response omitted it.
+   * @throws Never.
+   */
+  private resolvePeerEntity(
+    peer: Api.TypePeer,
+    index: PeerEntityIndex,
+  ): Api.User | Api.Chat | Api.Channel | undefined {
+    if (peer instanceof Api.PeerUser)
+      return index.users.get(peer.userId.toString());
+    if (peer instanceof Api.PeerChat)
+      return index.chats.get(peer.chatId.toString());
+    if (peer instanceof Api.PeerChannel)
+      return index.chats.get(peer.channelId.toString());
+    return undefined;
+  }
+
+  /**
+   * Maps one bare peer reference into a {@link GramDialogRef}.
+   *
+   * @param peer - The peer reference to map.
+   * @param index - The entities that came with the same response.
+   * @returns The peer ref, or `undefined` when its entity was not sent.
+   * @throws Never.
+   */
+  private mapPeerRef(
+    peer: Api.TypePeer,
+    index: PeerEntityIndex,
+  ): GramDialogRef | undefined {
+    const entity = this.resolvePeerEntity(peer, index);
+    if (!entity) return undefined;
+    return {
+      // ── The MARKED id, as `GramDialog.id` is, so the caller can pass it
+      //    straight back as a peer — the raw id of a channel addresses an
+      //    unrelated user. ────────────────────────────────────────────────
+      id: this.markedPeerId(peer),
+      type: this.entityDialogType(entity),
+      title: this.entityTitle(entity),
+      username: this.entityUsername(entity),
+      hasPhoto: this.entityHasPhoto(entity) ?? false,
+    };
+  }
+
+  /**
+   * Maps a vector of bare peer references, dropping any whose entity the
+   * response did not carry — a blank row is worse than a missing one.
+   *
+   * @param peers - The peer references to map.
+   * @param index - The entities that came with the same response.
+   * @returns The peer refs that could be resolved, in the order given.
+   * @throws Never.
+   */
+  private mapPeerRefs(
+    peers: Api.TypePeer[],
+    index: PeerEntityIndex,
+  ): GramDialogRef[] {
+    return peers.flatMap((peer) => {
+      const ref = this.mapPeerRef(peer, index);
+      return ref ? [ref] : [];
+    });
+  }
+
+  /**
+   * Classifies a resolved entity as a user, group, or channel.
+   *
+   * A basic group (`Api.Chat`) is always a group; an `Api.Channel` is a
+   * channel unless its `megagroup` flag marks it as a supergroup.
+   *
+   * @param entity - The resolved entity.
+   * @returns The matching dialog kind.
+   * @throws Never.
+   */
+  private entityDialogType(
+    entity: Api.User | Api.Chat | Api.Channel,
+  ): GramDialogType {
+    if (entity instanceof Api.User) return GRAM_DIALOG_TYPES.USER;
+    if (entity instanceof Api.Chat) return GRAM_DIALOG_TYPES.GROUP;
+    return entity.megagroup
+      ? GRAM_DIALOG_TYPES.GROUP
+      : GRAM_DIALOG_TYPES.CHANNEL;
+  }
+
+  /**
+   * Reads an entity's display title — a chat/channel title, or a user's first
+   * and last name joined.
+   *
+   * @param entity - The resolved entity.
+   * @returns The title; `''` for a user with neither name set.
+   * @throws Never.
+   */
+  private entityTitle(entity: Api.User | Api.Chat | Api.Channel): string {
+    if (!(entity instanceof Api.User)) return entity.title;
+    return [entity.firstName, entity.lastName]
+      .filter((part): part is string => Boolean(part))
+      .join(' ');
+  }
+
+  /**
+   * Reads an entity's public `@username`, without the `@`.
+   *
+   * Falls back to the `usernames` VECTOR when the legacy scalar field is
+   * empty: Telegram leaves the scalar unset for a COLLECTIBLE (Fragment)
+   * username and puts it in the vector instead, so reading only the scalar
+   * reports `@durov`-style collectible handles as having no username at all.
+   * The scalar still wins when both are present — it is the primary handle.
+   *
+   * @param entity - The resolved entity.
+   * @returns The username without its `@`, or `null` when the peer has none
+   *   (a basic group never does).
+   * @throws Never.
+   */
+  private entityUsername(
+    entity: Api.User | Api.Chat | Api.Channel,
+  ): string | null {
+    if (entity instanceof Api.Chat) return null;
+    if (entity.username) return entity.username;
+    const active = entity.usernames?.find((name) => name.active);
+    return active?.username ?? null;
   }
 
   /**
@@ -1843,7 +2537,9 @@ export class GramJsClientAdapter implements IGramClient {
       message.startsWith('AUTH_TOKEN_EXCEPTION')
     )
       code = 'TOKEN_INVALID';
-    else if ((TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message))
+    else if (
+      (TELEGRAM_AUTH_LOSS_RPC_CODES as readonly string[]).includes(message)
+    )
       // ── This session itself is dead (revoked/expired/deactivated): it cannot
       //    approve a login. Surface NOT_AUTHORIZED so the caller can tear down. ─
       code = 'NOT_AUTHORIZED';

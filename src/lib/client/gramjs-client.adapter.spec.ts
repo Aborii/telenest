@@ -892,6 +892,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 7,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'hi',
           date: 1700000000,
           out: true,
@@ -919,6 +920,7 @@ describe('GramJsClientAdapter', () => {
       ).resolves.toEqual({
         id: 9,
         peerId: '222',
+        peerIdMarked: '-100222',
         text: 'sent',
         date: 1700000001,
         out: true,
@@ -1275,6 +1277,62 @@ describe('GramJsClientAdapter', () => {
       expect(unmarked?.unreadMark).toBe(false);
       expect(noRaw?.unreadMark).toBeUndefined();
     });
+
+    // ── Drafts (#150) ────────────────────────────────────────────────────
+    it('maps an unsent draft off the raw TL dialog', async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              draft: asEntity(Api.DraftMessage, {
+                message: 'half a thought',
+                date: 1700000900,
+              }),
+            },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.draft).toEqual({
+        text: 'half a thought',
+        date: 1700000900,
+        replyToMsgId: undefined,
+      });
+    });
+
+    it("carries the draft's reply target when it is a reply", async () => {
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({
+            dialog: {
+              draft: asEntity(Api.DraftMessage, {
+                message: 'answering',
+                date: 1700000900,
+                replyTo: asEntity(Api.InputReplyToMessage, {
+                  replyToMsgId: 88,
+                }),
+              }),
+            },
+          }),
+        ]),
+      });
+      const [dialog] = await createAdapter(mock).getDialogs();
+      expect(dialog?.draft?.replyToMsgId).toBe(88);
+    });
+
+    it('treats a cleared draft as no draft at all', async () => {
+      // Telegram sends draftMessageEmpty to say a draft was DELETED. Taking it
+      // at face value would leave a permanent "Draft:" row on the dialog.
+      const mock = createMockClient({
+        getDialogs: jest.fn().mockResolvedValue([
+          aDialog({ dialog: { draft: asEntity(Api.DraftMessageEmpty, {}) } }),
+          aDialog({ dialog: {} }),
+        ]),
+      });
+      const [cleared, none] = await createAdapter(mock).getDialogs();
+      expect(cleared?.draft).toBeUndefined();
+      expect(none?.draft).toBeUndefined();
+    });
   });
 
   describe('getDialogFilters', () => {
@@ -1541,6 +1599,305 @@ describe('GramJsClientAdapter', () => {
       const [message] = await createAdapter(mock).getMessages('me');
       expect(message?.groupedId).toBeUndefined();
     });
+
+    // ── Entities (#142) ──────────────────────────────────────────────────
+    it('maps every modelled entity kind with its offsets', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            message: 'bold italic code',
+            entities: [
+              asEntity(Api.MessageEntityBold, { offset: 0, length: 4 }),
+              asEntity(Api.MessageEntityItalic, { offset: 5, length: 6 }),
+              asEntity(Api.MessageEntityCode, { offset: 12, length: 4 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'bold', offset: 0, length: 4 },
+        { type: 'italic', offset: 5, length: 6 },
+        { type: 'code', offset: 12, length: 4 },
+      ]);
+    });
+
+    it('carries the payload of the entities that have one', async () => {
+      // These four are the entities whose meaning is NOT recoverable from the
+      // text they cover — dropping the payload silently loses the link, the
+      // mention target, or the emoji itself.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityTextUrl, {
+                offset: 0,
+                length: 2,
+                url: 'https://example.com',
+              }),
+              asEntity(Api.MessageEntityMentionName, {
+                offset: 2,
+                length: 2,
+                userId: bigInt('4242'),
+              }),
+              asEntity(Api.MessageEntityCustomEmoji, {
+                offset: 4,
+                length: 2,
+                documentId: bigInt('13537855237972033634'),
+              }),
+              asEntity(Api.MessageEntityPre, {
+                offset: 6,
+                length: 2,
+                language: 'ts',
+              }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        {
+          type: 'text-url',
+          offset: 0,
+          length: 2,
+          url: 'https://example.com',
+        },
+        { type: 'mention-name', offset: 2, length: 2, userId: '4242' },
+        {
+          type: 'custom-emoji',
+          offset: 4,
+          length: 2,
+          // 64-bit id kept as a string — Number() would round it.
+          documentId: '13537855237972033634',
+        },
+        { type: 'pre', offset: 6, length: 2, language: 'ts' },
+      ]);
+    });
+
+    it('drops an empty pre language rather than reporting one', async () => {
+      // Telegram sends '' when no language was given; passing that through
+      // would make a renderer label the block as an empty language.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityPre, {
+                offset: 0,
+                length: 2,
+                language: '',
+              }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities?.[0]?.language).toBeUndefined();
+    });
+
+    it('keeps an unmodelled entity as unknown with its offsets intact', async () => {
+      // Skipping the span entirely would lose a piece of the text a renderer
+      // still has to account for; 'unknown' lets it leave that run alone.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityUnknown, { offset: 3, length: 5 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'unknown', offset: 3, length: 5 },
+      ]);
+    });
+
+    it('carries a collapsed blockquote, and omits the flag otherwise', async () => {
+      // `collapsed` is a name-dependent read against a hand-written mapping: a
+      // wrong field name would leave every quote expanded while still emitting
+      // a well-formed blockquote entity, so nothing else would catch it.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            entities: [
+              asEntity(Api.MessageEntityBlockquote, {
+                offset: 0,
+                length: 2,
+                collapsed: true,
+              }),
+              asEntity(Api.MessageEntityBlockquote, { offset: 3, length: 2 }),
+            ],
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toEqual([
+        { type: 'blockquote', offset: 0, length: 2, collapsed: true },
+        { type: 'blockquote', offset: 3, length: 2, collapsed: undefined },
+      ]);
+    });
+
+    it('leaves entities undefined for plain text', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg({ entities: [] })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.entities).toBeUndefined();
+    });
+
+    // ── Reactions (#144) ─────────────────────────────────────────────────
+    it('maps the three reaction forms with their counts', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            reactions: asEntity(Api.MessageReactions, {
+              results: [
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionEmoji, { emoticon: '👍' }),
+                  count: 12,
+                }),
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionCustomEmoji, {
+                    documentId: bigInt('13537855237972033634'),
+                  }),
+                  count: 3,
+                }),
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionPaid, {}),
+                  count: 5,
+                }),
+              ],
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions).toEqual([
+        { kind: 'emoji', emoticon: '👍', count: 12, chosen: false },
+        {
+          kind: 'custom-emoji',
+          documentId: '13537855237972033634',
+          count: 3,
+          chosen: false,
+        },
+        { kind: 'paid', count: 5, chosen: false },
+      ]);
+    });
+
+    it('treats a chosenOrder of 0 as chosen', async () => {
+      // The order is zero-based, so the account's FIRST reaction carries 0 —
+      // a truthiness test would report exactly that one as not chosen.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            reactions: asEntity(Api.MessageReactions, {
+              results: [
+                asEntity(Api.ReactionCount, {
+                  reaction: asEntity(Api.ReactionEmoji, { emoticon: '🔥' }),
+                  count: 1,
+                  chosenOrder: 0,
+                }),
+              ],
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions?.[0]?.chosen).toBe(true);
+    });
+
+    it('leaves reactions undefined when a message has none', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.reactions).toBeUndefined();
+    });
+
+    // ── Provenance (#152) ────────────────────────────────────────────────
+    it('maps a forward header, including the original date and post', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            fwdFrom: asEntity(Api.MessageFwdHeader, {
+              fromId: new Api.PeerChannel({ channelId: bigInt('777') }),
+              date: 1690000000,
+              channelPost: 42,
+              postAuthor: 'Jane',
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward).toEqual({
+        fromId: '-100777',
+        fromName: undefined,
+        date: 1690000000,
+        channelPost: 42,
+        postAuthor: 'Jane',
+      });
+    });
+
+    it('keeps a hidden-origin forward rather than dropping it', async () => {
+      // Telegram sends a name with no id when the original sender disallows
+      // linking back. Dropping the header would render the message as the
+      // forwarder's own words — a misattribution, not a missing decoration.
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            fwdFrom: asEntity(Api.MessageFwdHeader, {
+              fromName: 'Someone',
+              date: 1690000000,
+            }),
+          }),
+        ]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward?.fromId).toBeUndefined();
+      expect(message?.forward?.fromName).toBe('Someone');
+    });
+
+    it('leaves forward undefined for an original message', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([aMsg()]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.forward).toBeUndefined();
+    });
+
+    it('resolves viaBotUsername only from an already-attached bot', async () => {
+      // Resolving it with a lookup would cost one round-trip per message.
+      const resolved = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([
+          aMsg({
+            viaBotId: bigInt('55'),
+            viaBot: asEntity(Api.User, { username: 'gif' }),
+          }),
+        ]),
+      });
+      const [withBot] = await createAdapter(resolved).getMessages('me');
+      expect(withBot?.viaBotUsername).toBe('gif');
+
+      const unresolved = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ viaBotId: bigInt('55') })]),
+      });
+      const [withoutBot] = await createAdapter(unresolved).getMessages('me');
+      expect(withoutBot?.viaBotUsername).toBeUndefined();
+    });
+
+    it("maps a signed channel post's author", async () => {
+      // A signed post is exactly the case where senderId is absent, so this
+      // is the only attribution the message carries.
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aMsg({ postAuthor: 'Jane' })]),
+      });
+      const [message] = await createAdapter(mock).getMessages('me');
+      expect(message?.postAuthor).toBe('Jane');
+    });
   });
 
   describe('exportSession', () => {
@@ -1593,6 +1950,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 7,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'hi there',
           date: 5,
           out: false,
@@ -1645,6 +2003,7 @@ describe('GramJsClientAdapter', () => {
         {
           id: 8,
           peerId: '1001',
+          peerIdMarked: '1001',
           text: 'edited',
           date: 9,
           out: false,
@@ -2121,6 +2480,554 @@ describe('GramJsClientAdapter', () => {
       });
     });
 
+    it('searchMessages translates a filter and forwards the paging anchor', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchMessages('@g', 'find', {
+        limit: 3,
+        filter: 'photos',
+        offsetId: 90,
+      });
+      expect(mock.getMessages).toHaveBeenCalledWith('@g', {
+        search: 'find',
+        limit: 3,
+        filter: expect.any(Api.InputMessagesFilterPhotos),
+        offsetId: 90,
+      });
+    });
+
+    it('searchMessages OMITS offsetId entirely when the caller gave none', async () => {
+      // GramJS merges the caller's object over its defaults with
+      // `Object.assign`, so an explicit `offsetId: undefined` would replace its
+      // `0` default and poison the offset arithmetic. The key must be absent,
+      // which `toHaveBeenCalledWith` cannot see (it equates undefined/missing).
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchMessages('@g', 'find');
+      const args = mock.getMessages.mock.calls[0]?.[1] as Record<
+        string,
+        unknown
+      >;
+      expect(Object.keys(args)).not.toContain('offsetId');
+      expect(Object.keys(args)).not.toContain('filter');
+    });
+
+    it('searchMessages allows an EMPTY query with a filter (shared media)', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 4, message: '' })]),
+      });
+      const found = await createAdapter(mock).searchMessages('@g', '', {
+        filter: 'music',
+      });
+      expect(found).toHaveLength(1);
+      expect(mock.getMessages).toHaveBeenCalledWith('@g', {
+        search: '',
+        limit: undefined,
+        filter: expect.any(Api.InputMessagesFilterMusic),
+      });
+    });
+
+    it.each([
+      ['photos', Api.InputMessagesFilterPhotos],
+      ['videos', Api.InputMessagesFilterVideo],
+      ['photo-video', Api.InputMessagesFilterPhotoVideo],
+      ['documents', Api.InputMessagesFilterDocument],
+      ['links', Api.InputMessagesFilterUrl],
+      ['music', Api.InputMessagesFilterMusic],
+      ['voice', Api.InputMessagesFilterVoice],
+      ['round-voice', Api.InputMessagesFilterRoundVoice],
+      ['gifs', Api.InputMessagesFilterGif],
+      ['pinned', Api.InputMessagesFilterPinned],
+    ] as const)('maps the %s filter to its TL constructor', async (
+      filter,
+      ctor,
+    ) => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchGlobal('q', { filter });
+      const args = mock.getMessages.mock.calls[0]?.[1] as {
+        filter?: unknown;
+      };
+      expect(args.filter).toBeInstanceOf(ctor);
+    });
+
+    it('searchGlobal searches with NO entity, which is what reaches searchGlobal', async () => {
+      const mock = createMockClient({
+        getMessages: jest
+          .fn()
+          .mockResolvedValue([aRawMessage({ id: 12, message: 'anywhere' })]),
+      });
+      const [message] = await createAdapter(mock).searchGlobal('any', {
+        limit: 7,
+        offsetId: 40,
+      });
+      expect(message?.text).toBe('anywhere');
+      expect(mock.getMessages).toHaveBeenCalledWith(undefined, {
+        search: 'any',
+        limit: 7,
+        offsetId: 40,
+      });
+    });
+
+    it('searchGlobal defaults the limit rather than letting GramJS fetch every match', async () => {
+      const mock = createMockClient({
+        getMessages: jest.fn().mockResolvedValue([]),
+      });
+      await createAdapter(mock).searchGlobal('any');
+      expect(mock.getMessages).toHaveBeenCalledWith(undefined, {
+        search: 'any',
+        limit: 50,
+      });
+    });
+
+    it.each([
+      ['a user', new Api.PeerUser({ userId: bigInt('5') }), '5', '5'],
+      ['a basic group', new Api.PeerChat({ chatId: bigInt('9') }), '9', '-9'],
+      [
+        'a channel',
+        new Api.PeerChannel({ channelId: bigInt('77') }),
+        '77',
+        '-10077',
+      ],
+    ])(
+      'maps both id forms of %s onto a message',
+      async (_label, peer, raw, marked) => {
+        // The two coincide for a user and diverge for everything else, which
+        // is exactly why a global result needs the marked one: it is the only
+        // form that opens the chat, and the DTO carries no peer type to
+        // convert with.
+        const mock = createMockClient({
+          getMessages: jest
+            .fn()
+            .mockResolvedValue([aRawMessage({ peerId: peer })]),
+        });
+        const [message] = await createAdapter(mock).searchGlobal('q');
+        expect(message?.peerId).toBe(raw);
+        expect(message?.peerIdMarked).toBe(marked);
+      },
+    );
+
+    it('searchPublicPosts sends the tag without its sigil and maps the posts', async () => {
+      const post = asEntity(Api.Message, {
+        id: 31,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram is great',
+        date: 1700000002,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram', {
+        limit: 9,
+        offsetId: 4,
+      });
+
+      expect(found?.text).toBe('#telegram is great');
+      // The channel is one the account has never joined, so the marked id is
+      // the only form that can open it.
+      expect(found?.peerIdMarked).toBe('-10077');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ hashtag: 'telegram', limit: 9, offsetId: 4 }),
+      );
+    });
+
+    it('names a public post by its channel, which no entity attachment provides', async () => {
+      // A raw `invoke` gets none, so `message.sender` is empty and every post
+      // would be nameless — the whole identity of a result from a channel the
+      // reader has never seen. The response ships the channels beside them.
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'Telegram Tips',
+      });
+      const post = asEntity(Api.Message, {
+        id: 4,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram',
+        date: 1,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [channel],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram');
+      expect(found?.senderName).toBe('Telegram Tips');
+    });
+
+    it('leaves a sender name the message already carried alone', async () => {
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'Telegram Tips',
+      });
+      const post = asEntity(Api.Message, {
+        id: 4,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram',
+        date: 1,
+      });
+      // `sender` is a getter on the real class, so it has to be defined
+      // rather than assigned.
+      Object.defineProperty(post, 'sender', {
+        value: asEntity(Api.User, { firstName: 'Ada', lastName: 'L' }),
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [channel],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram');
+      expect(found?.senderName).toBe('Ada L');
+    });
+    it('searchPublicPosts skips service and empty entries in the vector', async () => {
+      // `channels.searchPosts` answers with a raw `messages.TypeMessages`, so
+      // unlike a GramJS-iterated search the vector can hold non-messages.
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [
+              asEntity(Api.MessageEmpty, { id: 1 }),
+              asEntity(Api.Message, {
+                id: 2,
+                peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+                message: 'real',
+                date: 1,
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchPublicPosts('tag');
+      expect(found).toHaveLength(1);
+      expect(found[0]?.text).toBe('real');
+    });
+
+    it('searchPublicPosts answers [] for messagesNotModified, which has no vector', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(new Api.messages.MessagesNotModified({ count: 0 })),
+      });
+      await expect(
+        createAdapter(mock).searchPublicPosts('tag'),
+      ).resolves.toEqual([]);
+    });
+
+    it('searchPublicPosts defaults its limit and starts from the newest post', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            new Api.messages.Messages({ messages: [], chats: [], users: [] }),
+          ),
+      });
+      await createAdapter(mock).searchPublicPosts('tag');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50, offsetId: 0 }),
+      );
+    });
+    it('searchContacts splits the account own peers from the public ones', async () => {
+      const ada = asEntity(Api.User, {
+        id: bigInt('5'),
+        firstName: 'Ada',
+        lastName: 'L',
+        username: 'ada',
+        photo: asEntity(Api.UserProfilePhoto, {}),
+      });
+      const news = asEntity(Api.Channel, {
+        id: bigInt('77'),
+        title: 'News',
+        username: 'news',
+        megagroup: false,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerUser({ userId: bigInt('5') })],
+            results: [new Api.PeerChannel({ channelId: bigInt('77') })],
+            chats: [news],
+            users: [ada],
+          }),
+        ),
+      });
+
+      const found = await createAdapter(mock).searchContacts('ad', 5);
+
+      expect(found.myResults).toEqual([
+        {
+          id: '5',
+          type: 'user',
+          title: 'Ada L',
+          username: 'ada',
+          hasPhoto: true,
+        },
+      ]);
+      // ── A channel is addressed by its MARKED id; the raw one would open an
+      //    unrelated user. ──────────────────────────────────────────────────
+      expect(found.globalResults).toEqual([
+        {
+          id: '-10077',
+          type: 'channel',
+          title: 'News',
+          username: 'news',
+          hasPhoto: false,
+        },
+      ]);
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'ad', limit: 5 }),
+      );
+    });
+
+    it('searchContacts drops a peer whose entity the response did not carry', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerUser({ userId: bigInt('999') })],
+            results: [],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('ghost');
+      expect(found.myResults).toEqual([]);
+    });
+
+    it('searchContacts reads a COLLECTIBLE username out of the usernames vector', async () => {
+      // Telegram leaves the legacy scalar empty for a Fragment username and
+      // puts it in `usernames` instead; reading only the scalar reports the
+      // peer as having no username at all.
+      const collectible = asEntity(Api.Channel, {
+        id: bigInt('88'),
+        title: 'Telegram',
+        username: undefined,
+        usernames: [
+          asEntity(Api.Username, { username: 'stale', active: false }),
+          asEntity(Api.Username, { username: 'telegram', active: true }),
+        ],
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [],
+            results: [new Api.PeerChannel({ channelId: bigInt('88') })],
+            chats: [collectible],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('telegram');
+      expect(found.globalResults[0]?.username).toBe('telegram');
+    });
+
+    it('searchContacts reports a basic group as having no username', async () => {
+      const group = asEntity(Api.Chat, { id: bigInt('9'), title: 'Team' });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [new Api.PeerChat({ chatId: bigInt('9') })],
+            results: [],
+            chats: [group],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchContacts('team');
+      expect(found.myResults[0]).toEqual({
+        id: '-9',
+        type: 'group',
+        title: 'Team',
+        username: null,
+        hasPhoto: false,
+      });
+    });
+
+    it('searchContacts defaults the limit when the caller names none', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.Found({
+            myResults: [],
+            results: [],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await createAdapter(mock).searchContacts('q');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 20 }),
+      );
+    });
+
+    it('getTopPeers maps the requested category with Telegram own ratings', async () => {
+      const ada = asEntity(Api.User, {
+        id: bigInt('5'),
+        firstName: 'Ada',
+        username: 'ada',
+      });
+      const room = asEntity(Api.Channel, {
+        id: bigInt('31'),
+        title: 'Room',
+        megagroup: true,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryCorrespondents(),
+                count: 2,
+                peers: [
+                  new Api.TopPeer({
+                    peer: new Api.PeerUser({ userId: bigInt('5') }),
+                    rating: 9.5,
+                  }),
+                  new Api.TopPeer({
+                    peer: new Api.PeerChannel({ channelId: bigInt('31') }),
+                    rating: 2,
+                  }),
+                ],
+              }),
+            ],
+            chats: [room],
+            users: [ada],
+          }),
+        ),
+      });
+
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents', { limit: 4 }),
+      ).resolves.toEqual([
+        { id: '5', type: 'user', title: 'Ada', username: 'ada', rating: 9.5 },
+        {
+          id: '-10031',
+          type: 'group',
+          title: 'Room',
+          username: null,
+          rating: 2,
+        },
+      ]);
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ correspondents: true, offset: 0, limit: 4 }),
+      );
+    });
+
+    it.each([
+      ['topPeersDisabled', new Api.contacts.TopPeersDisabled()],
+      ['topPeersNotModified', new Api.contacts.TopPeersNotModified()],
+    ])('getTopPeers answers [] for %s rather than throwing', async (
+      _label,
+      response,
+    ) => {
+      // Suggestions switched off in privacy settings is "nothing to show", not
+      // a failure — a client should render an empty strip either way.
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(response),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers answers [] when the response carries no matching category', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryGroups(),
+                count: 0,
+                peers: [],
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers drops a rated peer whose entity was not sent back', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.contacts.TopPeers({
+            categories: [
+              new Api.TopPeerCategoryPeers({
+                category: new Api.TopPeerCategoryCorrespondents(),
+                count: 1,
+                peers: [
+                  new Api.TopPeer({
+                    peer: new Api.PeerUser({ userId: bigInt('404') }),
+                    rating: 1,
+                  }),
+                ],
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      await expect(
+        createAdapter(mock).getTopPeers('correspondents'),
+      ).resolves.toEqual([]);
+    });
+
+    it('getTopPeers defaults the limit and asks with an empty hash', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(new Api.contacts.TopPeersNotModified()),
+      });
+      await createAdapter(mock).getTopPeers('bots-pm');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ botsPm: true, limit: 30 }),
+      );
+      const request = mock.invoke.mock.calls[0]?.[0] as { hash: unknown };
+      expect(bigInt.isInstance(request.hash)).toBe(true);
+    });
+
+    it('resetTopPeerRating names the list the peer is forgotten from', async () => {
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(true),
+      });
+      await createAdapter(mock).resetTopPeerRating('correspondents', '@ada');
+      const request = mock.invoke.mock.calls[0]?.[0] as {
+        category: unknown;
+        peer: unknown;
+      };
+      expect(request.category).toBeInstanceOf(
+        Api.TopPeerCategoryCorrespondents,
+      );
+      expect(request.peer).toBe('@ada');
+    });
+
     it('getFullChat maps a user (bio from GetFullUser)', async () => {
       const user = asEntity(Api.User, {
         id: bigInt('5'),
@@ -2144,6 +3051,43 @@ describe('GramJsClientAdapter', () => {
         participantsCount: undefined,
         verified: true,
       });
+    });
+
+    it('getFullChat reads a COLLECTIBLE username out of the usernames vector', async () => {
+      // Telegram leaves the legacy scalar empty when the username was bought
+      // through Fragment, so reading only the scalar reported a peer that
+      // demonstrably HAS a username as having none.
+      const user = asEntity(Api.User, {
+        id: bigInt('6'),
+        firstName: 'Pavel',
+        username: undefined,
+        usernames: [asEntity(Api.Username, { username: 'durov', active: true })],
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(user),
+        invoke: jest.fn().mockResolvedValue({ fullUser: { about: '' } }),
+      });
+      await expect(
+        createAdapter(mock).getFullChat('@durov'),
+      ).resolves.toMatchObject({ username: 'durov' });
+    });
+
+    it('getFullChat keeps the legacy scalar when both are present', async () => {
+      // The scalar is the primary handle; the vector also lists it plus any
+      // extras, so preferring the vector could rename the peer.
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('78'),
+        title: 'News',
+        username: 'news',
+        usernames: [asEntity(Api.Username, { username: 'alt', active: true })],
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(channel),
+        invoke: jest.fn().mockResolvedValue({ fullChat: {} }),
+      });
+      await expect(
+        createAdapter(mock).getFullChat('@news'),
+      ).resolves.toMatchObject({ username: 'news' });
     });
 
     it('getFullChat maps a broadcast channel (count from ChannelFull)', async () => {
@@ -2427,6 +3371,33 @@ describe('GramJsClientAdapter', () => {
         'getMessages',
         (a: GramJsClientAdapter): Promise<unknown> =>
           a.searchMessages('@x', 'q'),
+      ],
+      [
+        'searchGlobal',
+        'getMessages',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchGlobal('q'),
+      ],
+      [
+        'searchContacts',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchContacts('q'),
+      ],
+      [
+        'searchPublicPosts',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchPublicPosts('t'),
+      ],
+      [
+        'getTopPeers',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.getTopPeers('correspondents'),
+      ],
+      [
+        'resetTopPeerRating',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> =>
+          a.resetTopPeerRating('correspondents', '@x'),
       ],
       [
         'editMessage',

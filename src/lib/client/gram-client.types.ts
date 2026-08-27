@@ -69,6 +69,22 @@ export type GramDialogType =
   (typeof GRAM_DIALOG_TYPES)[keyof typeof GRAM_DIALOG_TYPES];
 
 /** Normalized entry from the account's dialog (conversation) list. */
+/**
+ * An unsent draft saved on a dialog — what every official client shows in the
+ * chat list ahead of the last message.
+ *
+ * Read-only: writing drafts (`messages.saveDraft`) is a separate surface. The
+ * point of exposing it is that a draft typed on another device shows up here.
+ */
+export interface GramDialogDraft {
+  /** The draft's plain text (empty for a media-only draft). */
+  text: string;
+  /** Unix timestamp (seconds) the draft was last edited. */
+  date: number;
+  /** Id of the message the draft replies to, when it is a reply. */
+  replyToMsgId?: number;
+}
+
 export interface GramDialog {
   /** Peer id rendered as a decimal string. */
   id: string;
@@ -163,14 +179,193 @@ export interface GramDialog {
    * this flag is not set. `undefined` when the raw TL dialog is not present.
    */
   unreadMark?: boolean;
+  /**
+   * The dialog's unsent draft, when it has one. Omitted for a dialog with no
+   * draft — and for an EMPTY draft (`draftMessageEmpty`), which Telegram uses
+   * to say a draft was cleared and which must not render as a "Draft:" row.
+   */
+  draft?: GramDialogDraft;
 }
 
 /** Normalized Telegram message. */
+/**
+ * Closed set of message-entity kinds — the formatting and semantic spans
+ * Telegram sends alongside a message's text. Declared as an `as const` record
+ * (never an `enum`) so {@link GramMessageEntityType} derives from it.
+ *
+ * Every `Api.MessageEntity*` variant telenest models has an entry; anything
+ * Telegram adds later maps to `UNKNOWN` with its offsets intact, so a renderer
+ * can skip the span rather than mis-styling it.
+ */
+export const GRAM_MESSAGE_ENTITY_TYPES = {
+  /** Bold text. */
+  BOLD: 'bold',
+  /** Italic text. */
+  ITALIC: 'italic',
+  /** Underlined text. */
+  UNDERLINE: 'underline',
+  /** Struck-through text. */
+  STRIKETHROUGH: 'strikethrough',
+  /** Inline monospace. */
+  CODE: 'code',
+  /** Preformatted block, optionally carrying a language hint. */
+  PRE: 'pre',
+  /** Hidden until tapped. */
+  SPOILER: 'spoiler',
+  /** Quoted block, optionally collapsed. */
+  BLOCKQUOTE: 'blockquote',
+  /** A bare URL written out in the text. */
+  URL: 'url',
+  /** Text hyperlinked to a URL the text itself does not contain. */
+  TEXT_URL: 'text-url',
+  /** An email address. */
+  EMAIL: 'email',
+  /** A phone number. */
+  PHONE: 'phone',
+  /** An `@username` mention. */
+  MENTION: 'mention',
+  /** A mention of a user by id, for accounts with no username. */
+  MENTION_NAME: 'mention-name',
+  /** A `#hashtag`. */
+  HASHTAG: 'hashtag',
+  /** A `$CASHTAG`. */
+  CASHTAG: 'cashtag',
+  /** A `/command`. */
+  BOT_COMMAND: 'bot-command',
+  /** A custom emoji, rendered from a document. */
+  CUSTOM_EMOJI: 'custom-emoji',
+  /** A bank-card number. */
+  BANK_CARD: 'bank-card',
+  /** A kind this version does not model; offsets are still accurate. */
+  UNKNOWN: 'unknown',
+} as const;
+
+/** Union of the entity kinds in {@link GRAM_MESSAGE_ENTITY_TYPES}. */
+export type GramMessageEntityType =
+  (typeof GRAM_MESSAGE_ENTITY_TYPES)[keyof typeof GRAM_MESSAGE_ENTITY_TYPES];
+
+/**
+ * One formatting or semantic span over a message's text.
+ *
+ * Offsets are **UTF-16 code units**, exactly as Telegram sends them, so they
+ * index into a JavaScript string directly — but an emoji or other astral
+ * character counts as two, which matters when slicing.
+ */
+export interface GramMessageEntity {
+  /** What the span is. */
+  type: GramMessageEntityType;
+  /** Start offset into {@link GramMessage.text}, in UTF-16 code units. */
+  offset: number;
+  /** Length of the span, in UTF-16 code units. */
+  length: number;
+  /**
+   * Target URL. Only on `text-url` — the one entity whose meaning is not
+   * recoverable from the text it covers.
+   */
+  url?: string;
+  /** Mentioned user id as a decimal string. Only on `mention-name`. */
+  userId?: string;
+  /** Syntax-highlighting hint. Only on `pre`, and only when Telegram sent one. */
+  language?: string;
+  /**
+   * Custom-emoji document id as a decimal string. Only on `custom-emoji`; a
+   * **string** because the id is 64-bit and can exceed `Number.MAX_SAFE_INTEGER`.
+   */
+  documentId?: string;
+  /** Whether the quote renders collapsed. Only on `blockquote`. */
+  collapsed?: boolean;
+}
+
+/**
+ * Closed set of reaction kinds. Declared as an `as const` record (never an
+ * `enum`) so {@link GramMessageReactionKind} derives from it.
+ */
+export const GRAM_MESSAGE_REACTION_KINDS = {
+  /** A standard emoji reaction. */
+  EMOJI: 'emoji',
+  /** A custom-emoji reaction. */
+  CUSTOM_EMOJI: 'custom-emoji',
+  /** A Telegram Stars paid reaction. */
+  PAID: 'paid',
+} as const;
+
+/** Union of the reaction kinds in {@link GRAM_MESSAGE_REACTION_KINDS}. */
+export type GramMessageReactionKind =
+  (typeof GRAM_MESSAGE_REACTION_KINDS)[keyof typeof GRAM_MESSAGE_REACTION_KINDS];
+
+/**
+ * One aggregated reaction under a message — the chip a client renders, with
+ * its total and whether this account is part of it.
+ *
+ * Who reacted (`recent_reactions`) is deliberately not modelled: the aggregate
+ * row is what every client shows by default, and the avatar list needs peer
+ * resolution this mapping does not do.
+ */
+export interface GramMessageReaction {
+  /** Which of the three reaction forms this is. */
+  kind: GramMessageReactionKind;
+  /** The emoji itself. Only on `emoji`. */
+  emoticon?: string;
+  /**
+   * Custom-emoji document id as a decimal string. Only on `custom-emoji`; a
+   * **string** for the same 64-bit reason as
+   * {@link GramMessageEntity.documentId}.
+   */
+  documentId?: string;
+  /** How many accounts chose this reaction. */
+  count: number;
+  /** Whether the logged-in account is one of them. */
+  chosen: boolean;
+}
+
+/**
+ * Where a forwarded message originally came from — what a client renders as
+ * the "Forwarded from X" header.
+ *
+ * {@link GramMessageForward.fromId} and {@link GramMessageForward.fromName} are
+ * separate on purpose: a name WITHOUT an id is Telegram's privacy case, where
+ * the original sender disallowed linking back, and a client must render the
+ * name as plain text rather than a link.
+ */
+export interface GramMessageForward {
+  /** Original sender's peer id as a decimal string, when not hidden. */
+  fromId?: string;
+  /** Original sender's display name, when Telegram sent one. */
+  fromName?: string;
+  /** Unix timestamp (seconds) of the ORIGINAL message, not the forward. */
+  date: number;
+  /** Original message id inside the source channel, for a channel post. */
+  channelPost?: number;
+  /** Signature carried over from a signed channel post. */
+  postAuthor?: string;
+}
+
 export interface GramMessage {
   /** Message id within its chat. */
   id: number;
-  /** Peer id (chat/user the message belongs to) as a decimal string. */
+  /**
+   * Peer id (chat/user the message belongs to) as a decimal string, in the
+   * RAW form — a channel appears as `1005640892`, not `-1001005640892`. Safe
+   * to pair with the peer the caller already passed in; to OPEN a chat the
+   * caller did not already know, use {@link GramMessage.peerIdMarked}.
+   */
   peerId: string;
+  /**
+   * Peer id in the MARKED form (`-100…` for a channel, `-…` for a basic
+   * group, plain for a user) — the id that OPENS the chat, and the one that
+   * matches {@link GramDialog.id}.
+   *
+   * Always prefer this when the peer was not already known to the caller,
+   * which is every result of
+   * {@link import('./gram-client.interface').IGramClient.searchGlobal}: the
+   * raw id of a channel addresses an unrelated user, and the DTO carries no
+   * peer TYPE with which a consumer could convert one form to the other.
+   *
+   * Always populated by the GramJS adapter; optional on the DTO because a
+   * hand-built {@link import('./gram-client.interface').IGramClient} fake may
+   * omit it, as {@link GramMessage.hasMedia} is.
+   */
+  peerIdMarked?: string;
   /** Plain-text body (empty for non-text/service messages). */
   text: string;
   /** Unix timestamp (seconds) the message was sent. */
@@ -185,7 +380,9 @@ export interface GramMessage {
    * a hand-built {@link import('./gram-client.interface').IGramClient} fake may
    * omit it. When `true`, the media can be fetched with
    * {@link import('./gram-client.interface').IGramClient.downloadMedia} using
-   * this message's `peerId` and `id`. Service/empty media never counts.
+   * this message's {@link GramMessage.peerIdMarked} and `id` — the marked
+   * form, since the raw one does not address a channel. Service/empty media
+   * never counts.
    */
   hasMedia?: boolean;
   /**
@@ -220,6 +417,45 @@ export interface GramMessage {
    * can exceed `Number.MAX_SAFE_INTEGER`. Omitted for non-album messages.
    */
   groupedId?: string;
+  /**
+   * Formatting and semantic spans over {@link GramMessage.text}, in the order
+   * Telegram sent them. Omitted when the message carries none.
+   *
+   * Without these the text is only its characters: bold and spoilers vanish,
+   * and a `text-url` link loses its target entirely, since the URL lives on
+   * the entity rather than in the text it covers.
+   */
+  entities?: GramMessageEntity[];
+  /**
+   * Aggregated reactions in Telegram's display order. Omitted when the message
+   * has none.
+   *
+   * These are a SNAPSHOT from the read that produced this message: reaction
+   * changes arrive as `updateMessageReactions`, which is not a message edit,
+   * so they do not surface on the edit stream. A refetch refreshes them.
+   */
+  reactions?: GramMessageReaction[];
+  /**
+   * Where the message came from, when it was forwarded. Omitted otherwise.
+   *
+   * Without it a forward is indistinguishable from something the sender wrote,
+   * which misattributes the words rather than merely losing decoration.
+   */
+  forward?: GramMessageForward;
+  /**
+   * `@username` of the bot the message was sent through (an inline result),
+   * without the `@`. Omitted when the message did not come through a bot, or
+   * when the bot is not among the entities GramJS already resolved — the same
+   * no-extra-round-trip rule {@link GramMessage.senderName} follows.
+   */
+  viaBotUsername?: string;
+  /**
+   * Signature on a signed channel post ("— Jane"). Omitted elsewhere.
+   *
+   * A signed channel post is exactly the case where {@link GramMessage.senderId}
+   * is absent, so without this the post has no attribution at all.
+   */
+  postAuthor?: string;
 }
 
 /** Result of {@link import('./gram-client.interface').IGramClient.sendCode}. */
@@ -559,9 +795,204 @@ export interface GramGetParticipantsParams {
   search?: string;
 }
 
+/**
+ * Closed set of content filters a message search can narrow to — the media,
+ * links, files, music and voice tabs every official client shows. Declared as
+ * an `as const` record (never an `enum`) so {@link GramSearchFilter} derives
+ * from it; each entry names the `inputMessagesFilter*` constructor it maps to.
+ */
+export const GRAM_SEARCH_FILTERS = {
+  /** Photos only (`inputMessagesFilterPhotos`). */
+  PHOTOS: 'photos',
+  /** Videos only (`inputMessagesFilterVideo`). */
+  VIDEOS: 'videos',
+  /** Photos and videos together (`inputMessagesFilterPhotoVideo`). */
+  PHOTO_VIDEO: 'photo-video',
+  /** Documents / files (`inputMessagesFilterDocument`). */
+  DOCUMENTS: 'documents',
+  /** Messages containing a link (`inputMessagesFilterUrl`). */
+  LINKS: 'links',
+  /** Music tracks (`inputMessagesFilterMusic`). */
+  MUSIC: 'music',
+  /** Voice notes (`inputMessagesFilterVoice`). */
+  VOICE: 'voice',
+  /**
+   * Voice notes AND round video notes together
+   * (`inputMessagesFilterRoundVoice`) — the pairing the official clients
+   * put behind their single "Voice" tab. {@link GRAM_SEARCH_FILTERS.VOICE}
+   * alone omits the round videos.
+   */
+  ROUND_VOICE: 'round-voice',
+  /** Animated GIFs (`inputMessagesFilterGif`). */
+  GIFS: 'gifs',
+  /** Pinned messages (`inputMessagesFilterPinned`). */
+  PINNED: 'pinned',
+} as const;
+
+/** Union of the search filters in {@link GRAM_SEARCH_FILTERS}. */
+export type GramSearchFilter =
+  (typeof GRAM_SEARCH_FILTERS)[keyof typeof GRAM_SEARCH_FILTERS];
+
+/**
+ * Every value of {@link GRAM_SEARCH_FILTERS} as a readonly array, for
+ * validating a filter that arrived from outside the process (a query string,
+ * a config file) without hand-maintaining a second list.
+ */
+export const GRAM_SEARCH_FILTER_VALUES = Object.values(
+  GRAM_SEARCH_FILTERS,
+) as readonly GramSearchFilter[];
+
 /** Parameters for searching messages within a peer. */
 export interface GramSearchMessagesParams {
   /** Maximum number of matching messages to return. */
+  limit?: number;
+  /**
+   * Narrow the results to one kind of content. An EMPTY query combined with a
+   * filter is explicitly supported — that pairing is the canonical "list this
+   * chat's photos / files / music" call behind the shared-media tabs, not a
+   * degenerate search.
+   */
+  filter?: GramSearchFilter;
+  /**
+   * Paging anchor: return only messages OLDER than this id (exclusive), the
+   * same meaning {@link GramGetMessagesParams.offsetId} carries. Pass the id
+   * of the oldest message of the page you already have.
+   */
+  offsetId?: number;
+}
+
+/**
+ * Parameters for
+ * {@link import('./gram-client.interface').IGramClient.searchGlobal}.
+ *
+ * The same three knobs {@link GramSearchMessagesParams} has, kept as its own
+ * type because `offsetId` means something weaker here. Telegram pages a global
+ * search by the triple `(offsetRate, offsetPeer, offsetId)`, and only the last
+ * of the three is exposed; a caller that walks pages with `offsetId` alone
+ * will get an approximation of the next page rather than an exact continuation
+ * once results span many peers.
+ */
+export interface GramSearchGlobalParams {
+  /** Maximum number of matching messages to return. */
+  limit?: number;
+  /** Narrow the results to one kind of content. */
+  filter?: GramSearchFilter;
+  /** Approximate paging anchor — see the note on this interface. */
+  offsetId?: number;
+}
+
+/**
+ * Parameters for
+ * {@link import('./gram-client.interface').IGramClient.searchPublicPosts}.
+ *
+ * Public-post search pages by the same `(offsetRate, offsetPeer, offsetId)`
+ * triple {@link GramSearchGlobalParams} describes, and exposes the same single
+ * anchor — so the same approximation applies once results span many channels.
+ */
+export interface GramSearchPublicPostsParams {
+  /** Maximum number of matching posts to return. */
+  limit?: number;
+  /** Approximate paging anchor — see the note on this interface. */
+  offsetId?: number;
+}
+/**
+ * Minimal reference to a peer, as returned by a peer search. A deliberate
+ * subset of {@link GramDialog}: a search result names a peer the account may
+ * have no dialog with at all, so there is no unread count, pin state or last
+ * message to report.
+ */
+export interface GramDialogRef {
+  /** Peer id rendered as a decimal string, as {@link GramDialog.id} is. */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public `@username` without the leading `@`, or `null` when it has none. */
+  username: string | null;
+  /** Whether the peer has a profile/chat photo — a cheap "an avatar exists". */
+  hasPhoto: boolean;
+}
+
+/**
+ * The two halves of a peer search, kept apart because they answer different
+ * questions and clients label them differently: the first is "chats you are
+ * already in", the second is "everyone else on Telegram".
+ */
+export interface GramContactsSearchResult {
+  /** Peers the account already has a relationship with (its chats, contacts). */
+  myResults: GramDialogRef[];
+  /** Publicly resolvable peers the account has no relationship with. */
+  globalResults: GramDialogRef[];
+}
+
+/**
+ * Closed set of the rating lists Telegram keeps for an account, mirroring the
+ * flags of `contacts.getTopPeers`. Declared as an `as const` record (never an
+ * `enum`) so {@link GramTopPeerType} derives from it.
+ */
+export const GRAM_TOP_PEER_TYPES = {
+  /** People the account messages most — the search panel's People strip. */
+  CORRESPONDENTS: 'correspondents',
+  /** Bots the account chats with privately. */
+  BOTS_PM: 'bots-pm',
+  /** Bots the account uses through inline queries. */
+  BOTS_INLINE: 'bots-inline',
+  /** Groups the account is most active in. */
+  GROUPS: 'groups',
+  /** Channels the account reads most. */
+  CHANNELS: 'channels',
+  /** People the account calls most. */
+  PHONE_CALLS: 'phone-calls',
+  /** People the account forwards messages to most. */
+  FORWARD_USERS: 'forward-users',
+  /** Chats the account forwards messages to most. */
+  FORWARD_CHATS: 'forward-chats',
+} as const;
+
+/** Union of the rating lists in {@link GRAM_TOP_PEER_TYPES}. */
+export type GramTopPeerType =
+  (typeof GRAM_TOP_PEER_TYPES)[keyof typeof GRAM_TOP_PEER_TYPES];
+
+/**
+ * Every value of {@link GRAM_TOP_PEER_TYPES} as a readonly array, for
+ * validating a list name that arrived from outside the process.
+ */
+export const GRAM_TOP_PEER_TYPE_VALUES = Object.values(
+  GRAM_TOP_PEER_TYPES,
+) as readonly GramTopPeerType[];
+
+/**
+ * One peer from a rating list, with the score Telegram itself assigned.
+ *
+ * The rating is the whole point of the type: it answers "how OFTEN do you deal
+ * with this peer", which is a different question from the dialog list's "when
+ * did you last speak". A client that derives this strip from `getDialogs` is
+ * showing recency under a frequency label.
+ */
+export interface GramTopPeer {
+  /**
+   * Peer id rendered as a decimal string, marked the way {@link GramDialog.id}
+   * is — so it can be passed straight back as a {@link GramPeer}.
+   */
+  id: string;
+  /** Whether the peer is a user, group, or channel. */
+  type: GramDialogType;
+  /** Display title — the chat/channel title, or the user's full name. */
+  title: string;
+  /** Public `@username` without the leading `@`, or `null` when it has none. */
+  username: string | null;
+  /** Telegram's own frequency rating; higher means more frequent. */
+  rating: number;
+}
+
+/** Parameters for reading a rating list. */
+export interface GramGetTopPeersParams {
+  /**
+   * Maximum number of rated peers to return. Defaults to 30 — what the
+   * official clients ask for before trimming the strip locally.
+   * `contacts.getTopPeers` requires the field, so something is always sent.
+   */
   limit?: number;
 }
 
@@ -596,7 +1027,11 @@ export interface GramChatInfo {
   type: GramDialogType;
   /** Display title — the chat/channel title, or the user's full name. */
   title: string;
-  /** Public @username (without the leading `@`), when set. */
+  /**
+   * Public @username (without the leading `@`), when set. Includes a
+   * COLLECTIBLE (Fragment) username, which Telegram carries in a separate
+   * vector rather than the legacy scalar field.
+   */
   username?: string;
   /** Bio (user) or description (group/channel), when set. */
   about?: string;

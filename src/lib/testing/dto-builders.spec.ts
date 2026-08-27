@@ -52,6 +52,7 @@ describe('DTO builders', () => {
       expect(aGramMessage()).toEqual({
         id: 1,
         peerId: '1000',
+        peerIdMarked: '1000',
         text: 'test message',
         date: 1_700_000_000,
         out: true,

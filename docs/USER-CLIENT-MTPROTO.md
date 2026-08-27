@@ -445,7 +445,12 @@ returns library DTOs; the service transparently connects the client on first use
 | `joinChannel` | `(peer: GramPeer) => Promise<void>` | Joins a public channel or group. |
 | `leaveChannel` | `(peer: GramPeer) => Promise<void>` | Leaves a channel or group. |
 | `getParticipants` | `(peer: GramPeer, params?: GramGetParticipantsParams) => Promise<GramUser[]>` | Lists a group/channel's participants. |
-| `searchMessages` | `(peer: GramPeer, query: string, params?: GramSearchMessagesParams) => Promise<GramMessage[]>` | Searches a peer's history for a text query. |
+| `searchMessages` | `(peer: GramPeer, query: string, params?: GramSearchMessagesParams) => Promise<GramMessage[]>` | Searches one peer's history for a text query, optionally filtered by content kind. |
+| `searchGlobal` | `(query: string, params?: GramSearchGlobalParams) => Promise<GramMessage[]>` | Searches **every** chat for a text query — one `messages.searchGlobal` call. |
+| `searchPublicPosts` | `(hashtag: string, params?: GramSearchPublicPostsParams) => Promise<GramMessage[]>` | Searches PUBLIC channel posts for a hashtag — channels you never joined. |
+| `searchContacts` | `(query: string, limit?: number) => Promise<GramContactsSearchResult>` | Finds peers by name / `@username` **prefix**, split into yours and public ones. |
+| `getTopPeers` | `(type: GramTopPeerType, params?: GramGetTopPeersParams) => Promise<GramTopPeer[]>` | Telegram's own frequency rating for the account; `[]` when the user disabled it. |
+| `resetTopPeerRating` | `(type: GramTopPeerType, peer: GramPeer) => Promise<void>` | Forgets one peer from a rating list ("Delete from recents"). |
 | `getFullChat` | `(peer: GramPeer) => Promise<GramChatInfo>` | Extended info (description, member count) for a chat/channel/user. |
 | `editMessage` | `(peer: GramPeer, messageId: number, text: string) => Promise<GramMessage>` | Edits a message's text; returns the edited message. |
 | `deleteMessages` | `(peer: GramPeer, messageIds: number[], params?: GramDeleteMessagesParams) => Promise<void>` | Deletes messages (for everyone by default). |
@@ -608,13 +613,78 @@ await this.user.deleteMessages('me', [sent.id]); // revoke: true by default
 | `silent` | `boolean` | Send without a notification sound. |
 
 `getParticipants` takes `GramGetParticipantsParams` (`limit`, `search`); `searchMessages` takes
-`GramSearchMessagesParams` (`limit`); `deleteMessages` takes `GramDeleteMessagesParams`
+`GramSearchMessagesParams` (`limit`, `filter`, `offsetId`); `deleteMessages` takes `GramDeleteMessagesParams`
 (`revoke`, default `true` — delete for everyone); `pinMessage` takes `GramPinMessageParams`
 (`notify`, default `false`).
 
 > [!NOTE]
 > `downloadMedia` takes the message's `peerId` and `id` (rather than a raw GramJS message) so
 > the DTO boundary stays intact — the adapter re-fetches the message and downloads its media.
+
+### Searching — one chat, every chat, and peers
+
+Three different questions, three different calls. Reaching for the wrong one is the
+usual source of an app that "searches" but quietly answers something else.
+
+```ts
+// ── Inside ONE conversation ─────────────────────────────────────────────────
+const hits = await this.user.searchMessages('@my_group', 'invoice', { limit: 20 });
+
+// An EMPTY query plus a filter is the canonical "list this chat's media" call —
+// it is how the Photos / Files / Music tabs of a chat are built, and it is not a
+// degenerate search.
+const photos = await this.user.searchMessages('@my_group', '', {
+  filter: 'photos',
+  limit: 50,
+});
+
+// ── ACROSS every chat the account can see ───────────────────────────────────
+const anywhere = await this.user.searchGlobal('invoice', { limit: 40 });
+const links = await this.user.searchGlobal('', { filter: 'links', limit: 40 });
+
+// ── PUBLIC posts, in channels you have never joined ─────────────────────────
+// A different question from searchGlobal, and Telegram routes it to a
+// different method. Hashtag only, and flood-limited: debounce it.
+const posts = await this.user.searchPublicPosts('telegram', { limit: 40 });
+
+// ── PEERS rather than messages ──────────────────────────────────────────────
+// A PREFIX search: 'du' finds @durov. `getFullChat('@durov')` resolves one EXACT
+// username and finds nothing for half a name, so the two are not interchangeable.
+const { myResults, globalResults } = await this.user.searchContacts('du', 10);
+
+// ── Who you deal with most (the "People" strip of a search panel) ───────────
+const people = await this.user.getTopPeers('correspondents', { limit: 30 });
+await this.user.resetTopPeerRating('correspondents', people[0]!.id);
+```
+
+`GramSearchFilter` is one of `'photos' | 'videos' | 'photo-video' | 'documents' |
+'links' | 'music' | 'voice' | 'round-voice' | 'gifs' | 'pinned'`, each mapping to the
+`inputMessagesFilter*` the official clients use for that tab.
+`GRAM_SEARCH_FILTER_VALUES` exports the list for validating a filter that arrived
+from outside the process.
+
+> [!NOTE]
+> `getTopPeers` resolves to an **empty array** — never an error — when the account
+> has switched contact suggestions off in its privacy settings
+> (`contacts.topPeersDisabled`). Disabled and "you have no rated peers" are
+> deliberately indistinguishable: a client should render an empty strip for both.
+
+> [!NOTE]
+> `searchGlobal` covers the chats the account is **in**; `searchPublicPosts` covers channels
+> it has never joined. Reaching for the first when you meant the second quietly returns a
+> much smaller answer rather than an error. The public one takes a hashtag only — newer
+> layers add a free-text form that charges the user Telegram Stars, which is out of scope
+> here — and Telegram flood-limits it harder, so `FLOOD_WAIT` is a normal outcome.
+
+> [!WARNING]
+> `getTopPeers` answers a *frequency* question. The dialog list answers a *recency*
+> one. Deriving the People strip from `getDialogs` shows how recently you spoke
+> under a label that promises how often — they disagree constantly.
+
+Paging a global search is approximate. Telegram anchors it on the triple
+`(offsetRate, offsetPeer, offsetId)` and only `offsetId` is exposed, so walking
+pages with it alone drifts once results span many peers. A per-chat search pages
+exactly.
 
 ### Streaming media (progressive video / HTTP Range)
 
@@ -936,7 +1006,8 @@ ids use the same GramJS *marked* format as `GramDialog.id` (users unmarked, basi
 ```ts
 interface GramMessage {
   id: number;            // message id within its chat
-  peerId: string;        // chat/user the message belongs to, as a decimal string
+  peerId: string;        // chat/user the message belongs to — the RAW id
+  peerIdMarked?: string; // the same peer in the MARKED form: the id that OPENS the chat
   text: string;          // plain-text body ('' for non-text/service messages)
   date: number;          // unix timestamp in seconds
   out: boolean;          // true when sent by the logged-in account
@@ -958,9 +1029,17 @@ interface GramMessage {
 
 `hasMedia` is always populated on messages produced by the adapter (it is optional only so a
 hand-built `IGramClient` fake may omit it). When `true`, fetch the bytes with
-`downloadMedia(message.peerId, message.id)`. `groupedId` is a **string** because album ids
+`downloadMedia(message.peerIdMarked, message.id)`. `groupedId` is a **string** because album ids
 are random 64-bit values that can exceed `2^53`; messages sharing a value were sent together
 as one album and can be collapsed into a single grouped bubble.
+
+> [!IMPORTANT]
+> `peerId` is the **raw** id and `peerIdMarked` is the **marked** one — a channel is
+> `1005640892` in the first and `-1001005640892` in the second. Only the marked form opens
+> a chat or matches `GramDialog.id`; the raw id of a channel addresses an unrelated *user*.
+> It never mattered for `searchMessages` or `getMessages`, where the caller supplied the peer,
+> but a `searchGlobal` result names a chat the caller has not seen — and the DTO carries no
+> peer type with which to convert one form into the other, so reach for `peerIdMarked` there.
 
 #### `entities` — rich text
 
@@ -1065,12 +1144,48 @@ interface GramChatInfo {
   id: string;                // peer id as a decimal string
   type: 'user' | 'group' | 'channel';
   title: string;             // chat/channel title, or the user's full name
-  username?: string;         // without the leading '@'
+  username?: string;         // without the leading '@'; includes a collectible (Fragment) one
   about?: string;            // bio (user) or description (group/channel)
   participantsCount?: number; // member count for groups/channels; undefined for users
   verified: boolean;         // whether the peer has Telegram's verified badge
 }
 ```
+
+### `GramDialogRef` and `GramContactsSearchResult`
+
+A search result names a peer the account may have no dialog with at all, so it is a
+deliberate subset of `GramDialog` — there is no unread count, pin state or last
+message to report.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Peer id, **marked** as `GramDialog.id` is (`-100…` for a channel), so it can be passed straight back as a `GramPeer`. |
+| `type` | `GramDialogType` | `'user' \| 'group' \| 'channel'`. |
+| `title` | `string` | Chat/channel title, or the user's full name. |
+| `username` | `string \| null` | Public `@username` without the `@`; `null` when the peer has none. |
+| `hasPhoto` | `boolean` | Whether an avatar exists to fetch. |
+
+Its `limit` is a **hint, not a cap**. Telegram exceeds it, and not in proportion —
+measured against a live account, 1 and 2 both came back with 3 results while 5, 20 and 50
+all came back with 10. Slice the result yourself if the caller needs a bounded list.
+
+`searchContacts` returns the two halves apart, because clients label them
+differently: `myResults` is "chats you are already in", `globalResults` is
+"everyone else on Telegram".
+
+### `GramTopPeer`
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | Peer id, marked as `GramDialog.id` is. |
+| `type` | `GramDialogType` | `'user' \| 'group' \| 'channel'`. |
+| `title` | `string` | Chat/channel title, or the user's full name. |
+| `username` | `string \| null` | Public `@username` without the `@`, or `null`. |
+| `rating` | `number` | Telegram's own frequency rating — higher is more frequent. |
+
+`GramTopPeerType` selects the list: `'correspondents'` (the search panel's People
+strip), `'bots-pm'`, `'bots-inline'`, `'groups'`, `'channels'`, `'phone-calls'`,
+`'forward-users'`, `'forward-chats'`.
 
 ### `GramMediaInfo`
 

@@ -65,6 +65,11 @@ function createFakeClient(
     leaveChannel: jest.fn(),
     getParticipants: jest.fn(),
     searchMessages: jest.fn(),
+    searchGlobal: jest.fn(),
+    searchPublicPosts: jest.fn(),
+    searchContacts: jest.fn(),
+    getTopPeers: jest.fn(),
+    resetTopPeerRating: jest.fn(),
     getFullChat: jest.fn(),
     editMessage: jest.fn(),
     deleteMessages: jest.fn(),
@@ -221,6 +226,67 @@ describe('TelegramUserService', () => {
       expect(client.searchMessages).toHaveBeenCalledWith('@g', 'q', {
         limit: 4,
       });
+    });
+
+    it('searchGlobal forwards the query and params', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).searchGlobal('q', {
+        limit: 5,
+        filter: 'links',
+      });
+      expect(client.searchGlobal).toHaveBeenCalledWith('q', {
+        limit: 5,
+        filter: 'links',
+      });
+    });
+
+    it('searchPublicPosts forwards the hashtag and params', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).searchPublicPosts('tag', {
+        limit: 9,
+      });
+      expect(client.searchPublicPosts).toHaveBeenCalledWith('tag', {
+        limit: 9,
+      });
+    });
+    it('searchContacts forwards the query and limit', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).searchContacts('ad', 5);
+      expect(client.searchContacts).toHaveBeenCalledWith('ad', 5);
+    });
+
+    it('getTopPeers forwards the list and params', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).getTopPeers('correspondents', {
+        limit: 3,
+      });
+      expect(client.getTopPeers).toHaveBeenCalledWith('correspondents', {
+        limit: 3,
+      });
+    });
+
+    it('resetTopPeerRating forwards the list and peer', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).resetTopPeerRating(
+        'correspondents',
+        '@ada',
+      );
+      expect(client.resetTopPeerRating).toHaveBeenCalledWith(
+        'correspondents',
+        '@ada',
+      );
+    });
+
+    it('the four new reads all connect lazily first', async () => {
+      const client = createFakeClient({
+        isConnected: jest.fn().mockReturnValue(false),
+      });
+      const service = new TelegramUserService(client);
+      await service.searchGlobal('q');
+      await service.searchContacts('q');
+      await service.getTopPeers('correspondents');
+      await service.resetTopPeerRating('correspondents', '@ada');
+      expect(client.connect).toHaveBeenCalledTimes(4);
     });
 
     it('getFullChat forwards the peer', async () => {

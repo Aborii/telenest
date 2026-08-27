@@ -25,6 +25,7 @@ import type {
   GramAcceptedLoginSession,
   GramChatActionEvent,
   GramChatInfo,
+  GramContactsSearchResult,
   GramDeletedMessages,
   GramDeleteMessagesParams,
   GramDialog,
@@ -32,6 +33,7 @@ import type {
   GramGetDialogsParams,
   GramGetMessagesParams,
   GramGetParticipantsParams,
+  GramGetTopPeersParams,
   GramMarkAsReadParams,
   GramMediaInfo,
   GramMediaRange,
@@ -39,13 +41,17 @@ import type {
   GramPeer,
   GramPinMessageParams,
   GramQrSignInCallbacks,
+  GramSearchGlobalParams,
   GramSearchMessagesParams,
+  GramSearchPublicPostsParams,
   GramSendCodeResult,
   GramSendFileParams,
   GramSendMessageParams,
   GramSignInResult,
   GramSignInWithCodeInput,
   GramStreamMediaOptions,
+  GramTopPeer,
+  GramTopPeerType,
   GramUpdateTwoFactorInput,
   GramUser,
 } from './gram-client.types';
@@ -355,11 +361,16 @@ export interface IGramClient {
   ): Promise<GramUser[]>;
 
   /**
-   * Searches a peer's history for messages matching a text query.
+   * Searches a peer's history for messages matching a text query, optionally
+   * narrowed to one kind of content.
+   *
+   * Passing an EMPTY `query` together with `params.filter` is supported and is
+   * how the shared-media tabs are built ("every photo in this chat"), rather
+   * than a search that happens to match everything.
    *
    * @param peer - Target peer (`'me'`, @username, or numeric id).
-   * @param query - The text to search for.
-   * @param params - Optional limit.
+   * @param query - The text to search for; `''` to match on the filter alone.
+   * @param params - Optional limit, content filter, and paging anchor.
    * @returns The matching messages, newest first.
    * @throws {import('../common').TelegramClientError} On failure.
    */
@@ -368,6 +379,114 @@ export interface IGramClient {
     query: string,
     params?: GramSearchMessagesParams,
   ): Promise<GramMessage[]>;
+
+  /**
+   * Searches every chat the account can see for messages matching a text
+   * query — the cross-chat half of the search panel.
+   *
+   * This is `messages.searchGlobal`, one request, not a scan of the account's
+   * dialogs: the alternative costs one round trip per dialog per keystroke.
+   *
+   * @param query - The text to search for; `''` to match on the filter alone.
+   * @param params - Optional limit, content filter, and (approximate) paging
+   *   anchor — see {@link GramSearchGlobalParams} for why it is approximate.
+   * @returns The matching messages, newest first, across all chats.
+   * @throws {import('../common').TelegramClientError} On failure.
+   * @example
+   * ```ts
+   * const links = await client.searchGlobal('', { filter: 'links', limit: 40 });
+   * ```
+   */
+  searchGlobal(
+    query: string,
+    params?: GramSearchGlobalParams,
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Searches PUBLIC channel posts for a hashtag — channels the account has
+   * never joined, which {@link IGramClient.searchGlobal} does not reach.
+   *
+   * The two global searches are genuinely different questions and Telegram
+   * routes them to different methods: `searchGlobal` covers the chats the
+   * account is IN, this one covers everything public.
+   *
+   * Hashtag only. Newer layers add a free-text form of the same request that
+   * charges the USER Telegram Stars; that is outside this library's scope, and
+   * the vendored layer does not expose it either.
+   *
+   * Public-post search is flood-limited server-side more aggressively than an
+   * ordinary one, so `FLOOD_WAIT` is a normal outcome here — do not wire it to
+   * a search-as-you-type without debouncing.
+   *
+   * @param hashtag - The tag WITHOUT its leading `#`.
+   * @param params - Optional limit and (approximate) paging anchor.
+   * @returns The matching public posts, newest first.
+   * @throws {import('../common').TelegramClientError} On failure, including
+   *   `FLOOD_WAIT`.
+   * @example
+   * ```ts
+   * const posts = await client.searchPublicPosts('telegram', { limit: 40 });
+   * ```
+   */
+  searchPublicPosts(
+    hashtag: string,
+    params?: GramSearchPublicPostsParams,
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Searches Telegram for peers whose name or `@username` starts with a query.
+   *
+   * A PREFIX search, unlike {@link IGramClient.getFullChat}, which resolves one
+   * exact `@username` — typing half a name finds nothing through the latter.
+   *
+   * @param query - The name or username prefix to search for.
+   * @param limit - Peers to ask Telegram for. A HINT, not a cap: Telegram
+   *   exceeds it, and not proportionally — against a live account, 1 and 2
+   *   both returned 3 results while 5, 20 and 50 all returned 10. A caller
+   *   that needs a bounded list must slice the result itself. Defaults to
+   *   20, what the official clients send for a search-as-you-type; the field
+   *   is required by the request, so something is always sent.
+   * @returns The account's own matching peers and the public ones, apart.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  searchContacts(
+    query: string,
+    limit?: number,
+  ): Promise<GramContactsSearchResult>;
+
+  /**
+   * Reads one of Telegram's rating lists for the account — the peers it deals
+   * with most often, highest-rated first.
+   *
+   * Resolves to an EMPTY array when the account has switched the suggestions
+   * off in its privacy settings (`contacts.topPeersDisabled`). That is not an
+   * error, and the two are indistinguishable from the outside on purpose: a
+   * client should render an empty strip either way.
+   *
+   * @param type - Which rating list to read.
+   * @param params - Optional limit.
+   * @returns The rated peers, highest rating first; `[]` when disabled.
+   * @throws {import('../common').TelegramClientError} On failure.
+   * @example
+   * ```ts
+   * const people = await client.getTopPeers('correspondents', { limit: 30 });
+   * ```
+   */
+  getTopPeers(
+    type: GramTopPeerType,
+    params?: GramGetTopPeersParams,
+  ): Promise<GramTopPeer[]>;
+
+  /**
+   * Removes one peer from a rating list — the "Delete from recents" every
+   * official client offers on a long-press of a suggestion.
+   *
+   * @param type - The rating list to remove the peer from.
+   * @param peer - The peer to forget (`'me'`, @username, or numeric id).
+   * @returns Nothing.
+   * @throws {import('../common').TelegramClientError} On failure.
+   */
+  resetTopPeerRating(type: GramTopPeerType, peer: GramPeer): Promise<void>;
 
   /**
    * Fetches extended ("full") information about a chat, channel, or user.

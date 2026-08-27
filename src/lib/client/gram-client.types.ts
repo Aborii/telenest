@@ -875,6 +875,20 @@ export interface GramSearchGlobalParams {
 }
 
 /**
+ * Parameters for
+ * {@link import('./gram-client.interface').IGramClient.searchPublicPosts}.
+ *
+ * Public-post search pages by the same `(offsetRate, offsetPeer, offsetId)`
+ * triple {@link GramSearchGlobalParams} describes, and exposes the same single
+ * anchor — so the same approximation applies once results span many channels.
+ */
+export interface GramSearchPublicPostsParams {
+  /** Maximum number of matching posts to return. */
+  limit?: number;
+  /** Approximate paging anchor — see the note on this interface. */
+  offsetId?: number;
+}
+/**
  * Minimal reference to a peer, as returned by a peer search. A deliberate
  * subset of {@link GramDialog}: a search result names a peer the account may
  * have no dialog with at all, so there is no unread count, pin state or last

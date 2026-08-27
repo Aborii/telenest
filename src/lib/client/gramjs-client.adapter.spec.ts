@@ -2611,6 +2611,86 @@ describe('GramJsClientAdapter', () => {
       },
     );
 
+    it('searchPublicPosts sends the tag without its sigil and maps the posts', async () => {
+      const post = asEntity(Api.Message, {
+        id: 31,
+        peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+        message: '#telegram is great',
+        date: 1700000002,
+      });
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [post],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+
+      const [found] = await createAdapter(mock).searchPublicPosts('telegram', {
+        limit: 9,
+        offsetId: 4,
+      });
+
+      expect(found?.text).toBe('#telegram is great');
+      // The channel is one the account has never joined, so the marked id is
+      // the only form that can open it.
+      expect(found?.peerIdMarked).toBe('-10077');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ hashtag: 'telegram', limit: 9, offsetId: 4 }),
+      );
+    });
+
+    it('searchPublicPosts skips service and empty entries in the vector', async () => {
+      // `channels.searchPosts` answers with a raw `messages.TypeMessages`, so
+      // unlike a GramJS-iterated search the vector can hold non-messages.
+      const mock = createMockClient({
+        invoke: jest.fn().mockResolvedValue(
+          new Api.messages.Messages({
+            messages: [
+              asEntity(Api.MessageEmpty, { id: 1 }),
+              asEntity(Api.Message, {
+                id: 2,
+                peerId: new Api.PeerChannel({ channelId: bigInt('77') }),
+                message: 'real',
+                date: 1,
+              }),
+            ],
+            chats: [],
+            users: [],
+          }),
+        ),
+      });
+      const found = await createAdapter(mock).searchPublicPosts('tag');
+      expect(found).toHaveLength(1);
+      expect(found[0]?.text).toBe('real');
+    });
+
+    it('searchPublicPosts answers [] for messagesNotModified, which has no vector', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(new Api.messages.MessagesNotModified({ count: 0 })),
+      });
+      await expect(
+        createAdapter(mock).searchPublicPosts('tag'),
+      ).resolves.toEqual([]);
+    });
+
+    it('searchPublicPosts defaults its limit and starts from the newest post', async () => {
+      const mock = createMockClient({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            new Api.messages.Messages({ messages: [], chats: [], users: [] }),
+          ),
+      });
+      await createAdapter(mock).searchPublicPosts('tag');
+      expect(mock.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50, offsetId: 0 }),
+      );
+    });
     it('searchContacts splits the account own peers from the public ones', async () => {
       const ada = asEntity(Api.User, {
         id: bigInt('5'),
@@ -3243,6 +3323,11 @@ describe('GramJsClientAdapter', () => {
         'searchContacts',
         'invoke',
         (a: GramJsClientAdapter): Promise<unknown> => a.searchContacts('q'),
+      ],
+      [
+        'searchPublicPosts',
+        'invoke',
+        (a: GramJsClientAdapter): Promise<unknown> => a.searchPublicPosts('t'),
       ],
       [
         'getTopPeers',

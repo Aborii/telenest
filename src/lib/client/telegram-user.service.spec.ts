@@ -66,6 +66,7 @@ function createFakeClient(
     getParticipants: jest.fn(),
     searchMessages: jest.fn(),
     searchGlobal: jest.fn(),
+    searchPublicPosts: jest.fn(),
     searchContacts: jest.fn(),
     getTopPeers: jest.fn(),
     resetTopPeerRating: jest.fn(),
@@ -239,6 +240,15 @@ describe('TelegramUserService', () => {
       });
     });
 
+    it('searchPublicPosts forwards the hashtag and params', async () => {
+      const client = createFakeClient();
+      await new TelegramUserService(client).searchPublicPosts('tag', {
+        limit: 9,
+      });
+      expect(client.searchPublicPosts).toHaveBeenCalledWith('tag', {
+        limit: 9,
+      });
+    });
     it('searchContacts forwards the query and limit', async () => {
       const client = createFakeClient();
       await new TelegramUserService(client).searchContacts('ad', 5);

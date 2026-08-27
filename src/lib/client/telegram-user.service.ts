@@ -61,6 +61,7 @@ import type {
   GramPinMessageParams,
   GramSearchGlobalParams,
   GramSearchMessagesParams,
+  GramSearchPublicPostsParams,
   GramSendFileParams,
   GramSendMessageParams,
   GramStreamMediaOptions,
@@ -599,6 +600,28 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
   ): Promise<GramMessage[]> {
     await this.ensureConnected();
     return this.client.searchGlobal(query, params);
+  }
+
+  /**
+   * Searches PUBLIC channel posts for a hashtag — channels the account has
+   * never joined, which {@link TelegramUserService.searchGlobal} does not
+   * reach.
+   *
+   * Flood-limited server-side more aggressively than an ordinary search, so
+   * debounce it rather than firing per keystroke.
+   *
+   * @param hashtag - The tag WITHOUT its leading `#`.
+   * @param params - Optional limit and paging anchor.
+   * @returns The matching public posts, newest first.
+   * @throws {import('../common').TelegramClientError} On failure, including
+   *   `FLOOD_WAIT`.
+   */
+  public async searchPublicPosts(
+    hashtag: string,
+    params?: GramSearchPublicPostsParams,
+  ): Promise<GramMessage[]> {
+    await this.ensureConnected();
+    return this.client.searchPublicPosts(hashtag, params);
   }
 
   /**

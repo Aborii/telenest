@@ -52,6 +52,7 @@ function fakeClient(
     getParticipants: jest.fn(),
     searchMessages: jest.fn(),
     searchGlobal: jest.fn(),
+    searchPublicPosts: jest.fn(),
     searchContacts: jest.fn(),
     getTopPeers: jest.fn(),
     resetTopPeerRating: jest.fn(),

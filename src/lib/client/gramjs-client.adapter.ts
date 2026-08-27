@@ -79,6 +79,7 @@ import {
   type GramSearchFilter,
   type GramSearchGlobalParams,
   type GramSearchMessagesParams,
+  type GramSearchPublicPostsParams,
   type GramSendCodeResult,
   type GramSendFileParams,
   type GramSendMessageParams,
@@ -947,6 +948,38 @@ export class GramJsClientAdapter implements IGramClient {
         error,
         'Failed to search messages globally.',
         'searchGlobal',
+      );
+    }
+  }
+
+  /** {@inheritDoc IGramClient.searchPublicPosts} */
+  public async searchPublicPosts(
+    hashtag: string,
+    params: GramSearchPublicPostsParams = {},
+  ): Promise<GramMessage[]> {
+    try {
+      const result = await this.client.invoke(
+        new Api.channels.SearchPosts({
+          // ── Without the `#`, as Telegram wants it and as the official
+          //    clients send it (they slice the sigil off the query). ────────
+          hashtag,
+          offsetRate: 0,
+          offsetPeer: new Api.InputPeerEmpty(),
+          offsetId: params.offsetId ?? 0,
+          limit: params.limit ?? GLOBAL_SEARCH_DEFAULT_LIMIT,
+        }),
+      );
+      // ── `messagesNotModified` carries no `messages` vector at all; it is a
+      //    hash-based "nothing changed", not a failure. ────────────────────
+      if (result instanceof Api.messages.MessagesNotModified) return [];
+      return result.messages
+        .filter((message): message is Api.Message => message instanceof Api.Message)
+        .map((message) => this.mapMessage(message));
+    } catch (error) {
+      throw this.toClientError(
+        error,
+        'Failed to search public posts.',
+        'searchPublicPosts',
       );
     }
   }

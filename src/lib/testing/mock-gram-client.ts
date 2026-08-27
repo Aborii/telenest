@@ -133,6 +133,7 @@ export function createMockGramClient(
     getParticipants: jest.fn().mockResolvedValue([]),
     searchMessages: jest.fn().mockResolvedValue([]),
     searchGlobal: jest.fn().mockResolvedValue([]),
+    searchPublicPosts: jest.fn().mockResolvedValue([]),
     searchContacts: jest
       .fn()
       .mockResolvedValue({ myResults: [], globalResults: [] }),

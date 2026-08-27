@@ -43,6 +43,7 @@ import type {
   GramQrSignInCallbacks,
   GramSearchGlobalParams,
   GramSearchMessagesParams,
+  GramSearchPublicPostsParams,
   GramSendCodeResult,
   GramSendFileParams,
   GramSendMessageParams,
@@ -399,6 +400,37 @@ export interface IGramClient {
   searchGlobal(
     query: string,
     params?: GramSearchGlobalParams,
+  ): Promise<GramMessage[]>;
+
+  /**
+   * Searches PUBLIC channel posts for a hashtag — channels the account has
+   * never joined, which {@link IGramClient.searchGlobal} does not reach.
+   *
+   * The two global searches are genuinely different questions and Telegram
+   * routes them to different methods: `searchGlobal` covers the chats the
+   * account is IN, this one covers everything public.
+   *
+   * Hashtag only. Newer layers add a free-text form of the same request that
+   * charges the USER Telegram Stars; that is outside this library's scope, and
+   * the vendored layer does not expose it either.
+   *
+   * Public-post search is flood-limited server-side more aggressively than an
+   * ordinary one, so `FLOOD_WAIT` is a normal outcome here — do not wire it to
+   * a search-as-you-type without debouncing.
+   *
+   * @param hashtag - The tag WITHOUT its leading `#`.
+   * @param params - Optional limit and (approximate) paging anchor.
+   * @returns The matching public posts, newest first.
+   * @throws {import('../common').TelegramClientError} On failure, including
+   *   `FLOOD_WAIT`.
+   * @example
+   * ```ts
+   * const posts = await client.searchPublicPosts('telegram', { limit: 40 });
+   * ```
+   */
+  searchPublicPosts(
+    hashtag: string,
+    params?: GramSearchPublicPostsParams,
   ): Promise<GramMessage[]>;
 
   /**

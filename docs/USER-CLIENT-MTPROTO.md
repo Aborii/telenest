@@ -447,6 +447,7 @@ returns library DTOs; the service transparently connects the client on first use
 | `getParticipants` | `(peer: GramPeer, params?: GramGetParticipantsParams) => Promise<GramUser[]>` | Lists a group/channel's participants. |
 | `searchMessages` | `(peer: GramPeer, query: string, params?: GramSearchMessagesParams) => Promise<GramMessage[]>` | Searches one peer's history for a text query, optionally filtered by content kind. |
 | `searchGlobal` | `(query: string, params?: GramSearchGlobalParams) => Promise<GramMessage[]>` | Searches **every** chat for a text query — one `messages.searchGlobal` call. |
+| `searchPublicPosts` | `(hashtag: string, params?: GramSearchPublicPostsParams) => Promise<GramMessage[]>` | Searches PUBLIC channel posts for a hashtag — channels you never joined. |
 | `searchContacts` | `(query: string, limit?: number) => Promise<GramContactsSearchResult>` | Finds peers by name / `@username` **prefix**, split into yours and public ones. |
 | `getTopPeers` | `(type: GramTopPeerType, params?: GramGetTopPeersParams) => Promise<GramTopPeer[]>` | Telegram's own frequency rating for the account; `[]` when the user disabled it. |
 | `resetTopPeerRating` | `(type: GramTopPeerType, peer: GramPeer) => Promise<void>` | Forgets one peer from a rating list ("Delete from recents"). |
@@ -641,6 +642,11 @@ const photos = await this.user.searchMessages('@my_group', '', {
 const anywhere = await this.user.searchGlobal('invoice', { limit: 40 });
 const links = await this.user.searchGlobal('', { filter: 'links', limit: 40 });
 
+// ── PUBLIC posts, in channels you have never joined ─────────────────────────
+// A different question from searchGlobal, and Telegram routes it to a
+// different method. Hashtag only, and flood-limited: debounce it.
+const posts = await this.user.searchPublicPosts('telegram', { limit: 40 });
+
 // ── PEERS rather than messages ──────────────────────────────────────────────
 // A PREFIX search: 'du' finds @durov. `getFullChat('@durov')` resolves one EXACT
 // username and finds nothing for half a name, so the two are not interchangeable.
@@ -662,6 +668,13 @@ from outside the process.
 > has switched contact suggestions off in its privacy settings
 > (`contacts.topPeersDisabled`). Disabled and "you have no rated peers" are
 > deliberately indistinguishable: a client should render an empty strip for both.
+
+> [!NOTE]
+> `searchGlobal` covers the chats the account is **in**; `searchPublicPosts` covers channels
+> it has never joined. Reaching for the first when you meant the second quietly returns a
+> much smaller answer rather than an error. The public one takes a hashtag only — newer
+> layers add a free-text form that charges the user Telegram Stars, which is out of scope
+> here — and Telegram flood-limits it harder, so `FLOOD_WAIT` is a normal outcome.
 
 > [!WARNING]
 > `getTopPeers` answers a *frequency* question. The dialog list answers a *recency*

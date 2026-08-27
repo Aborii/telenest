@@ -1971,6 +1971,12 @@ export class GramJsClientAdapter implements IGramClient {
    * Maps a GramJS resolved entity into a {@link GramChatInfo}, merging in the
    * description / participant count read from a matching "full" request.
    *
+   * Classification, title and username all come from the shared entity
+   * readers, so a peer described here and the same peer described by a search
+   * result cannot disagree — which they did while this read the legacy
+   * `username` scalar directly and reported collectible (Fragment) usernames
+   * as absent.
+   *
    * @param entity - The resolved `Api.User` / `Api.Chat` / `Api.Channel`.
    * @param about - The bio/description from the full request, when present.
    * @param participantsCount - Member count from the full request, when present.
@@ -1982,43 +1988,21 @@ export class GramJsClientAdapter implements IGramClient {
     about: string | undefined,
     participantsCount: number | undefined,
   ): GramChatInfo {
-    if (entity instanceof Api.User) {
-      const fullName = [entity.firstName, entity.lastName]
-        .filter((part): part is string => Boolean(part))
-        .join(' ');
-      return {
-        id: entity.id.toString(),
-        type: GRAM_DIALOG_TYPES.USER,
-        title: fullName,
-        username: entity.username,
-        about,
-        participantsCount: undefined,
-        verified: Boolean(entity.verified),
-      };
-    }
-
-    // ── A basic group (`Api.Chat`) is always a group; a `Api.Channel` is a
-    //    channel unless its `megagroup` flag marks it as a supergroup. ────────
-    const type: GramDialogType =
-      entity instanceof Api.Chat
-        ? GRAM_DIALOG_TYPES.GROUP
-        : entity.megagroup
-          ? GRAM_DIALOG_TYPES.GROUP
-          : GRAM_DIALOG_TYPES.CHANNEL;
-
     return {
       id: entity.id.toString(),
-      type,
-      title: entity.title,
-      // ── Basic groups have no username; only channels/supergroups do. ───────
-      username: entity instanceof Api.Channel ? entity.username : undefined,
+      type: this.entityDialogType(entity),
+      title: this.entityTitle(entity),
+      // ── `?? undefined` because this DTO's field is optional, while the
+      //    shared reader answers `null` for "the peer has none". ────────────
+      username: this.entityUsername(entity) ?? undefined,
       about,
-      participantsCount,
-      verified:
-        entity instanceof Api.Channel ? Boolean(entity.verified) : false,
+      // ── A user never has a member count, whatever the caller passed. ─────
+      participantsCount:
+        entity instanceof Api.User ? undefined : participantsCount,
+      // ── Only users and channels carry the badge; a basic group cannot. ───
+      verified: entity instanceof Api.Chat ? false : Boolean(entity.verified),
     };
   }
-
   /**
    * Turns a library search filter into the TL `inputMessagesFilter*` it names.
    *

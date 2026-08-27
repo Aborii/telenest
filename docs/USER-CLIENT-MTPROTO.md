@@ -1122,7 +1122,7 @@ interface GramChatInfo {
   id: string;                // peer id as a decimal string
   type: 'user' | 'group' | 'channel';
   title: string;             // chat/channel title, or the user's full name
-  username?: string;         // without the leading '@'
+  username?: string;         // without the leading '@'; includes a collectible (Fragment) one
   about?: string;            // bio (user) or description (group/channel)
   participantsCount?: number; // member count for groups/channels; undefined for users
   verified: boolean;         // whether the peer has Telegram's verified badge

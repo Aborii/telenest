@@ -982,7 +982,11 @@ export interface GramChatInfo {
   type: GramDialogType;
   /** Display title — the chat/channel title, or the user's full name. */
   title: string;
-  /** Public @username (without the leading `@`), when set. */
+  /**
+   * Public @username (without the leading `@`), when set. Includes a
+   * COLLECTIBLE (Fragment) username, which Telegram carries in a separate
+   * vector rather than the legacy scalar field.
+   */
   username?: string;
   /** Bio (user) or description (group/channel), when set. */
   about?: string;

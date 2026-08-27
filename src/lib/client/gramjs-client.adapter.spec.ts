@@ -2884,6 +2884,43 @@ describe('GramJsClientAdapter', () => {
       });
     });
 
+    it('getFullChat reads a COLLECTIBLE username out of the usernames vector', async () => {
+      // Telegram leaves the legacy scalar empty when the username was bought
+      // through Fragment, so reading only the scalar reported a peer that
+      // demonstrably HAS a username as having none.
+      const user = asEntity(Api.User, {
+        id: bigInt('6'),
+        firstName: 'Pavel',
+        username: undefined,
+        usernames: [asEntity(Api.Username, { username: 'durov', active: true })],
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(user),
+        invoke: jest.fn().mockResolvedValue({ fullUser: { about: '' } }),
+      });
+      await expect(
+        createAdapter(mock).getFullChat('@durov'),
+      ).resolves.toMatchObject({ username: 'durov' });
+    });
+
+    it('getFullChat keeps the legacy scalar when both are present', async () => {
+      // The scalar is the primary handle; the vector also lists it plus any
+      // extras, so preferring the vector could rename the peer.
+      const channel = asEntity(Api.Channel, {
+        id: bigInt('78'),
+        title: 'News',
+        username: 'news',
+        usernames: [asEntity(Api.Username, { username: 'alt', active: true })],
+      });
+      const mock = createMockClient({
+        getEntity: jest.fn().mockResolvedValue(channel),
+        invoke: jest.fn().mockResolvedValue({ fullChat: {} }),
+      });
+      await expect(
+        createAdapter(mock).getFullChat('@news'),
+      ).resolves.toMatchObject({ username: 'news' });
+    });
+
     it('getFullChat maps a broadcast channel (count from ChannelFull)', async () => {
       const channel = asEntity(Api.Channel, {
         id: bigInt('77'),

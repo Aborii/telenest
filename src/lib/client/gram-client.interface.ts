@@ -440,11 +440,12 @@ export interface IGramClient {
    * exact `@username` — typing half a name finds nothing through the latter.
    *
    * @param query - The name or username prefix to search for.
-   * @param limit - Maximum peers to ask Telegram for. ONE bound for the
-   *   request, not one per half: how `contacts.search` divides the answer
-   *   between the two is its own business. Defaults to 20, which is what the
-   *   official clients request for a search-as-you-type; the field is
-   *   required, so something is always sent.
+   * @param limit - Peers to ask Telegram for. A HINT, not a cap: Telegram
+   *   exceeds it, and not proportionally — against a live account, 1 and 2
+   *   both returned 3 results while 5, 20 and 50 all returned 10. A caller
+   *   that needs a bounded list must slice the result itself. Defaults to
+   *   20, what the official clients send for a search-as-you-type; the field
+   *   is required by the request, so something is always sent.
    * @returns The account's own matching peers and the public ones, apart.
    * @throws {import('../common').TelegramClientError} On failure.
    */

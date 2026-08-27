@@ -631,7 +631,8 @@ export class TelegramUserService implements OnModuleInit, OnModuleDestroy {
    * resolves one exact `@username` and finds nothing for half a name.
    *
    * @param query - The name or username prefix to search for.
-   * @param limit - Maximum peers per half of the result.
+   * @param limit - Maximum peers to ask Telegram for — ONE bound for the
+   *   request, not one per half.
    * @returns The account's own matching peers and the public ones, apart.
    * @throws {import('../common').TelegramClientError} On failure.
    */

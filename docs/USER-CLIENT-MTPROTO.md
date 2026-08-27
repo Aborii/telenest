@@ -1165,6 +1165,9 @@ message to report.
 | `username` | `string \| null` | Public `@username` without the `@`; `null` when the peer has none. |
 | `hasPhoto` | `boolean` | Whether an avatar exists to fetch. |
 
+Its `limit` is ONE bound for the request, not one per half — how Telegram divides
+the answer between the two is its own business.
+
 `searchContacts` returns the two halves apart, because clients label them
 differently: `myResults` is "chats you are already in", `globalResults` is
 "everyone else on Telegram".

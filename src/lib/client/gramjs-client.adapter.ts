@@ -975,7 +975,9 @@ export class GramJsClientAdapter implements IGramClient {
       //    hash-based "nothing changed", not a failure. ────────────────────
       if (result instanceof Api.messages.MessagesNotModified) return [];
       return result.messages
-        .filter((message): message is Api.Message => message instanceof Api.Message)
+        .filter(
+          (message): message is Api.Message => message instanceof Api.Message,
+        )
         .map((message) => this.mapMessage(message));
     } catch (error) {
       throw this.toClientError(

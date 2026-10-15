@@ -116,8 +116,9 @@ below expand each one.
 | Mint an MTProto session string (interactive) | `npm run login` |
 | Run the demo app | `npm run start:dev` |
 
-Always run `npm run typecheck` and `npm test` before considering a change done.
-Strict TypeScript is the gate (there is no ESLint config in this repo).
+Always run `npm run typecheck`, `npm run lint` and `npm test` before considering a
+change done. Strict TypeScript and ESLint (`eslint.config.js`) are the gate; CI also
+runs `npm run build` and `npm run format:check`.
 
 ---
 
@@ -125,8 +126,8 @@ Strict TypeScript is the gate (there is no ESLint config in this repo).
 
 This repo uses a `dev`-based flow:
 
-- **`dev` is the integration branch and the merge base.** It is the default
-  branch. All feature/fix work branches off `dev` and opens PRs **against `dev`**
+- **`dev` is the integration branch and the merge base.** GitHub's default branch
+  is `main`, so always pass `--base dev`. All feature/fix work branches off `dev` and opens PRs **against `dev`**
   (`gh pr create --base dev`). Never open feature PRs against `main`.
 - **`main` is release-only.** It receives `dev` *only* via a release merge, so it
   always reflects the latest released version.
@@ -209,8 +210,8 @@ Every exported constant and non-trivial module-level variable has a one-line
 ## Type safety
 
 `strict`, `noImplicitAny`, `strictNullChecks`, and `noUncheckedIndexedAccess` are
-on (`tsconfig.json`). Treat `@typescript-eslint/no-explicit-any` as an error in
-spirit even though ESLint is not wired up.
+on (`tsconfig.json`). `@typescript-eslint/no-explicit-any` is an error in
+`eslint.config.js`, and CI fails on `npm run lint`.
 
 - **No `any`** — explicit or implicit — anywhere in source. Never cast to `any`
   (`value as any`). When a third-party API returns a broad/`unknown` type, contain
@@ -285,3 +286,77 @@ follow the interface, not GramJS internals.
 - [ ] Tests added/updated; `npm run typecheck` and `npm test` pass.
 - [ ] `docs/<FEATURE>.md` created or updated for new/changed features.
 - [ ] Branch is off `dev` and the PR targets `dev` (not `main`).
+
+<!-- first-pass:project:start (written once by the setup-first-pass skill; yours to edit, re-runs keep it) -->
+
+### This repo (first-pass)
+
+- **What it is:** `telenest` (npm package, GitHub `Aborii/telenest`): a published NestJS library for the Telegram Bot API (Telegraf, `src/lib/bot`) and MTProto user accounts (GramJS, `src/lib/client`), sharing only `src/lib/common`.
+  - `src/main.ts`, `src/app.module.ts` and `src/bots/` are an unpublished demo app. `examples/` holds the login CLIs.
+  - npm (`package-lock.json`), Node >= 20, Jest + ts-jest. The coming-manager API server uses it through a linked folder.
+- **CI's checks** (what must pass before a merge): `.github/workflows/ci.yml`, job `build-and-test`, runs on Node 20.x and 22.x. The `dev` branch requires both checks ("Node 20.x", "Node 22.x"), and the branch must be up to date.
+  - CI runs `npm ci` (whose `prepare` script also builds `dist`), then `npm run typecheck`, `npm run lint`, `npm run format:check` (advisory: `continue-on-error`), `npm run test:cov` and `npm run build`.
+  - The local equivalent is the same commands, after `npm install` or `npm ci`.
+  - `codeql.yml` also scans PRs to `dev`/`main` and runs weekly. It has no local step.
+- **Run one test file:** `npx jest src/lib/bot/retry.spec.ts`. Add `-t "<test name>"` for one test.
+- **Real tests** (the layer that catches what mocks miss): `src/lib/bot/webhook/telegram-webhook.integration.spec.ts` boots a real Nest HTTP app on loopback with a faked Telegraf. It runs inside `npm test`.
+  - Nothing runs against real Telegram. `src/lib/client/gramjs-client.adapter.ts` is covered only by fixture specs, so GramJS wire behaviour is only checked by a manual live run, which needs a yes.
+- **What they need running, and how to start and stop it:** none. The webhook spec starts and closes its own app on an ephemeral 127.0.0.1 port. The Redis/ORM/key-value session stores use in-memory fakes, and the file store uses the OS temp folder.
+- **Looking at the UI running** (how a screen this repo changes is opened and seen): none: no UI. The TypeDoc API reference is built from the JSDoc (`npm run docs:api` writes `docs/api`). `docs.yml` publishes it to GitHub Pages on every push to `main`.
+- **Test limits** (what never to run here, and how much at once):
+  - Never run `npm run start:dev`, `npm run login` or `examples/qr-login.example.ts` as a test (see "Local runs that reach real people").
+  - Never run `npm run git:release`: it publishes.
+  - The repo sets no worker limit. The full suite is 86 spec files.
+- **Heavy runs** (what they are here and their limits; how this machine runs them is the machine block's): the full Jest suite and `npm run test:cov` (86 spec files, 1,000+ tests); `npm run build` (`tsc -p tsconfig.build.json`); `npm run docs:api` (TypeDoc); `npm ci`/`npm install` (they run `prepare`, which builds). The repo sets no limits of its own.
+- **Local runs that reach real people** (what a local server, worker or test run sends for real, and the empty keys or switches that stop it):
+  - **Tests** (`npm test`, `npm run test:cov`): none found. Every Telegram transport is faked (`src/lib/testing/`, `launch: false`, `autoConnect: false`). But nothing blocks a socket: `test/jest-setup.ts` only loads `reflect-metadata`.
+  - **`npm run start:dev`** (demo app): long-polls Telegram as two real bots and replies to real users. It reads `ECHO_BOT_TOKEN` and `GREETER_BOT_TOKEN`. With `ECHO_BOT_WEBHOOK_DOMAIN`/`GREETER_BOT_WEBHOOK_DOMAIN` set, it also calls `setWebhook`, which moves that bot's live updates away from wherever they go now.
+    - The stop is to leave both tokens unset, so boot fails at `getOrThrow`.
+    - The placeholder values in `.env.example` are not a stop: they still call api.telegram.org.
+    - With real tokens it needs a yes.
+  - **`npm run login`** (`examples/login-cli.ts`) and **`examples/qr-login.example.ts`**: sign in to a real Telegram account over MTProto with `TG_API_ID`/`TG_API_HASH` and send a login code to `TG_PHONE`. With `TG_SESSION` set, they act as that account.
+    - The stop is an empty `TG_API_ID` or `TG_API_HASH`, which throws before connecting (`examples/login-cli.ts:52`).
+    - These always need a yes.
+  - Both examples load `.env` through `dotenv/config`. No `.env` is committed.
+  - **Publishing**: `npm run git:release` pushes the `v*` tag, and that triggers `.github/workflows/release.yml` → `npm publish` (public npm, cannot be undone). A push to `main` deploys the docs site. Both need the owner's yes.
+- **Monitoring** (where a swallowed error must end up): none of its own, since it is a library. An error it swallows must go to Nest's `Logger` or to the metrics/tracer/health hooks in `src/lib/common/observability/`. The consuming app decides where those end up.
+- **Words live in:** `README.md`, `docs/*.md` (one per feature), `CHANGELOG.md`, the JSDoc that becomes the TypeDoc site, and error messages and codes in `src/lib/common/telegram.errors.ts`.
+  - The coming-manager API server maps these error codes and DTO fields to its own user-facing words.
+- **The same job in two places** (a change to one needs the other):
+  - `src/lib/bot/retry.ts` (`withRetry`, 429) and `src/lib/client/retry.ts` (`withClientRetry`, FLOOD_WAIT).
+  - A new MTProto method needs four places: `gram-client.interface.ts` (`IGramClient`), `gramjs-client.adapter.ts`, `telegram-user.service.ts` and `src/lib/testing/mock-gram-client.ts`.
+  - `TelegramBotService` and `src/lib/testing/mock-telegraf.ts`.
+  - The six `SessionStore` implementations in `src/lib/client/session/`: memory, file, key-value, redis, encrypted, and orm (orm extends key-value).
+  - `telegram-bot.health.ts` and `telegram-client.health.ts`; the bot metrics middleware and the client user metrics.
+  - The bot `updates/` decorators and the client `updates/` decorators. They are kept apart on purpose, so a shared behaviour change goes in both.
+  - `CLAUDE.md` and `.github/copilot-instructions.md` (plus `.github/instructions/typescript.instructions.md`).
+  - `.github/dependabot.yml` on `dev` and on `main` (Dependabot reads only the default branch's copy).
+  - Release gates: `ci.yml`, `release.yml` (typecheck, test and build, but no lint) and `scripts/release.mts`.
+  - `package-lock.json` and `pnpm-lock.yaml` (both tracked).
+- **Extra pre-mortem cases** (this repo's own ways to run twice, end, or scale):
+  - A webhook handler that throws returns 500, and Telegram then redelivers the same update. The handler runs again (`telegram-webhook.controller.ts:87`), and nothing dedupes by `update_id`.
+  - Two processes polling one bot token get a `409` (deploy overlap, or rotating the token in the runtime bot).
+  - Two connections on one MTProto session string can get the auth key revoked, which signs the account out.
+  - A caller that wraps a send in its own retry after a timeout sends twice. The library's helpers retry only on 429/FLOOD_WAIT.
+  - A long text split by `splitMessageText` goes out as several messages. A failure part-way leaves a partial set.
+  - Several named bots or accounts in one process.
+  - Concurrent `FileSessionStore` writes: last writer wins.
+- **Owner rules:**
+  - GitHub's default branch is `main`, which is release-only. Feature PRs go `--base dev`. `main` lagging `dev` is correct.
+  - Dependabot security PRs target `main` by design.
+  - Never touch a Dependabot branch by hand. No `gh pr update-branch` and no pushes: comment `@dependabot rebase` only.
+  - A `dependabot.yml` change needs identical PRs to `dev` and `main`.
+  - CI often queues for 20+ minutes. `BLOCKED` with an empty check list means "not started yet".
+  - Each merge to `dev` puts the other PRs out of date, so combine related one-line PRs into one branch.
+  - Commit messages go in a file and `git commit -F <file>`. A heredoc on stdin hangs with gpg.
+  - `git show origin/main:path` breaks in the Bash tool. Use `gh api repos/Aborii/telenest/contents/<path>?ref=<branch>`.
+  - To refresh `dist` for the linked consumer, run `npx tsc -p tsconfig.build.json`. Never `pnpm build`: its clean step wipes `dist` and the run can die.
+  - Consumers import bot symbols from `telenest/bot`, never the root barrel, because the root loads the optional `telegram` peer.
+  - When coming-manager work needs a telenest change, open an `Aborii/telenest` issue (real labels, grounded in source) instead of patching. The owner implements it.
+  - A live check never makes a real account write (join, send, pin) without a yes.
+  - Releases (`npm run git:release`, the tag push, `npm publish`) and pushes to `main` are the owner's call.
+- **Invariants:** `INVARIANTS.md`
+
+<!-- first-pass:project:end -->
+
+@INVARIANTS.md

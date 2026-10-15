@@ -45,7 +45,7 @@ says what holds it today and where it is known to break.
    Held by: `src/lib/bot/webhook/telegram-webhook.guard.ts:90` with `src/lib/bot/webhook/secret-token.ts:72-83`; `src/lib/bot/web-app/validate-web-app-init-data.ts:115-141` (24 h default `maxAgeSeconds`, constant-time compare); `src/lib/bot/webhook/telegram-webhook.integration.spec.ts`. Express parses the body before the guard runs (Nest's default size limit applies)
    Known breaks: none known
 
-8. **The published API keeps its meaning within a major version: exports, subpath entries (`telenest/bot`, `/client`, `/common`, `/testing`), DTO fields, error codes and id formats change only in a new major, and consumers (the coming-manager API server) are updated with it.**
+8. **The published API keeps its meaning within a major version: exports, subpath entries (`telenest/bot`, `/client`, `/common`, `/testing`), DTO fields, error codes and id formats change only in a new major, and known consumers are updated with it.**
    Held by: convention only; the `exports` and `typesVersions` maps in `package.json`; no API snapshot or exports test
    Known breaks: none known
 

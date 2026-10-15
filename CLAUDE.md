@@ -293,7 +293,7 @@ follow the interface, not GramJS internals.
 
 - **What it is:** `telenest` (npm package, GitHub `Aborii/telenest`): a published NestJS library for the Telegram Bot API (Telegraf, `src/lib/bot`) and MTProto user accounts (GramJS, `src/lib/client`), sharing only `src/lib/common`.
   - `src/main.ts`, `src/app.module.ts` and `src/bots/` are an unpublished demo app. `examples/` holds the login CLIs.
-  - npm (`package-lock.json`), Node >= 20, Jest + ts-jest. The coming-manager API server uses it through a linked folder.
+  - npm (`package-lock.json`), Node >= 20, Jest + ts-jest. A downstream NestJS app uses it through a linked folder.
 - **CI's checks** (what must pass before a merge): `.github/workflows/ci.yml`, job `build-and-test`, runs on Node 20.x and 22.x. The `dev` branch requires both checks ("Node 20.x", "Node 22.x"), and the branch must be up to date.
   - CI runs `npm ci` (whose `prepare` script also builds `dist`), then `npm run typecheck`, `npm run lint`, `npm run format:check` (advisory: `continue-on-error`), `npm run test:cov` and `npm run build`.
   - The local equivalent is the same commands, after `npm install` or `npm ci`.
@@ -321,7 +321,7 @@ follow the interface, not GramJS internals.
   - **Publishing**: `npm run git:release` pushes the `v*` tag, and that triggers `.github/workflows/release.yml` → `npm publish` (public npm, cannot be undone). A push to `main` deploys the docs site. Both need the owner's yes.
 - **Monitoring** (where a swallowed error must end up): none of its own, since it is a library. An error it swallows must go to Nest's `Logger` or to the metrics/tracer/health hooks in `src/lib/common/observability/`. The consuming app decides where those end up.
 - **Words live in:** `README.md`, `docs/*.md` (one per feature), `CHANGELOG.md`, the JSDoc that becomes the TypeDoc site, and error messages and codes in `src/lib/common/telegram.errors.ts`.
-  - The coming-manager API server maps these error codes and DTO fields to its own user-facing words.
+  - Consuming apps map these error codes and DTO fields to its own user-facing words.
 - **The same job in two places** (a change to one needs the other):
   - `src/lib/bot/retry.ts` (`withRetry`, 429) and `src/lib/client/retry.ts` (`withClientRetry`, FLOOD_WAIT).
   - A new MTProto method needs four places: `gram-client.interface.ts` (`IGramClient`), `gramjs-client.adapter.ts`, `telegram-user.service.ts` and `src/lib/testing/mock-gram-client.ts`.
@@ -352,7 +352,7 @@ follow the interface, not GramJS internals.
   - `git show origin/main:path` breaks in the Bash tool. Use `gh api repos/Aborii/telenest/contents/<path>?ref=<branch>`.
   - To refresh `dist` for the linked consumer, run `npx tsc -p tsconfig.build.json`. Never `pnpm build`: its clean step wipes `dist` and the run can die.
   - Consumers import bot symbols from `telenest/bot`, never the root barrel, because the root loads the optional `telegram` peer.
-  - When coming-manager work needs a telenest change, open an `Aborii/telenest` issue (real labels, grounded in source) instead of patching. The owner implements it.
+  - When work in a consuming app needs a telenest change, open an `Aborii/telenest` issue (real labels, grounded in source) instead of patching. The owner implements it.
   - A live check never makes a real account write (join, send, pin) without a yes.
   - Releases (`npm run git:release`, the tag push, `npm publish`) and pushes to `main` are the owner's call.
 - **Invariants:** `INVARIANTS.md`
